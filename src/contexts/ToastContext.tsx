@@ -1,0 +1,45 @@
+import { createContext, useContext, useState, ReactNode } from 'react';
+import { Toast } from '../components/ui/Toast';
+
+interface ToastContextType {
+  showToast: (type: 'success' | 'error' | 'warning', message: string) => void;
+}
+
+const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [toasts, setToasts] = useState<Array<{ id: string; type: 'success' | 'error' | 'warning'; message: string }>>([]);
+
+  const showToast = (type: 'success' | 'error' | 'warning', message: string) => {
+    const id = Date.now().toString();
+    setToasts(prev => [...prev, { id, type, message }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  return (
+    <ToastContext.Provider value={{ showToast }}>
+      {children}
+      <div className="fixed bottom-4 right-4 z-50 space-y-2">
+        {toasts.map(toast => (
+          <Toast
+            key={toast.id}
+            type={toast.type}
+            message={toast.message}
+            onClose={() => removeToast(toast.id)}
+          />
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast() {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within ToastProvider');
+  }
+  return context;
+}
