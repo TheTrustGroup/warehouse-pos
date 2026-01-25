@@ -30,10 +30,19 @@ export const StatCard = memo(function StatCard({ title, value, icon: Icon, trend
 
   return (
     <div className="glass-card animate-fade-in-up p-6">
-      <div className="flex items-start justify-between gap-5">
+      <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-slate-600 mb-3">{title}</p>
-          <p className="text-3xl font-bold text-slate-900 tracking-tight leading-tight mb-3 break-words">{formattedValue}</p>
+          <p 
+            className={`font-bold text-slate-900 tracking-tight leading-none mb-3 ${
+              format === 'currency' 
+                ? 'text-2xl' 
+                : 'text-3xl'
+            }`}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {formattedValue}
+          </p>
           {trend && (
             <div className={`text-xs font-semibold flex items-center gap-1.5 ${trend.isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
               <span className="text-base">{trend.isPositive ? '↑' : '↓'}</span>
@@ -41,8 +50,8 @@ export const StatCard = memo(function StatCard({ title, value, icon: Icon, trend
             </div>
           )}
         </div>
-        <div className={`p-4 rounded-xl border backdrop-blur-[10px] ${colorClasses[color]} flex-shrink-0`}>
-          <Icon className="w-6 h-6" strokeWidth={2} />
+        <div className={`p-3 rounded-xl border backdrop-blur-[10px] ${colorClasses[color]} flex-shrink-0`}>
+          <Icon className="w-5 h-5" strokeWidth={2} />
         </div>
       </div>
     </div>
