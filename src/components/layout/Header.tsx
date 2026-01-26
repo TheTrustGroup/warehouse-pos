@@ -1,7 +1,17 @@
 // src/components/layout/Header.tsx - Premium Glass Header
-import { Search, Bell } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Bell, LogOut } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function Header() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
   return (
     <header className="fixed top-0 left-0 lg:left-[280px] right-0 h-[72px] bg-glass border-b border-white/40 flex items-center justify-between px-4 lg:px-8 z-10 backdrop-blur-xl">
       {/* Search Bar */}
@@ -16,11 +26,22 @@ export function Header() {
           />
         </div>
       </div>
-      
+
       {/* Right Section */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
+        {/* Log out - visible on all screens including mobile */}
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium transition-colors"
+          title="Log out"
+          aria-label="Log out"
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="hidden sm:inline">Log out</span>
+        </button>
         {/* Notifications */}
-        <button 
+        <button
           className="relative p-2.5 hover:bg-slate-50/80 rounded-xl transition-all duration-200 group min-w-[44px] min-h-[44px] flex items-center justify-center"
           aria-label="View notifications"
         >

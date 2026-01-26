@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Menu, X } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { Menu, X, LogOut } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -8,11 +8,14 @@ import {
   BarChart3,
   Settings,
   Users,
+  ClipboardList,
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
   { name: 'Inventory', to: '/inventory', icon: Package },
+  { name: 'Orders', to: '/orders', icon: ClipboardList },
   { name: 'POS', to: '/pos', icon: ShoppingCart },
   { name: 'Reports', to: '/reports', icon: BarChart3 },
   { name: 'Users', to: '/users', icon: Users },
@@ -21,6 +24,14 @@ const navigation = [
 
 export function MobileMenu() {
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    setIsOpen(false);
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <>
@@ -39,7 +50,7 @@ export function MobileMenu() {
         }`}
       >
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsOpen(false)}></div>
-        <aside className="relative w-[280px] h-full glass shadow-large border-r border-slate-200/50">
+        <aside className="relative w-[280px] h-full flex flex-col glass shadow-large border-r border-slate-200/50">
           <div className="px-6 py-6 border-b border-slate-200/30">
             <div className="flex flex-col gap-1">
               <h1 className="text-[28px] font-extrabold leading-none tracking-tight gradient-text">
@@ -49,7 +60,7 @@ export function MobileMenu() {
             </div>
           </div>
 
-          <nav className="px-3 py-6 space-y-1">
+          <nav className="px-3 py-6 space-y-1 flex-1 overflow-y-auto">
             {navigation.map(item => (
               <NavLink
                 key={item.name}
@@ -64,6 +75,16 @@ export function MobileMenu() {
               </NavLink>
             ))}
           </nav>
+          <div className="p-4 border-t border-slate-200/30">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+              Log out
+            </button>
+          </div>
         </aside>
       </div>
     </>

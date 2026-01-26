@@ -87,7 +87,7 @@ export function Sidebar() {
       </nav>
 
       {/* User Profile with Role Switcher */}
-      <div className="p-4 border-t border-slate-200/30">
+      <div className="p-4 border-t border-slate-200/30 space-y-2">
         <div
           className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 hover:bg-slate-50/80 transition-all cursor-pointer group"
           onClick={() => setShowUserMenu(!showUserMenu)}
@@ -111,9 +111,19 @@ export function Sidebar() {
           <div className="w-2 h-2 rounded-full bg-green-500 shadow-lg shadow-green-500/50" />
         </div>
 
-        {/* User Menu Dropdown */}
+        {/* Always-visible Log out button */}
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          Log out
+        </button>
+
+        {/* User Menu Dropdown (Switch User Demo) */}
         {showUserMenu && (
-          <div className="mt-2 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 py-2 bg-slate-50">
               Switch User (Demo)
             </p>
@@ -137,15 +147,6 @@ export function Sidebar() {
               className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm"
             >
               Cashier
-            </button>
-            <div className="border-t border-slate-200" />
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="w-full text-left px-3 py-2.5 hover:bg-red-50 text-sm font-medium text-red-600 flex items-center gap-2"
-            >
-              <LogOut className="w-4 h-4" />
-              Log out
             </button>
           </div>
         )}
