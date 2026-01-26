@@ -1,6 +1,6 @@
 // src/components/layout/Sidebar.tsx - Premium Figma-Inspired Design
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -9,6 +9,7 @@ import {
   BarChart3,
   Settings,
   Users,
+  LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { PERMISSIONS } from '../../types/permissions';
@@ -33,7 +34,8 @@ const baseNavigation = [
 ];
 
 export function Sidebar() {
-  const { user, hasPermission, hasAnyPermission, login } = useAuth();
+  const { user, hasPermission, hasAnyPermission, login, logout } = useAuth();
+  const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const navigation = baseNavigation.filter(
@@ -46,6 +48,12 @@ export function Sidebar() {
     await login(username, 'password');
     setShowUserMenu(false);
     window.location.reload();
+  };
+
+  const handleLogout = () => {
+    setShowUserMenu(false);
+    logout();
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -129,6 +137,15 @@ export function Sidebar() {
               className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm"
             >
               Cashier
+            </button>
+            <div className="border-t border-slate-200" />
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full text-left px-3 py-2.5 hover:bg-red-50 text-sm font-medium text-red-600 flex items-center gap-2"
+            >
+              <LogOut className="w-4 h-4" />
+              Log out
             </button>
           </div>
         )}
