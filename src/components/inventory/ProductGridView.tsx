@@ -8,14 +8,22 @@ interface ProductGridViewProps {
   onDelete: (id: string) => void;
   selectedIds: string[];
   onSelectChange: (ids: string[]) => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canSelect?: boolean;
+  showCostPrice?: boolean;
 }
 
-export function ProductGridView({ 
-  products, 
-  onEdit, 
+export function ProductGridView({
+  products,
+  onEdit,
   onDelete,
   selectedIds,
-  onSelectChange 
+  onSelectChange,
+  canEdit = true,
+  canDelete = true,
+  canSelect = true,
+  showCostPrice: _showCostPrice = true,
 }: ProductGridViewProps) {
   const handleSelectOne = (id: string, checked: boolean) => {
     onSelectChange(
@@ -41,19 +49,21 @@ export function ProductGridView({
           <div 
             key={product.id} 
             className={`glass-card group cursor-pointer relative animate-fade-in-up ${
-              isSelected ? 'ring-2 ring-primary-500 ring-offset-2' : ''
+              canSelect && isSelected ? 'ring-2 ring-primary-500 ring-offset-2' : ''
             }`}
             style={{ animationDelay: `${index * 50}ms` }}
           >
-            <div className="absolute top-4 left-4 z-10">
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={(e) => handleSelectOne(product.id, e.target.checked)}
-                className="rounded border-slate-300 w-5 h-5 cursor-pointer shadow-sm"
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
+            {canSelect && (
+              <div className="absolute top-4 left-4 z-10">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={(e) => handleSelectOne(product.id, e.target.checked)}
+                  className="rounded border-slate-300 w-5 h-5 cursor-pointer shadow-sm"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            )}
             
             {product.images[0] ? (
               <img 
@@ -102,27 +112,33 @@ export function ProductGridView({
                 </div>
               )}
 
-              <div className="flex gap-2 pt-3 border-t border-slate-200/50">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit(product);
-                  }}
-                  className="flex-1 py-2.5 px-3 bg-blue-50/80 text-blue-600 rounded-lg hover:bg-blue-100/80 transition-all duration-200 flex items-center justify-center gap-2 font-semibold text-sm backdrop-blur-[10px] border border-blue-200/30 hover:border-blue-300/50"
-                >
-                  <Edit className="w-4 h-4" />
-                  <span>Edit</span>
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm('Delete this product?')) onDelete(product.id);
-                  }}
-                  className="py-2.5 px-3 bg-red-50/80 text-red-600 rounded-lg hover:bg-red-100/80 transition-all duration-200 backdrop-blur-[10px] border border-red-200/30 hover:border-red-300/50"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              {(canEdit || canDelete) && (
+                <div className="flex gap-2 pt-3 border-t border-slate-200/50">
+                  {canEdit && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(product);
+                      }}
+                      className="flex-1 py-2.5 px-3 bg-blue-50/80 text-blue-600 rounded-lg hover:bg-blue-100/80 transition-all duration-200 flex items-center justify-center gap-2 font-semibold text-sm backdrop-blur-[10px] border border-blue-200/30 hover:border-blue-300/50"
+                    >
+                      <Edit className="w-4 h-4" />
+                      <span>Edit</span>
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm('Delete this product?')) onDelete(product.id);
+                      }}
+                      className="py-2.5 px-3 bg-red-50/80 text-red-600 rounded-lg hover:bg-red-100/80 transition-all duration-200 backdrop-blur-[10px] border border-red-200/30 hover:border-red-300/50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         );

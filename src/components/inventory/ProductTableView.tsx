@@ -10,15 +10,23 @@ interface ProductTableViewProps {
   onView: (product: Product) => void;
   selectedIds: string[];
   onSelectChange: (ids: string[]) => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canSelect?: boolean;
+  showCostPrice?: boolean;
 }
 
-export function ProductTableView({ 
-  products, 
-  onEdit, 
-  onDelete, 
+export function ProductTableView({
+  products,
+  onEdit,
+  onDelete,
   onView,
   selectedIds,
-  onSelectChange 
+  onSelectChange,
+  canEdit = true,
+  canDelete = true,
+  canSelect = true,
+  showCostPrice = true,
 }: ProductTableViewProps) {
   const [sortField, setSortField] = useState<keyof Product>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -73,14 +81,16 @@ export function ProductTableView({
         <table className="w-full">
           <thead className="table-header sticky top-0 z-10">
             <tr>
-              <th className="px-5 py-4 text-left">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.length === products.length && products.length > 0}
-                  onChange={(e) => handleSelectAll(e.target.checked)}
-                  className="rounded border-slate-300 w-4 h-4 cursor-pointer"
-                />
-              </th>
+              {canSelect && (
+                <th className="px-5 py-4 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length === products.length && products.length > 0}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="rounded border-slate-300 w-4 h-4 cursor-pointer"
+                  />
+                </th>
+              )}
               <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                 Image
               </th>
@@ -118,9 +128,11 @@ export function ProductTableView({
               <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                 Location
               </th>
-              <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                Actions
-              </th>
+              {(canEdit || canDelete) && (
+                <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -131,14 +143,16 @@ export function ProductTableView({
                   key={product.id} 
                   className="table-row"
                 >
-                  <td className="px-5 py-4 align-middle">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(product.id)}
-                      onChange={(e) => handleSelectOne(product.id, e.target.checked)}
-                      className="rounded border-slate-300 w-4 h-4 cursor-pointer"
-                    />
-                  </td>
+                  {canSelect && (
+                    <td className="px-5 py-4 align-middle">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(product.id)}
+                        onChange={(e) => handleSelectOne(product.id, e.target.checked)}
+                        className="rounded border-slate-300 w-4 h-4 cursor-pointer"
+                      />
+                    </td>
+                  )}
                   <td className="px-5 py-4 align-middle">
                     {product.images[0] ? (
                       <img 
@@ -183,40 +197,48 @@ export function ProductTableView({
                   <td className="px-5 py-4 align-middle">
                     <div>
                       <p className="font-semibold text-slate-900">{formatCurrency(product.sellingPrice)}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">Cost: {formatCurrency(product.costPrice)}</p>
+                      {showCostPrice && (
+                        <p className="text-xs text-slate-500 mt-0.5">Cost: {formatCurrency(product.costPrice)}</p>
+                      )}
                     </div>
                   </td>
                   <td className="px-5 py-4 align-middle text-sm text-slate-600 font-medium">
                     {product.location.aisle}-{product.location.rack}-{product.location.bin}
                   </td>
-                  <td className="px-5 py-4 align-middle">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => onView(product)}
-                        className="btn-action btn-action-view"
-                        title="View"
-                        aria-label={`View ${product.name}`}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => onEdit(product)}
-                        className="btn-action btn-action-edit"
-                        title="Edit"
-                        aria-label={`Edit ${product.name}`}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => onDelete(product.id)}
-                        className="btn-action btn-action-delete"
-                        title="Delete"
-                        aria-label={`Delete ${product.name}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
+                  {(canEdit || canDelete) && (
+                    <td className="px-5 py-4 align-middle">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => onView(product)}
+                          className="btn-action btn-action-view"
+                          title="View"
+                          aria-label={`View ${product.name}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => onEdit(product)}
+                            className="btn-action btn-action-edit"
+                            title="Edit"
+                            aria-label={`Edit ${product.name}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => onDelete(product.id)}
+                            className="btn-action btn-action-delete"
+                            title="Delete"
+                            aria-label={`Delete ${product.name}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               );
             })}

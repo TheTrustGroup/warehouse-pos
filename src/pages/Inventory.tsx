@@ -1,17 +1,25 @@
 import { useState, useMemo } from 'react';
 import { useInventory, ProductFilters } from '../contexts/InventoryContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ProductTableView } from '../components/inventory/ProductTableView';
 import { ProductGridView } from '../components/inventory/ProductGridView';
 import { ProductFormModal } from '../components/inventory/ProductFormModal';
 import { InventoryFilters } from '../components/inventory/InventoryFilters';
 import { InventorySearchBar } from '../components/inventory/InventorySearchBar';
 import { Product } from '../types';
+import { PERMISSIONS } from '../types/permissions';
 import { Plus, LayoutGrid, List, Trash2, Download } from 'lucide-react';
 
 type ViewMode = 'table' | 'grid';
 
 export function Inventory() {
   const { products, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts } = useInventory();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission(PERMISSIONS.INVENTORY.CREATE);
+  const canUpdate = hasPermission(PERMISSIONS.INVENTORY.UPDATE);
+  const canDelete = hasPermission(PERMISSIONS.INVENTORY.DELETE);
+  const canBulk = hasPermission(PERMISSIONS.INVENTORY.BULK_ACTIONS);
+  const canViewCostPrice = hasPermission(PERMISSIONS.INVENTORY.VIEW_COST_PRICE);
   
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [searchQuery, setSearchQuery] = useState('');
@@ -127,13 +135,15 @@ export function Inventory() {
             {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''} found
           </p>
         </div>
-        <button
-          onClick={handleAddProduct}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Add Product
-        </button>
+        {canCreate && (
+          <button
+            onClick={handleAddProduct}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Add Product
+          </button>
+        )}
       </div>
 
       {/* Search and View Toggle */}
@@ -184,7 +194,7 @@ export function Inventory() {
         {/* Products List/Grid */}
         <div className="lg:col-span-3 space-y-4">
           {/* Bulk Actions */}
-          {selectedIds.length > 0 && (
+          {canBulk && selectedIds.length > 0 && (
             <div className="glass-card bg-primary-50/80 border-primary-200/50 animate-fade-in-up">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-primary-900">
@@ -198,13 +208,15 @@ export function Inventory() {
                     <Download className="w-4 h-4" />
                     Export
                   </button>
-                  <button
-                    onClick={handleBulkDelete}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 flex items-center gap-2 text-sm font-semibold shadow-sm hover:shadow-md"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Delete
-                  </button>
+                  {canDelete && (
+                    <button
+                      onClick={handleBulkDelete}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 flex items-center gap-2 text-sm font-semibold shadow-sm hover:shadow-md"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -219,6 +231,10 @@ export function Inventory() {
               onView={handleViewProduct}
               selectedIds={selectedIds}
               onSelectChange={setSelectedIds}
+              canEdit={canUpdate}
+              canDelete={canDelete}
+              canSelect={canBulk}
+              showCostPrice={canViewCostPrice}
             />
           ) : (
             <ProductGridView
@@ -227,6 +243,10 @@ export function Inventory() {
               onDelete={handleDeleteProduct}
               selectedIds={selectedIds}
               onSelectChange={setSelectedIds}
+              canEdit={canUpdate}
+              canDelete={canDelete}
+              canSelect={canBulk}
+              showCostPrice={canViewCostPrice}
             />
           )}
         </div>

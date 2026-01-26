@@ -91,7 +91,7 @@ export interface User {
   id: string;
   username: string;
   email: string;
-  role: 'admin' | 'manager' | 'cashier' | 'viewer';
+  role: 'admin' | 'manager' | 'cashier' | 'warehouse' | 'driver' | 'viewer';
   fullName: string;
   avatar?: string;
   permissions: string[];

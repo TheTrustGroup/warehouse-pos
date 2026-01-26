@@ -1,16 +1,84 @@
 import { useState } from 'react';
 import { WifiOff, ShoppingCart, Trash2 } from 'lucide-react';
 import { usePOS } from '../contexts/POSContext';
+import { useOrders } from '../contexts/OrderContext';
+import { useToast } from '../contexts/ToastContext';
 import { ProductSearch } from '../components/pos/ProductSearch';
 import { Cart } from '../components/pos/Cart';
 import { PaymentPanel } from '../components/pos/PaymentPanel';
 import { Receipt } from '../components/pos/Receipt';
 import { Transaction, Payment } from '../types';
 
+const DELIVERY_FEE = 20;
+
 export function POS() {
-  const { cart, clearCart, isOnline, processTransaction } = usePOS();
+  const { cart, clearCart, isOnline, processTransaction, calculateSubtotal, calculateTax, calculateTotal, discount } = usePOS();
+  const { createOrder } = useOrders();
+  const { showToast } = useToast();
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(null);
+
+  const handleCreateOrder = async () => {
+    if (cart.length === 0) {
+      showToast('error', 'Cart is empty');
+      return;
+    }
+
+    const customerName = prompt('Customer Name:');
+    const customerPhone = prompt('Customer Phone:');
+    const customerAddress = prompt('Delivery Address:');
+
+    if (!customerName || !customerPhone) {
+      showToast('error', 'Customer information required');
+      return;
+    }
+
+    const subtotal = calculateSubtotal();
+    const tax = calculateTax();
+    const totalWithDelivery = calculateTotal() + DELIVERY_FEE;
+
+    const orderData = {
+      type: 'delivery' as const,
+      customer: {
+        name: customerName,
+        phone: customerPhone,
+        isRegistered: false,
+        address: customerAddress
+          ? {
+              street: customerAddress,
+              area: '',
+              city: 'Accra',
+            }
+          : undefined,
+      },
+      items: cart.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        sku: item.sku,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        subtotal: item.subtotal,
+      })),
+      subtotal,
+      deliveryFee: DELIVERY_FEE,
+      tax,
+      discount,
+      total: totalWithDelivery,
+      payment: {
+        method: 'cash_on_delivery' as const,
+        status: 'pending' as const,
+        paidAmount: 0,
+      },
+    };
+
+    try {
+      const order = await createOrder(orderData);
+      showToast('success', `Order ${order.orderNumber} created successfully`);
+      clearCart();
+    } catch {
+      showToast('error', 'Failed to create order');
+    }
+  };
 
   const handleCompletePayment = async (payments: Payment[]) => {
     const transaction = await processTransaction(payments);
@@ -76,6 +144,17 @@ export function POS() {
             </div>
             <Cart />
           </div>
+
+          {/* Create Delivery Order */}
+          {cart.length > 0 && (
+            <button
+              onClick={handleCreateOrder}
+              className="btn-secondary w-full mb-3"
+              disabled={cart.length === 0}
+            >
+              Create Delivery Order
+            </button>
+          )}
 
           {/* Payment Panel */}
           {cart.length > 0 && (

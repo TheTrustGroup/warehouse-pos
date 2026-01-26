@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { CreditCard, Banknote, Smartphone, X } from 'lucide-react';
 import { usePOS } from '../../contexts/POSContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { Payment } from '../../types';
 import { formatCurrency } from '../../lib/utils';
 
@@ -9,7 +11,9 @@ interface PaymentPanelProps {
 }
 
 export function PaymentPanel({ onComplete }: PaymentPanelProps) {
-  const { calculateTotal, discount, setDiscount } = usePOS();
+  const { calculateTotal, calculateSubtotal, discount, setDiscount } = usePOS();
+  const { canPerformAction, requireApproval } = useAuth();
+  const { showToast } = useToast();
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mobile_money'>('cash');
   const [cashReceived, setCashReceived] = useState('');
   const [discountInput, setDiscountInput] = useState('');
@@ -33,8 +37,31 @@ export function PaymentPanel({ onComplete }: PaymentPanelProps) {
     onComplete(payments);
   };
 
-  const handleDiscountApply = () => {
+  const handleDiscountApply = async () => {
     const discountValue = parseFloat(discountInput) || 0;
+    if (discountValue <= 0) {
+      setDiscountInput('');
+      return;
+    }
+
+    const subtotal = calculateSubtotal();
+    const discountPercent = subtotal > 0 ? (discountValue / subtotal) * 100 : 0;
+    const { allowed, needsApproval } = canPerformAction('discount', discountPercent);
+
+    if (!allowed && needsApproval) {
+      const approved = await requireApproval(
+        'Apply Discount',
+        `Discount ${discountPercent.toFixed(1)}% (${formatCurrency(discountValue)}) exceeds your limit`
+      );
+      if (!approved) {
+        showToast('error', 'Discount approval denied');
+        return;
+      }
+    } else if (!allowed) {
+      showToast('error', 'You cannot apply this discount. Limit exceeded.');
+      return;
+    }
+
     setDiscount(discountValue);
     setDiscountInput('');
   };
