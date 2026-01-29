@@ -21,22 +21,39 @@ export function generateTransactionNumber(): string {
 }
 
 /**
- * Formats a number as Ghana Cedis currency
- * @param amount - Amount to format
- * @returns Formatted currency string (e.g., "₵100.00")
+ * Formats a number as Ghana Cedis currency.
+ * Safe for undefined/null/NaN (returns ₵0.00). Never throws or logs.
  */
-export function formatCurrency(amount: number): string {
-  if (isNaN(amount)) {
-    console.error('Invalid amount for currency formatting:', amount);
+export function formatCurrency(amount: number | undefined | null): string {
+  const n = amount == null ? 0 : Number(amount);
+  if (typeof n !== 'number' || !Number.isFinite(n)) {
     return '₵0.00';
   }
-  
-  return new Intl.NumberFormat('en-GH', {
-    style: 'currency',
-    currency: 'GHS',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount).replace('GHS', '₵');
+  try {
+    return new Intl.NumberFormat('en-GH', {
+      style: 'currency',
+      currency: 'GHS',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n).replace('GHS', '₵');
+  } catch {
+    return '₵0.00';
+  }
+}
+
+/**
+ * Normalize category to a display string (API may return object { id, name, slug }).
+ */
+export function getCategoryDisplay(category: unknown): string {
+  if (category == null) return '';
+  if (typeof category === 'string') return category;
+  if (typeof category === 'object' && category !== null && 'name' in category && typeof (category as { name?: string }).name === 'string') {
+    return (category as { name: string }).name;
+  }
+  if (typeof category === 'object' && category !== null && 'slug' in category && typeof (category as { slug?: string }).slug === 'string') {
+    return (category as { slug: string }).slug;
+  }
+  return String(category);
 }
 
 /**

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Product } from '../../types';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, getCategoryDisplay } from '../../lib/utils';
 import { Pencil, Trash2, Eye, Package } from 'lucide-react';
 
 interface ProductTableViewProps {
@@ -176,7 +176,7 @@ export function ProductTableView({
                   <td className="px-5 py-4 align-middle text-sm text-slate-700 font-medium">{product.sku}</td>
                   <td className="px-5 py-4 align-middle">
                     <span className="badge badge-info">
-                      {product.category}
+                      {getCategoryDisplay(product.category)}
                     </span>
                   </td>
                   <td className="px-5 py-4 align-middle">

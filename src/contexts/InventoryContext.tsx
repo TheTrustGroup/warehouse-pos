@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useEffect } from 'react
 import { Product } from '../types';
 import { setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL, getApiHeaders, handleApiResponse } from '../lib/api';
+import { getCategoryDisplay } from '../lib/utils';
 
 interface InventoryContextType {
   products: Product[];
@@ -187,7 +188,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const filterProducts = (filters: ProductFilters) => {
     return products.filter(p => {
-      if (filters.category && p.category !== filters.category) return false;
+      if (filters.category && getCategoryDisplay(p.category) !== filters.category) return false;
       if (filters.minQuantity !== undefined && p.quantity < filters.minQuantity) return false;
       if (filters.maxQuantity !== undefined && p.quantity > filters.maxQuantity) return false;
       if (filters.lowStock && !(p.quantity > 0 && p.quantity <= p.reorderLevel)) return false;

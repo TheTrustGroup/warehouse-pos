@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Search, Scan, Package } from 'lucide-react';
 import { useInventory } from '../../contexts/InventoryContext';
 import { usePOS } from '../../contexts/POSContext';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, getCategoryDisplay } from '../../lib/utils';
 
 export function ProductSearch() {
   const { products } = useInventory();
@@ -12,7 +12,7 @@ export function ProductSearch() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const categories = Array.from(new Set(products.map(p => p.category)));
+  const categories = Array.from(new Set(products.map(p => getCategoryDisplay(p.category)))).filter(Boolean);
 
   useEffect(() => {
     let filtered = products.filter(p => p.quantity > 0);
@@ -26,7 +26,7 @@ export function ProductSearch() {
     }
 
     if (selectedCategory) {
-      filtered = filtered.filter(p => p.category === selectedCategory);
+      filtered = filtered.filter(p => getCategoryDisplay(p.category) === selectedCategory);
     }
 
     setFilteredProducts(filtered);

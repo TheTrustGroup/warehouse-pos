@@ -8,6 +8,7 @@ import { InventoryFilters } from '../components/inventory/InventoryFilters';
 import { InventorySearchBar } from '../components/inventory/InventorySearchBar';
 import { Product } from '../types';
 import { PERMISSIONS } from '../types/permissions';
+import { getCategoryDisplay } from '../lib/utils';
 import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, RefreshCw } from 'lucide-react';
 
 type ViewMode = 'table' | 'grid';
@@ -30,7 +31,7 @@ export function Inventory() {
 
   // All hooks must run unconditionally (before any early returns) to avoid React error #310
   const categories = useMemo(() => {
-    return Array.from(new Set(products.map(p => p.category))).sort();
+    return Array.from(new Set(products.map(p => getCategoryDisplay(p.category)))).filter(Boolean).sort();
   }, [products]);
 
   const filteredProducts = useMemo(() => {

@@ -22,11 +22,13 @@ const colorClasses = {
 };
 
 export const StatCard = memo(function StatCard({ title, value, icon: Icon, trend, format = 'number', color = 'blue' }: StatCardProps) {
-  const formattedValue = format === 'currency' 
-    ? formatCurrency(Number(value))
+  const num = value != null ? Number(value) : 0;
+  const safeNum = typeof num === 'number' && Number.isFinite(num) ? num : 0;
+  const formattedValue = format === 'currency'
+    ? formatCurrency(safeNum)
     : format === 'number'
-    ? Number(value).toLocaleString()
-    : value;
+    ? safeNum.toLocaleString()
+    : typeof value === 'string' || typeof value === 'number' ? value : String(value ?? '');
 
   return (
     <div className="glass-card animate-fade-in-up p-6">

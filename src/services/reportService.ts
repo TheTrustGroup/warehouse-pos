@@ -1,5 +1,5 @@
 import { Product, Transaction } from '../types';
-import { formatDate } from '../lib/utils';
+import { formatDate, getCategoryDisplay } from '../lib/utils';
 
 export interface SalesReport {
   totalRevenue: number;
@@ -146,12 +146,13 @@ export function generateSalesReport(
     t.items.forEach(item => {
       const product = products.find(p => p.id === item.productId);
       if (product) {
-        const existing = categorySales.get(product.category);
+        const catKey = getCategoryDisplay(product.category);
+        const existing = categorySales.get(catKey);
         if (existing) {
           existing.revenue += item.subtotal;
           existing.quantity += item.quantity;
         } else {
-          categorySales.set(product.category, {
+          categorySales.set(catKey, {
             revenue: item.subtotal,
             quantity: item.quantity,
           });
@@ -248,13 +249,14 @@ export function generateInventoryReport(products: Product[]): InventoryReport {
   // Products by category (using real products only)
   const categoryStats = new Map<string, { count: number; value: number }>();
   realProducts.forEach(p => {
-    const existing = categoryStats.get(p.category);
+    const catKey = getCategoryDisplay(p.category);
+    const existing = categoryStats.get(catKey);
     const value = p.quantity * p.costPrice;
     if (existing) {
       existing.count += 1;
       existing.value += value;
     } else {
-      categoryStats.set(p.category, { count: 1, value });
+      categoryStats.set(catKey, { count: 1, value });
     }
   });
 

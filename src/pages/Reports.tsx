@@ -8,7 +8,7 @@ import { TopProductsTable } from '../components/reports/TopProductsTable';
 import { InventoryMetrics } from '../components/reports/InventoryMetrics';
 import { generateSalesReport, generateInventoryReport, exportToCSV, SalesReport, InventoryReport } from '../services/reportService';
 import { Transaction } from '../types';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, getCategoryDisplay } from '../lib/utils';
 import { getStoredData } from '../lib/storage';
 import { parseDate, validateDateRange } from '../lib/dateUtils';
 
@@ -86,7 +86,7 @@ export function Reports() {
     const exportData = products.map(p => ({
       'SKU': p.sku,
       'Name': p.name,
-      'Category': p.category,
+      'Category': getCategoryDisplay(p.category),
       'Quantity': p.quantity,
       'Cost Price': p.costPrice,
       'Selling Price': p.sellingPrice,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Product } from '../../types';
-import { generateSKU } from '../../lib/utils';
+import { generateSKU, getCategoryDisplay } from '../../lib/utils';
 import { X, Upload } from 'lucide-react';
 
 interface ProductFormModalProps {
@@ -49,7 +49,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
         barcode: product.barcode,
         name: product.name,
         description: product.description,
-        category: product.category,
+        category: getCategoryDisplay(product.category),
         tags: product.tags,
         quantity: product.quantity,
         costPrice: product.costPrice,
