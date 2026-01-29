@@ -28,6 +28,26 @@ export function Inventory() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
+  // All hooks must run unconditionally (before any early returns) to avoid React error #310
+  const categories = useMemo(() => {
+    return Array.from(new Set(products.map(p => p.category))).sort();
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    let result = products;
+    if (searchQuery.trim()) result = searchProducts(searchQuery);
+    if (Object.keys(filters).length > 0) {
+      const filtered = filterProducts(filters);
+      if (searchQuery.trim()) {
+        const searchIds = new Set(result.map(p => p.id));
+        result = filtered.filter(p => searchIds.has(p.id));
+      } else {
+        result = filtered;
+      }
+    }
+    return result;
+  }, [products, searchQuery, filters, searchProducts, filterProducts]);
+
   // Loading state
   if (isLoading) {
     return (
@@ -90,35 +110,6 @@ export function Inventory() {
       </div>
     );
   }
-
-  // Get unique categories
-  const categories = useMemo(() => {
-    return Array.from(new Set(products.map(p => p.category))).sort();
-  }, [products]);
-
-  // Filter and search products
-  const filteredProducts = useMemo(() => {
-    let result = products;
-
-    // Apply search
-    if (searchQuery.trim()) {
-      result = searchProducts(searchQuery);
-    }
-
-    // Apply filters
-    if (Object.keys(filters).length > 0) {
-      const filtered = filterProducts(filters);
-      // If we have a search query, intersect results
-      if (searchQuery.trim()) {
-        const searchIds = new Set(result.map(p => p.id));
-        result = filtered.filter(p => searchIds.has(p.id));
-      } else {
-        result = filtered;
-      }
-    }
-
-    return result;
-  }, [products, searchQuery, filters, searchProducts, filterProducts]);
 
   const handleAddProduct = () => {
     setEditingProduct(null);
