@@ -164,8 +164,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       localStorage.removeItem('current_user');
       localStorage.removeItem('auth_token');
-      // Redirect to login page
-      window.location.href = '/login';
+      // No full page redirect: re-render lets ProtectedRoutes return <Navigate to="/login" />,
+      // avoiding "Importing a module script failed" from cached index/chunks after deploy.
     }
   };
 
