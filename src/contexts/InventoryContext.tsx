@@ -88,10 +88,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setError(null);
       
       // Connect to your real API
-      const response = await fetch(`${API_BASE_URL}/api/products`, {
+      // Try /admin/api/products first (based on discovered endpoints), fallback to /api/products
+      let response = await fetch(`${API_BASE_URL}/admin/api/products`, {
         headers: getApiHeaders(),
         credentials: 'include',
       });
+      
+      // If 404, try standard endpoint
+      if (response.status === 404) {
+        response = await fetch(`${API_BASE_URL}/api/products`, {
+          headers: getApiHeaders(),
+          credentials: 'include',
+        });
+      }
       
       // Handle API response with proper error handling
       const data = await handleApiResponse<Product[]>(response);

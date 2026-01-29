@@ -55,13 +55,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       
       // Check if user is authenticated
-      const response = await fetch(`${API_BASE_URL}/api/auth/user`, {
+      // Try /admin/api/me first (based on discovered endpoints), fallback to /api/auth/user
+      const response = await fetch(`${API_BASE_URL}/admin/api/me`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
         },
         credentials: 'include', // Include cookies
-      });
+      }).catch(() => 
+        // Fallback to standard auth endpoint if /admin/api/me doesn't work
+        fetch(`${API_BASE_URL}/api/auth/user`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+          credentials: 'include',
+        })
+      );
 
       if (response.ok) {
         const userData = await handleApiResponse<User>(response);
@@ -69,16 +79,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(normalizedUser);
         localStorage.setItem('current_user', JSON.stringify(normalizedUser));
       } else {
-        // Not authenticated or session expired
+        // Not authenticated or session expired - this is expected when not logged in
         setUser(null);
         localStorage.removeItem('current_user');
         localStorage.removeItem('auth_token');
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
-      setUser(null);
-      localStorage.removeItem('current_user');
-      localStorage.removeItem('auth_token');
+      // Silently handle network errors - user is simply not authenticated
+      // Only log if it's not a network error (CORS, fetch failure, etc.)
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        // Network/CORS error - silently fail, user is not authenticated
+        setUser(null);
+        localStorage.removeItem('current_user');
+        localStorage.removeItem('auth_token');
+      } else {
+        // Other errors - log but don't show to user
+        console.error('Auth check failed:', error);
+        setUser(null);
+        localStorage.removeItem('current_user');
+        localStorage.removeItem('auth_token');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -89,7 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const login = async (email: string, password: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      // Try /admin/api/login first, fallback to /api/auth/login
+      let response = await fetch(`${API_BASE_URL}/admin/api/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -98,6 +119,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         credentials: 'include', // Include cookies for httpOnly cookie support
         body: JSON.stringify({ email: email.trim(), password: password.trim() }),
       });
+      
+      // If 404, try standard endpoint
+      if (response.status === 404) {
+        response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+        });
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ 
@@ -131,10 +165,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       // Call logout endpoint to invalidate session on server
-      await fetch(`${API_BASE_URL}/api/auth/logout`, {
+      // Try /admin/api/logout first, fallback to /api/auth/logout
+      await fetch(`${API_BASE_URL}/admin/api/logout`, {
         method: 'POST',
         credentials: 'include',
-      });
+      }).catch(() =>
+        fetch(`${API_BASE_URL}/api/auth/logout`, {
+          method: 'POST',
+          credentials: 'include',
+        })
+      );
     } catch (error) {
       console.error('Logout error:', error);
       // Continue with local logout even if API call fails
