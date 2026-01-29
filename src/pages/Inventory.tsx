@@ -183,7 +183,10 @@ export function Inventory() {
       {/* Header */}
       <div className="flex items-center justify-between animate-fade-in-up">
         <div>
-          <h1 className="text-[32px] font-bold text-slate-900 tracking-tight mb-2">Inventory</h1>
+          <h1 className="text-[32px] font-bold text-slate-900 tracking-tight mb-1">Inventory</h1>
+          <p className="text-slate-500 text-sm mb-2">
+            Products, suppliers, locations and stock levels
+          </p>
           <p className="text-slate-500 text-sm">
             {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''} found
             {filteredProducts.length !== products.length && ` (of ${products.length} total)`}

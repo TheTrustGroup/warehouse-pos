@@ -58,7 +58,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
         location: product.location && typeof product.location === 'object'
           ? { warehouse: (product.location as any).warehouse ?? 'Main Store', aisle: (product.location as any).aisle ?? '', rack: (product.location as any).rack ?? '', bin: (product.location as any).bin ?? '' }
           : { warehouse: 'Main Store', aisle: '', rack: '', bin: '' },
-        supplier: product.supplier,
+        supplier: product.supplier && typeof product.supplier === 'object'
+          ? { name: (product.supplier as any).name ?? '', contact: (product.supplier as any).contact ?? '', email: (product.supplier as any).email ?? '' }
+          : { name: '', contact: '', email: '' },
         images: product.images,
         expiryDate: product.expiryDate,
         variants: product.variants || {},

@@ -128,6 +128,9 @@ export function ProductTableView({
               <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                 Location
               </th>
+              <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Supplier
+              </th>
               {(canEdit || canDelete) && (
                 <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Actions
@@ -204,6 +207,9 @@ export function ProductTableView({
                   </td>
                   <td className="px-5 py-4 align-middle text-sm text-slate-600 font-medium">
                     {getLocationDisplay(product.location)}
+                  </td>
+                  <td className="px-5 py-4 align-middle text-sm text-slate-700">
+                    {product.supplier?.name || '—'}
                   </td>
                   {(canEdit || canDelete) && (
                     <td className="px-5 py-4 align-middle">

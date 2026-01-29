@@ -161,10 +161,11 @@ export const ROLES: Record<string, Role> = {
   VIEWER: {
     id: 'viewer',
     name: 'View Only / Accountant',
-    description: 'View-only access to reports',
+    description: 'View-only access to reports and POS',
     permissions: [
       PERMISSIONS.DASHBOARD.VIEW,
       PERMISSIONS.INVENTORY.VIEW,
+      PERMISSIONS.POS.ACCESS,
       PERMISSIONS.ORDERS.VIEW_ALL,
       PERMISSIONS.REPORTS.VIEW_SALES,
       PERMISSIONS.REPORTS.VIEW_INVENTORY,

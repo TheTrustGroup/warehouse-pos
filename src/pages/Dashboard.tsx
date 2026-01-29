@@ -37,7 +37,8 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       <div className="animate-fade-in-up">
-        <h1 className="text-[32px] font-bold text-slate-900 tracking-tight mb-2">Dashboard</h1>
+        <h1 className="text-[32px] font-bold text-slate-900 tracking-tight mb-1">Dashboard</h1>
+        <p className="text-slate-500 text-sm mb-2">Inventory, suppliers & point of sale in one place</p>
         <p className="text-slate-500 text-sm">Welcome back! Here's what's happening today.</p>
       </div>
 
