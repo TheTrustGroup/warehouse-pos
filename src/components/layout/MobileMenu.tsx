@@ -11,6 +11,7 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { ROLES } from '../../types/permissions';
 
 const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
@@ -25,7 +26,7 @@ const navigation = [
 export function MobileMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout, switchRole } = useAuth();
 
   const handleLogout = () => {
     setIsOpen(false);
@@ -75,7 +76,20 @@ export function MobileMenu() {
               </NavLink>
             ))}
           </nav>
-          <div className="p-4 border-t border-slate-200/30">
+          <div className="p-4 border-t border-slate-200/30 space-y-3">
+            <label className="block">
+              <span className="text-xs font-medium text-slate-500 block mb-1">Role</span>
+              <select
+                value={user?.role ?? 'viewer'}
+                onChange={(e) => { switchRole(e.target.value); setIsOpen(false); }}
+                className="w-full rounded-lg border border-slate-200/60 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+                aria-label="Switch role"
+              >
+                {Object.values(ROLES).map((role) => (
+                  <option key={role.id} value={role.id}>{role.name}</option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               onClick={handleLogout}

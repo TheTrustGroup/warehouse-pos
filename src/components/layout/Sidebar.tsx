@@ -10,7 +10,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { PERMISSIONS } from '../../types/permissions';
+import { PERMISSIONS, ROLES } from '../../types/permissions';
 
 const baseNavigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD.VIEW },
@@ -32,7 +32,7 @@ const baseNavigation = [
 ];
 
 export function Sidebar() {
-  const { user, hasPermission, hasAnyPermission, logout } = useAuth();
+  const { user, hasPermission, hasAnyPermission, logout, switchRole } = useAuth();
   const navigate = useNavigate();
 
   const navigation = baseNavigation.filter(
@@ -76,8 +76,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* User Profile with Logout */}
-      <div className="p-4 border-t border-slate-200/30">
+      {/* User Profile with Role selector and Logout */}
+      <div className="p-4 border-t border-slate-200/30 space-y-3">
         <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 hover:bg-slate-50/80 transition-all group">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm shadow-lg">
             {user?.fullName?.charAt(0) || 'U'}
@@ -86,9 +86,7 @@ export function Sidebar() {
             <p className="text-sm font-semibold text-slate-900 truncate">
               {user?.fullName}
             </p>
-            <p className="text-xs text-slate-500 font-medium capitalize">
-              {user?.role}
-            </p>
+            <p className="text-xs text-slate-500 font-medium">Role</p>
           </div>
           <button
             onClick={handleLogout}
@@ -98,6 +96,21 @@ export function Sidebar() {
             Logout
           </button>
         </div>
+        <label className="block">
+          <span className="sr-only">Switch role</span>
+          <select
+            value={user?.role ?? 'viewer'}
+            onChange={(e) => switchRole(e.target.value)}
+            className="w-full rounded-lg border border-slate-200/60 bg-white/80 px-3 py-2 text-sm font-medium text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            aria-label="Switch role to see different features"
+          >
+            {Object.values(ROLES).map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
     </aside>
   );

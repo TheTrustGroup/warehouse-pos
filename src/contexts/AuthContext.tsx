@@ -3,12 +3,16 @@ import { User } from '../types';
 import { ROLES, Permission } from '../types/permissions';
 import { API_BASE_URL, handleApiResponse } from '../lib/api';
 
+const DEMO_ROLE_KEY = 'warehouse_demo_role';
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Switch role for demo/testing so you can see all inventory and POS features */
+  switchRole: (roleId: string) => void;
   hasPermission: (permission: Permission) => boolean;
   hasAnyPermission: (permissions: Permission[]) => boolean;
   hasAllPermissions: (permissions: Permission[]) => boolean;
@@ -64,7 +68,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const userData = await handleApiResponse<User>(response);
-        const normalizedUser = normalizeUserData(userData);
+        let normalizedUser = normalizeUserData(userData);
+        const demoRoleId = typeof localStorage !== 'undefined' ? localStorage.getItem(DEMO_ROLE_KEY) : null;
+        const demoRole = demoRoleId ? Object.values(ROLES).find((r) => r.id === demoRoleId) : null;
+        if (demoRole) {
+          normalizedUser = { ...normalizedUser, role: demoRole.id as User['role'], permissions: demoRole.permissions };
+        }
         setUser(normalizedUser);
         localStorage.setItem('current_user', JSON.stringify(normalizedUser));
       } else {
@@ -91,6 +100,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  /**
+   * Switch role for demo/testing. Persists in localStorage so it survives refresh.
+   * Use this to see all inventory features (e.g. Admin) when the API returns Viewer.
+   */
+  const switchRole = (roleId: string) => {
+    const role = Object.values(ROLES).find((r) => r.id === roleId);
+    if (!role || !user) return;
+    localStorage.setItem(DEMO_ROLE_KEY, roleId);
+    setUser({ ...user, role: role.id as User['role'], permissions: role.permissions });
+    localStorage.setItem('current_user', JSON.stringify({ ...user, role: role.id, permissions: role.permissions }));
   };
 
   /**
@@ -130,8 +151,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!userPayload || typeof userPayload !== 'object') {
         throw new Error('Invalid login response');
       }
-      const normalizedUser = normalizeUserData(userPayload);
-
+      let normalizedUser = normalizeUserData(userPayload);
+      const demoRoleId = typeof localStorage !== 'undefined' ? localStorage.getItem(DEMO_ROLE_KEY) : null;
+      const demoRole = demoRoleId ? Object.values(ROLES).find((r) => r.id === demoRoleId) : null;
+      if (demoRole) {
+        normalizedUser = { ...normalizedUser, role: demoRole.id as User['role'], permissions: demoRole.permissions };
+      }
       setUser(normalizedUser);
       localStorage.setItem('current_user', JSON.stringify(normalizedUser));
       const token = data?.token ?? data?.access_token ?? data?.data?.token;
@@ -249,6 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         logout,
+        switchRole,
         hasPermission,
         hasAnyPermission,
         hasAllPermissions,
