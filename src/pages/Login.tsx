@@ -14,19 +14,21 @@ export function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!email || !password) {
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
+    if (!trimmedEmail || !trimmedPassword) {
       showToast('error', 'Please enter email and password');
       return;
     }
 
     try {
       setIsLoading(true);
-      await login(email, password);
+      await login(trimmedEmail, trimmedPassword);
       showToast('success', 'Login successful');
       navigate('/', { replace: true });
     } catch (error) {
-      showToast('error', error instanceof Error ? error.message : 'Login failed');
+      const message = error instanceof Error ? error.message : 'Login failed';
+      showToast('error', message);
     } finally {
       setIsLoading(false);
     }

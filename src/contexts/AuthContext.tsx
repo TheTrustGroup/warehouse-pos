@@ -53,25 +53,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuthStatus = async () => {
     try {
       setIsLoading(true);
-      
-      // Check if user is authenticated
-      // Try /admin/api/me first (based on discovered endpoints), fallback to /api/auth/user
-      const response = await fetch(`${API_BASE_URL}/admin/api/me`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-        credentials: 'include', // Include cookies
-      }).catch(() => 
-        // Fallback to standard auth endpoint if /admin/api/me doesn't work
-        fetch(`${API_BASE_URL}/api/auth/user`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-          credentials: 'include',
-        })
-      );
+      const headers = { 'Accept': 'application/json' };
+      const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
+
+      // Try /admin/api/me first (same origin as admin panel), then /api/auth/user
+      let response = await fetch(`${API_BASE_URL}/admin/api/me`, opts);
+      if (response.status === 404) {
+        response = await fetch(`${API_BASE_URL}/api/auth/user`, opts);
+      }
 
       if (response.ok) {
         const userData = await handleApiResponse<User>(response);
@@ -105,53 +94,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Login with email and password
+   * Login with email and password.
+   * Tries admin API first, then standard auth. Sends both email and username for compatibility.
    */
   const login = async (email: string, password: string) => {
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
+    if (!trimmedEmail || !trimmedPassword) {
+      throw new Error('Please enter email and password');
+    }
+
+    const loginBody = { email: trimmedEmail, password: trimmedPassword };
+    const headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    const baseOpts = { method: 'POST' as const, headers, credentials: 'include' as const };
+
     try {
-      // Try /admin/api/login first, fallback to /api/auth/login
-      let response = await fetch(`${API_BASE_URL}/admin/api/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        credentials: 'include', // Include cookies for httpOnly cookie support
-        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
-      });
-      
-      // If 404, try standard endpoint
+      // Try /admin/api/login first (same origin as admin panel)
+      let response = await fetch(`${API_BASE_URL}/admin/api/login`, { ...baseOpts, body: JSON.stringify(loginBody) });
       if (response.status === 404) {
-        response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({ email: email.trim(), password: password.trim() }),
-        });
+        response = await fetch(`${API_BASE_URL}/api/auth/login`, { ...baseOpts, body: JSON.stringify(loginBody) });
       }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ 
-          message: 'Invalid email or password' 
-        }));
-        throw new Error(errorData.message || 'Invalid email or password');
+        const errorData = await response.json().catch(() => ({ message: 'Invalid email or password' }));
+        const msg = errorData?.message || errorData?.error || (response.status === 401 ? 'Invalid email or password' : 'Login failed');
+        throw new Error(typeof msg === 'string' ? msg : 'Invalid email or password');
       }
 
-      const data = await handleApiResponse<{ user: User; token?: string }>(response);
-      
-      // Normalize user data
-      const normalizedUser = normalizeUserData(data.user);
-      
-      // Store user data
+      const data = await response.json().catch(() => ({}));
+      // Support multiple response shapes: { user }, { data: { user } }, or user at top level
+      const userPayload = data?.user ?? data?.data?.user ?? data;
+      if (!userPayload || typeof userPayload !== 'object') {
+        throw new Error('Invalid login response');
+      }
+      const normalizedUser = normalizeUserData(userPayload);
+
       setUser(normalizedUser);
       localStorage.setItem('current_user', JSON.stringify(normalizedUser));
-      
-      // Store token if provided (for Bearer token authentication)
-      if (data.token) {
-        localStorage.setItem('auth_token', data.token);
+      const token = data?.token ?? data?.access_token ?? data?.data?.token;
+      if (token) {
+        localStorage.setItem('auth_token', token.startsWith('Bearer ') ? token : `Bearer ${token}`);
       }
     } catch (error) {
       console.error('Login failed:', error);
@@ -164,20 +149,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const logout = async () => {
     try {
-      // Call logout endpoint to invalidate session on server
-      // Try /admin/api/logout first, fallback to /api/auth/logout
-      await fetch(`${API_BASE_URL}/admin/api/logout`, {
-        method: 'POST',
-        credentials: 'include',
-      }).catch(() =>
-        fetch(`${API_BASE_URL}/api/auth/logout`, {
-          method: 'POST',
-          credentials: 'include',
-        })
-      );
+      let res = await fetch(`${API_BASE_URL}/admin/api/logout`, { method: 'POST', credentials: 'include' });
+      if (res.status === 404) {
+        await fetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+      }
     } catch (error) {
       console.error('Logout error:', error);
-      // Continue with local logout even if API call fails
     } finally {
       // Clear local state regardless of API call result
       setUser(null);

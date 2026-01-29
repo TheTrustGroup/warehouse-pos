@@ -3,8 +3,8 @@
  */
 
 // Get API base URL from environment variable or use default
-// Note: This should NOT include /api suffix - endpoints will append /api
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://extremedeptkidz.com';
+// Must match admin panel origin (e.g. https://extremedeptkidz.com) for /admin/api/* to work
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'https://extremedeptkidz.com').replace(/\/$/, '');
 
 /**
  * Get authentication token from stored user session
