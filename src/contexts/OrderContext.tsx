@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useEffect, useCallback 
 import { Order, OrderStatus, OrderItem, PaymentStatus, DeliveryInfo } from '../types/order';
 import { useInventory } from './InventoryContext';
 import { useToast } from './ToastContext';
+import { API_BASE_URL, getApiHeaders, handleApiResponse } from '../lib/api';
 import { v4 as uuidv4 } from 'uuid';
 
 interface OrderContextType {
@@ -27,30 +28,67 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const { products, updateProduct } = useInventory();
   const { showToast } = useToast();
 
-  // Load orders from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem('orders');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        const ordersWithDates = parsed.map((o: Order & { createdAt?: string; updatedAt?: string; statusHistory?: Array<{ timestamp: string }> }) => ({
+  /**
+   * Load orders from API
+   */
+  const loadOrders = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/orders`, {
+        headers: getApiHeaders(),
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await handleApiResponse<Order[]>(response);
+        
+        // Convert date strings to Date objects
+        const ordersWithDates = (data || []).map((o: any) => ({
           ...o,
           createdAt: o.createdAt ? new Date(o.createdAt) : new Date(),
           updatedAt: o.updatedAt ? new Date(o.updatedAt) : new Date(),
-          statusHistory: (o.statusHistory || []).map((h: { timestamp: string; [k: string]: unknown }) => ({
+          statusHistory: (o.statusHistory || []).map((h: any) => ({
             ...h,
             timestamp: new Date(h.timestamp),
           })),
+          delivery: o.delivery ? {
+            ...o.delivery,
+            scheduledTime: o.delivery.scheduledTime ? new Date(o.delivery.scheduledTime) : null,
+            actualTime: o.delivery.actualTime ? new Date(o.delivery.actualTime) : null,
+            deliveryProof: o.delivery.deliveryProof ? {
+              ...o.delivery.deliveryProof,
+              receivedAt: o.delivery.deliveryProof.receivedAt ? new Date(o.delivery.deliveryProof.receivedAt) : null,
+            } : null,
+          } : null,
+          payment: o.payment ? {
+            ...o.payment,
+            paidAt: o.payment.paidAt ? new Date(o.payment.paidAt) : null,
+          } : null,
+          inventory: o.inventory ? {
+            ...o.inventory,
+            reservedAt: o.inventory.reservedAt ? new Date(o.inventory.reservedAt) : null,
+            deductedAt: o.inventory.deductedAt ? new Date(o.inventory.deductedAt) : null,
+          } : null,
         }));
+        
         setOrders(ordersWithDates);
-      } catch {
+      } else {
         setOrders([]);
       }
+    } catch (error) {
+      console.error('Error loading orders:', error);
+      setOrders([]);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
+  };
+
+  // Load orders from API on mount
+  useEffect(() => {
+    loadOrders();
   }, []);
 
-  // Save orders to localStorage
+  // Save orders to localStorage for offline support (only real API data)
   useEffect(() => {
     if (!isLoading && orders.length > 0) {
       localStorage.setItem('orders', JSON.stringify(orders));
@@ -73,7 +111,6 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       const product = products.find(p => p.id === item.productId);
       if (product && product.quantity >= item.quantity) {
         // Stock is available, reserve it (don't deduct yet)
-        console.log(`Reserved ${item.quantity} of ${product.name}`);
       } else {
         throw new Error(`Insufficient stock for ${item.productName}`);
       }

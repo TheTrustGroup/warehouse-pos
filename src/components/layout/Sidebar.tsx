@@ -1,5 +1,4 @@
 // src/components/layout/Sidebar.tsx - Premium Figma-Inspired Design
-import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -9,7 +8,6 @@ import {
   BarChart3,
   Settings,
   Users,
-  LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { PERMISSIONS } from '../../types/permissions';
@@ -34,9 +32,8 @@ const baseNavigation = [
 ];
 
 export function Sidebar() {
-  const { user, hasPermission, hasAnyPermission, login, logout } = useAuth();
+  const { user, hasPermission, hasAnyPermission, logout } = useAuth();
   const navigate = useNavigate();
-  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const navigation = baseNavigation.filter(
     (item) =>
@@ -44,15 +41,8 @@ export function Sidebar() {
       ('anyPermissions' in item && item.anyPermissions && hasAnyPermission(item.anyPermissions))
   );
 
-  const switchUser = async (username: string) => {
-    await login(username, 'password');
-    setShowUserMenu(false);
-    window.location.reload();
-  };
-
-  const handleLogout = () => {
-    setShowUserMenu(false);
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login', { replace: true });
   };
 
@@ -86,18 +76,10 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* User Profile with Role Switcher */}
-      <div className="p-4 border-t border-slate-200/30 space-y-2">
-        <div
-          className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 hover:bg-slate-50/80 transition-all cursor-pointer group"
-          onClick={() => setShowUserMenu(!showUserMenu)}
-          onKeyDown={(e) => e.key === 'Enter' && setShowUserMenu(!showUserMenu)}
-          role="button"
-          tabIndex={0}
-          aria-expanded={showUserMenu}
-          aria-haspopup="true"
-        >
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm shadow-lg group-hover:shadow-xl transition-shadow">
+      {/* User Profile with Logout */}
+      <div className="p-4 border-t border-slate-200/30">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 hover:bg-slate-50/80 transition-all group">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm shadow-lg">
             {user?.fullName?.charAt(0) || 'U'}
           </div>
           <div className="flex-1 min-w-0">
@@ -108,48 +90,14 @@ export function Sidebar() {
               {user?.role}
             </p>
           </div>
-          <div className="w-2 h-2 rounded-full bg-green-500 shadow-lg shadow-green-500/50" />
+          <button
+            onClick={handleLogout}
+            className="text-xs text-red-600 hover:text-red-700 font-medium transition-colors"
+            type="button"
+          >
+            Logout
+          </button>
         </div>
-
-        {/* Always-visible Log out button */}
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Log out
-        </button>
-
-        {/* User Menu Dropdown (Switch User Demo) */}
-        {showUserMenu && (
-          <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 py-2 bg-slate-50">
-              Switch User (Demo)
-            </p>
-            <button
-              type="button"
-              onClick={() => switchUser('admin')}
-              className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm"
-            >
-              Administrator
-            </button>
-            <button
-              type="button"
-              onClick={() => switchUser('manager')}
-              className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm"
-            >
-              Store Manager
-            </button>
-            <button
-              type="button"
-              onClick={() => switchUser('cashier')}
-              className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm"
-            >
-              Cashier
-            </button>
-          </div>
-        )}
       </div>
     </aside>
   );

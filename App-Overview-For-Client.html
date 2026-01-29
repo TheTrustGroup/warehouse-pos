@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Warehouse Inventory &amp; POS – App Overview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+      color: #1e293b;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+      background: #fff;
+    }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0 0 8px;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 12px;
+    }
+    .subtitle {
+      font-size: 0.95rem;
+      color: #64748b;
+      margin: 0 0 32px;
+    }
+    h2 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #0f172a;
+      margin: 28px 0 12px;
+    }
+    p { margin: 0 0 12px; }
+    .flow {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 12px 0;
+      font-size: 0.95rem;
+    }
+    .flow strong { color: #0f172a; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin: 16px 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th {
+      background: #0f172a;
+      color: #fff;
+      text-align: left;
+      padding: 12px 16px;
+      font-weight: 600;
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    tr:last-child td { border-bottom: 0; }
+    tr:nth-child(even) { background: #f8fafc; }
+    ul { margin: 8px 0 16px; padding-left: 24px; }
+    li { margin: 4px 0; }
+    .note {
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 0.9rem;
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+    @media print {
+      body { padding: 24px 20px; }
+      .flow { break-inside: avoid; }
+      table { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Warehouse Inventory &amp; Smart POS System</h1>
+  <p class="subtitle">Application overview for client — how the app works and how delivery affects inventory</p>
+
+  <h2>1. How the app works</h2>
+  <div class="flow">
+    <strong>Open app</strong> → Loads with the usual layout (sidebar + header + main area).<br><br>
+    <strong>(Optionally) log in</strong> → Auth uses the browser’s storage: if a user is already stored, they’re “logged in”; if not, the app auto-logs in as admin and saves that. So you can use the app without visiting the login page; the login page is for switching user or after clearing browser storage.<br><br>
+    <strong>Sidebar</strong> → You go to Dashboard, Inventory, POS, Orders, Reports, or Settings (and Users if you have permission).<br><br>
+    <strong>Screens</strong> → Each page uses the app’s providers (inventory, orders, POS, auth, etc.) to read and update data.<br><br>
+    <strong>Data</strong> → Stored in the browser via localStorage (products, orders, settings, current user).<br><br>
+    <strong>Roles and permissions</strong> → What you see in the sidebar and what you can do (e.g. Add product, apply discount, delete) depend on the current user’s role and permissions.
+  </div>
+  <p>So the flow is: open app → (optionally) log in → use the sidebar to move between sections → each screen reads/updates data through the app’s state → data is stored in the browser, and what you’re allowed to see and do depends on your role and permissions.</p>
+
+  <h2>2. Do delivery items wait on successful delivery before the system updates?</h2>
+  <p><strong>No.</strong> Inventory is not updated only after “successful delivery.” It’s updated when the order <strong>goes out for delivery</strong>.</p>
+
+  <p>What the system does:</p>
+  <table>
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>What happens to inventory</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Order created</strong></td>
+        <td>Stock is only <strong>reserved</strong> (availability is checked; quantity is not deducted yet).</td>
+      </tr>
+      <tr>
+        <td><strong>Status → “Out for delivery”</strong></td>
+        <td>Stock is <strong>deducted</strong> from inventory (order is dispatched).</td>
+      </tr>
+      <tr>
+        <td><strong>Status → “Delivered”</strong></td>
+        <td>No extra inventory change; stock was already deducted when the order went “Out for delivery”.</td>
+      </tr>
+      <tr>
+        <td><strong>Status → “Failed”</strong> (delivery failed)</td>
+        <td>Reserved/deducted stock is <strong>returned</strong> to inventory.</td>
+      </tr>
+      <tr>
+        <td><strong>Order cancelled</strong></td>
+        <td>If stock was already deducted, it is returned; otherwise only the order state changes.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <ul>
+    <li>Items do <strong>not</strong> wait on “successful delivery” before the system updates inventory.</li>
+    <li>The inventory update happens at <strong>“Out for delivery”</strong> (dispatch), not at “Delivered”.</li>
+  </ul>
+
+  <div class="note">
+    <strong>Note:</strong> If you ever want stock to be deducted only after successful delivery, the logic can be changed so that deduction happens when the order is marked “Delivered” instead of when it is set to “Out for delivery.” Right now the design is: deduct on dispatch, and put stock back if delivery fails or the order is cancelled.
+  </div>
+
+  <p class="footer">
+    Extreme Dept Kidz — Warehouse Inventory &amp; Smart POS System. This document gives a basic understanding of app flow and delivery/inventory behaviour.
+  </p>
+</body>
+</html>

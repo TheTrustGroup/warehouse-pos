@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { InventoryProvider } from './contexts/InventoryContext';
 import { POSProvider } from './contexts/POSContext';
@@ -23,19 +23,47 @@ const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login }
 
 const Users = () => <div className="card"><h2 className="text-2xl font-bold">Users</h2></div>;
 
+/**
+ * Protected Routes Wrapper
+ * Checks authentication before rendering the Layout
+ */
+function ProtectedRoutes() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Layout />;
+}
+
 function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <SettingsProvider>
+    <ToastProvider>
+      <SettingsProvider>
+        <AuthProvider>
           <InventoryProvider>
             <POSProvider>
               <OrderProvider>
                 <BrowserRouter>
                   <Suspense fallback={<LoadingSpinner />}>
                     <Routes>
+                      {/* Public Route */}
                       <Route path="/login" element={<Login />} />
-                      <Route path="/" element={<Layout />}>
+                      
+                      {/* Protected Routes */}
+                      <Route path="/" element={<ProtectedRoutes />}>
                         <Route
                           index
                           element={
@@ -99,6 +127,8 @@ function App() {
                           }
                         />
                       </Route>
+
+                      {/* Catch all */}
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                   </Suspense>
@@ -107,9 +137,9 @@ function App() {
               </OrderProvider>
             </POSProvider>
           </InventoryProvider>
-        </SettingsProvider>
-      </ToastProvider>
-    </AuthProvider>
+        </AuthProvider>
+      </SettingsProvider>
+    </ToastProvider>
   );
 }
 

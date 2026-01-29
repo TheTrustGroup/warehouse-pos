@@ -4,12 +4,35 @@ import { SalesChart } from '../components/dashboard/SalesChart';
 import { TopProducts } from '../components/dashboard/TopProducts';
 import { RecentActivity } from '../components/dashboard/RecentActivity';
 import { QuickActions } from '../components/dashboard/QuickActions';
-import { getMockDashboardStats, getMockSalesData, getMockRecentActivity } from '../services/mockData';
+import { useInventory } from '../contexts/InventoryContext';
+import { useMemo } from 'react';
+import { InventoryActivity } from '../types';
 
 export function Dashboard() {
-  const stats = getMockDashboardStats();
-  const salesData = getMockSalesData();
-  const recentActivity = getMockRecentActivity();
+  const { products } = useInventory();
+
+  // Calculate stats from real product data
+  const stats = useMemo(() => {
+    const totalProducts = products.length;
+    const totalStockValue = products.reduce((sum, p) => sum + (p.quantity * p.costPrice), 0);
+    const lowStockItems = products.filter(p => p.quantity > 0 && p.quantity <= p.reorderLevel).length;
+    const outOfStockItems = products.filter(p => p.quantity === 0).length;
+    
+    return {
+      totalProducts,
+      totalStockValue,
+      lowStockItems,
+      outOfStockItems,
+      todaySales: 0,
+      todayTransactions: 0,
+      monthSales: 0,
+      topProducts: [],
+    };
+  }, [products]);
+
+  const salesData = useMemo(() => [], []);
+
+  const recentActivity = useMemo<InventoryActivity[]>(() => [], []);
 
   return (
     <div className="space-y-8">

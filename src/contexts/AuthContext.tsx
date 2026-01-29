@@ -1,12 +1,14 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User } from '../types';
 import { ROLES, Permission } from '../types/permissions';
+import { API_BASE_URL, handleApiResponse } from '../lib/api';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
   hasPermission: (permission: Permission) => boolean;
   hasAnyPermission: (permissions: Permission[]) => boolean;
   hasAllPermissions: (permissions: Permission[]) => boolean;
@@ -16,80 +18,134 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const MOCK_USERS: User[] = [
-  {
-    id: '1',
-    username: 'admin',
-    email: 'admin@extremedeptkidz.com',
-    role: 'admin',
-    fullName: 'Administrator',
-    permissions: ROLES.ADMIN.permissions,
-    isActive: true,
-    lastLogin: new Date(),
-    createdAt: new Date(),
-  },
-  {
-    id: '2',
-    username: 'manager',
-    email: 'manager@extremedeptkidz.com',
-    role: 'manager',
-    fullName: 'Store Manager',
-    permissions: ROLES.MANAGER.permissions,
-    isActive: true,
-    lastLogin: new Date(),
-    createdAt: new Date(),
-  },
-  {
-    id: '3',
-    username: 'cashier',
-    email: 'cashier@extremedeptkidz.com',
-    role: 'cashier',
-    fullName: 'John Doe',
-    permissions: ROLES.CASHIER.permissions,
-    isActive: true,
-    lastLogin: new Date(),
-    createdAt: new Date(),
-  },
-];
+/**
+ * Normalize user data from API response
+ */
+function normalizeUserData(userData: any): User {
+  const role = ROLES[userData.role?.toUpperCase?.()] || ROLES.VIEWER;
+  
+  return {
+    id: userData.id,
+    username: userData.username || userData.email?.split('@')[0] || 'user',
+    email: userData.email,
+    role: userData.role || 'viewer',
+    fullName: userData.fullName || userData.name || userData.email,
+    avatar: userData.avatar,
+    permissions: userData.permissions || role.permissions,
+    isActive: userData.isActive !== undefined ? userData.isActive : true,
+    lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : new Date(),
+    createdAt: userData.createdAt ? new Date(userData.createdAt) : new Date(),
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Check authentication status on mount
   useEffect(() => {
-    const stored = localStorage.getItem('current_user');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        parsed.lastLogin = parsed.lastLogin ? new Date(parsed.lastLogin) : new Date();
-        parsed.createdAt = parsed.createdAt ? new Date(parsed.createdAt) : new Date();
-        const role = ROLES[parsed.role?.toUpperCase?.()];
-        if (role) {
-          parsed.permissions = role.permissions;
-        }
-        setUser(parsed);
-      } catch {
-        setUser(MOCK_USERS[0]);
-        localStorage.setItem('current_user', JSON.stringify(MOCK_USERS[0]));
-      }
-    } else {
-      setUser(MOCK_USERS[0]);
-      localStorage.setItem('current_user', JSON.stringify(MOCK_USERS[0]));
-    }
+    checkAuthStatus();
   }, []);
 
-  const login = async (username: string, _password: string) => {
-    const foundUser = MOCK_USERS.find(u => u.username === username);
-    if (foundUser) {
-      setUser(foundUser);
-      localStorage.setItem('current_user', JSON.stringify(foundUser));
-    } else {
-      throw new Error('Invalid credentials');
+  /**
+   * Check if user is authenticated by calling the API
+   */
+  const checkAuthStatus = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Check if user is authenticated
+      const response = await fetch(`${API_BASE_URL}/api/auth/user`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+        credentials: 'include', // Include cookies
+      });
+
+      if (response.ok) {
+        const userData = await handleApiResponse<User>(response);
+        const normalizedUser = normalizeUserData(userData);
+        setUser(normalizedUser);
+        localStorage.setItem('current_user', JSON.stringify(normalizedUser));
+      } else {
+        // Not authenticated or session expired
+        setUser(null);
+        localStorage.removeItem('current_user');
+        localStorage.removeItem('auth_token');
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      setUser(null);
+      localStorage.removeItem('current_user');
+      localStorage.removeItem('auth_token');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('current_user');
+  /**
+   * Login with email and password
+   */
+  const login = async (email: string, password: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        credentials: 'include', // Include cookies for httpOnly cookie support
+        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ 
+          message: 'Invalid email or password' 
+        }));
+        throw new Error(errorData.message || 'Invalid email or password');
+      }
+
+      const data = await handleApiResponse<{ user: User; token?: string }>(response);
+      
+      // Normalize user data
+      const normalizedUser = normalizeUserData(data.user);
+      
+      // Store user data
+      setUser(normalizedUser);
+      localStorage.setItem('current_user', JSON.stringify(normalizedUser));
+      
+      // Store token if provided (for Bearer token authentication)
+      if (data.token) {
+        localStorage.setItem('auth_token', data.token);
+      }
+    } catch (error) {
+      console.error('Login failed:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Logout and clear session
+   */
+  const logout = async () => {
+    try {
+      // Call logout endpoint to invalidate session on server
+      await fetch(`${API_BASE_URL}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Continue with local logout even if API call fails
+    } finally {
+      // Clear local state regardless of API call result
+      setUser(null);
+      localStorage.removeItem('current_user');
+      localStorage.removeItem('auth_token');
+      // Redirect to login page
+      window.location.href = '/login';
+    }
   };
 
   const hasPermission = (permission: Permission): boolean => {
@@ -111,14 +167,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const approved = window.confirm(
       `Manager approval required for: ${action}\nReason: ${reason}\n\nSimulate approval?`
     );
-
-    console.log('Approval Request:', {
-      requestedBy: user?.username,
-      action,
-      reason,
-      approved,
-      timestamp: new Date(),
-    });
 
     return approved;
   };
@@ -177,6 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isAuthenticated: !!user,
+        isLoading,
         login,
         logout,
         hasPermission,

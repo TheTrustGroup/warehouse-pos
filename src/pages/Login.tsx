@@ -1,84 +1,107 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LogIn } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
+import { Lock, Mail } from 'lucide-react';
 
 export function Login() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    
+    if (!email || !password) {
+      showToast('error', 'Please enter email and password');
+      return;
+    }
+
     try {
-      await login(username, password);
+      setIsLoading(true);
+      await login(email, password);
+      showToast('success', 'Login successful');
       navigate('/', { replace: true });
-    } catch {
-      setError('Invalid username or password. Try: admin, manager, or cashier');
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Login failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4">
-      <div className="glass-card w-full max-w-md p-8 animate-fade-in-up">
+      <div className="glass-card max-w-md w-full p-8 animate-fade-in-up">
+        {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-[28px] font-extrabold gradient-text tracking-tight mb-1">
+          <h1 className="text-3xl font-extrabold gradient-text mb-2">
             Extreme Dept Kidz
           </h1>
-          <p className="text-slate-500 text-sm font-medium">Inventory & POS</p>
+          <p className="text-slate-600">Warehouse & POS System</p>
         </div>
 
-        <h2 className="text-xl font-bold text-slate-900 mb-6">Sign in</h2>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {error && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200/50 text-red-700 text-sm">
-              {error}
-            </div>
-          )}
-
+        {/* Login Form */}
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="username" className="block text-sm font-semibold text-slate-700 mb-2">
-              Username
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Email
             </label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              className="input-field w-full"
-              placeholder="admin, manager, cashier"
-              autoComplete="username"
-              required
-            />
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
+                placeholder="Enter your email"
+                autoComplete="email"
+                disabled={isLoading}
+                required
+              />
+            </div>
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-semibold text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
               Password
             </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="input-field w-full"
-              placeholder="Any password for demo"
-              autoComplete="current-password"
-            />
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                disabled={isLoading}
+                required
+              />
+            </div>
           </div>
 
-          <button type="submit" className="btn-primary w-full flex items-center justify-center gap-2">
-            <LogIn className="w-5 h-5" />
-            Sign in
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Logging in...</span>
+              </>
+            ) : (
+              'Login'
+            )}
           </button>
         </form>
 
-        <p className="text-xs text-slate-500 mt-6 text-center">
-          Demo: use admin, manager, or cashier (password can be anything)
+        {/* Footer */}
+        <p className="text-center text-sm text-slate-500 mt-6">
+          Warehouse Management System
         </p>
       </div>
     </div>

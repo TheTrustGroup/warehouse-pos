@@ -1,10 +1,12 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Product } from '../types';
-import { mockProducts } from '../services/mockData';
-import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
+import { setStoredData, isStorageAvailable } from '../lib/storage';
+import { API_BASE_URL, getApiHeaders, handleApiResponse } from '../lib/api';
 
 interface InventoryContextType {
   products: Product[];
+  isLoading: boolean;
+  error: string | null;
   addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateProduct: (id: string, updates: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
@@ -12,6 +14,7 @@ interface InventoryContextType {
   getProduct: (id: string) => Product | undefined;
   searchProducts: (query: string) => Product[];
   filterProducts: (filters: ProductFilters) => Product[];
+  refreshProducts: () => Promise<void>;
 }
 
 export interface ProductFilters {
@@ -27,37 +30,102 @@ const InventoryContext = createContext<InventoryContextType | undefined>(undefin
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    if (!isStorageAvailable()) {
-      console.warn('localStorage is not available. Using mock data.');
-      setProducts(mockProducts);
-      return;
-    }
-
-    const storedProducts = getStoredData<Product[]>('warehouse_products', []);
+  /**
+   * Clear old mock data from localStorage
+   * Detects mock data by checking for mock SKUs or demo user IDs
+   */
+  const clearMockData = () => {
+    if (!isStorageAvailable()) return;
     
-    if (storedProducts.length > 0) {
+    const keysToRemove = [
+      'warehouse_products',
+      'transactions',
+      'orders',
+      'offline_transactions',
+    ];
+    
+    keysToRemove.forEach(key => {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          
+          // Check if it's an array (products, orders, transactions)
+          if (Array.isArray(parsed)) {
+            // Check if it contains mock data indicators
+            const isMockData = parsed.some((item: any) => 
+              item.sku?.includes('SKU-2024') || 
+              item.createdBy === 'admin' ||
+              item.createdBy === 'manager' ||
+              item.createdBy === 'cashier' ||
+              (item.sku && item.sku.startsWith('SKU-2024'))
+            );
+            
+            if (isMockData) {
+              localStorage.removeItem(key);
+            }
+          } else if (parsed && typeof parsed === 'object') {
+            // For single objects, check if they have mock indicators
+            if (parsed.sku?.includes('SKU-2024') || parsed.createdBy === 'admin') {
+              localStorage.removeItem(key);
+            }
+          }
+        } catch (e) {
+          // Invalid JSON, remove it
+          localStorage.removeItem(key);
+        }
+      }
+    });
+  };
+
+  // Load products from API
+  const loadProducts = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Connect to your real API
+      const response = await fetch(`${API_BASE_URL}/api/products`, {
+        headers: getApiHeaders(),
+        credentials: 'include',
+      });
+      
+      // Handle API response with proper error handling
+      const data = await handleApiResponse<Product[]>(response);
+      
       // Convert date strings back to Date objects
-      const productsWithDates = storedProducts.map((p: any) => ({
+      const productsWithDates = (data || []).map((p: any) => ({
         ...p,
         createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
         updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
         expiryDate: p.expiryDate ? new Date(p.expiryDate) : null,
       }));
+      
       setProducts(productsWithDates);
-    } else {
-      setProducts(mockProducts);
+    } catch (err) {
+      console.error('Error loading products:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load products. Please check your connection.');
+      setProducts([]); // Empty array, not mock data - no localStorage fallback
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  // Clear mock data and load products on mount
+  useEffect(() => {
+    clearMockData();
+    loadProducts();
   }, []);
 
-  // Save to localStorage whenever products change
+  // Save to localStorage whenever products change (for offline support)
   useEffect(() => {
-    if (products.length > 0 && isStorageAvailable()) {
+    if (!isLoading && products.length > 0 && isStorageAvailable()) {
       setStoredData('warehouse_products', products);
     }
-  }, [products]);
+  }, [products, isLoading]);
 
   const addProduct = (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newProduct: Product = {
@@ -118,6 +186,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   return (
     <InventoryContext.Provider value={{
       products,
+      isLoading,
+      error,
       addProduct,
       updateProduct,
       deleteProduct,
@@ -125,6 +195,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       getProduct,
       searchProducts,
       filterProducts,
+      refreshProducts: loadProducts,
     }}>
       {children}
     </InventoryContext.Provider>

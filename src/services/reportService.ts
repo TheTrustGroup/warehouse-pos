@@ -41,15 +41,55 @@ export interface InventoryReport {
   }>;
 }
 
+/**
+ * Check if a transaction is mock/demo data
+ * Only excludes transactions with clear demo/test indicators
+ */
+function isMockTransaction(transaction: Transaction): boolean {
+  // Exclude transactions with demo/test indicators in transaction number
+  if (transaction.transactionNumber) {
+    const upperNumber = transaction.transactionNumber.toUpperCase();
+    if (
+      upperNumber.includes('DEMO') ||
+      upperNumber.includes('TEST') ||
+      upperNumber.includes('SAMPLE') ||
+      upperNumber.includes('MOCK')
+    ) {
+      return true;
+    }
+  }
+  
+  // Exclude transactions with demo/test indicators in cashier name
+  // Only exclude if it's clearly a demo/test user, not real role names
+  if (transaction.cashier) {
+    const upperCashier = transaction.cashier.toUpperCase();
+    if (
+      upperCashier.includes('DEMO') ||
+      upperCashier.includes('TEST') ||
+      upperCashier.includes('SAMPLE') ||
+      upperCashier.includes('MOCK')
+    ) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 export function generateSalesReport(
   transactions: Transaction[],
   products: Product[],
   startDate: Date,
   endDate: Date
 ): SalesReport {
+  // Filter transactions: date range, completed status, and exclude mock data
   const filteredTransactions = transactions.filter(t => {
     const tDate = new Date(t.createdAt);
-    return tDate >= startDate && tDate <= endDate && t.status === 'completed';
+    const inDateRange = tDate >= startDate && tDate <= endDate;
+    const isCompleted = t.status === 'completed';
+    const isRealData = !isMockTransaction(t);
+    
+    return inDateRange && isCompleted && isRealData;
   });
 
   const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.total, 0);
@@ -161,15 +201,53 @@ export function generateSalesReport(
   };
 }
 
-export function generateInventoryReport(products: Product[]): InventoryReport {
-  const totalProducts = products.length;
-  const totalStockValue = products.reduce((sum, p) => sum + p.quantity * p.costPrice, 0);
-  const lowStockItems = products.filter(p => p.quantity > 0 && p.quantity <= p.reorderLevel).length;
-  const outOfStockItems = products.filter(p => p.quantity === 0).length;
+/**
+ * Check if a product is mock/demo data
+ * Only excludes products with clear demo/test indicators
+ */
+function isMockProduct(product: Product): boolean {
+  // Exclude products with demo/test SKUs
+  if (product.sku) {
+    const upperSku = product.sku.toUpperCase();
+    if (
+      upperSku.includes('DEMO') ||
+      upperSku.includes('TEST') ||
+      upperSku.includes('SAMPLE') ||
+      upperSku.includes('MOCK') ||
+      upperSku.startsWith('SKU-2024') // Mock SKU pattern from old mock data
+    ) {
+      return true;
+    }
+  }
+  
+  // Exclude products created by demo/test users (only if explicitly marked)
+  if (product.createdBy) {
+    const upperCreatedBy = product.createdBy.toUpperCase();
+    if (
+      upperCreatedBy.includes('DEMO') ||
+      upperCreatedBy.includes('TEST') ||
+      upperCreatedBy.includes('SAMPLE') ||
+      upperCreatedBy.includes('MOCK')
+    ) {
+      return true;
+    }
+  }
+  
+  return false;
+}
 
-  // Products by category
+export function generateInventoryReport(products: Product[]): InventoryReport {
+  // Filter out mock products
+  const realProducts = products.filter(p => !isMockProduct(p));
+  
+  const totalProducts = realProducts.length;
+  const totalStockValue = realProducts.reduce((sum, p) => sum + p.quantity * p.costPrice, 0);
+  const lowStockItems = realProducts.filter(p => p.quantity > 0 && p.quantity <= p.reorderLevel).length;
+  const outOfStockItems = realProducts.filter(p => p.quantity === 0).length;
+
+  // Products by category (using real products only)
   const categoryStats = new Map<string, { count: number; value: number }>();
-  products.forEach(p => {
+  realProducts.forEach(p => {
     const existing = categoryStats.get(p.category);
     const value = p.quantity * p.costPrice;
     if (existing) {
@@ -188,8 +266,8 @@ export function generateInventoryReport(products: Product[]): InventoryReport {
     }))
     .sort((a, b) => b.value - a.value);
 
-  // Top value products
-  const topValueProducts = [...products]
+  // Top value products (using real products only)
+  const topValueProducts = [...realProducts]
     .map(p => ({
       name: p.name,
       quantity: p.quantity,

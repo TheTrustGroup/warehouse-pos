@@ -1,8 +1,9 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { Transaction, TransactionItem, Payment } from '../types';
 import { useInventory } from './InventoryContext';
 import { generateTransactionNumber, calculateTotal } from '../lib/utils';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
+import { API_BASE_URL, getApiHeaders } from '../lib/api';
 
 interface POSContextType {
   cart: TransactionItem[];
@@ -30,9 +31,45 @@ export function POSProvider({ children }: { children: ReactNode }) {
   const [discount, setDiscount] = useState(0);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+  /**
+   * Sync offline transactions to API when connection is restored
+   */
+  const syncOfflineTransactions = useCallback(async () => {
+    if (!isStorageAvailable()) return;
+    
+    const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
+    if (offlineQueue.length === 0) return;
+
+    try {
+      // Send each offline transaction to API
+      for (const transaction of offlineQueue) {
+        const response = await fetch(`${API_BASE_URL}/api/transactions`, {
+          method: 'POST',
+          headers: getApiHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(transaction),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to sync transaction ${transaction.transactionNumber}`);
+        }
+      }
+      
+      // Clear offline queue after successful sync
+      localStorage.removeItem('offline_transactions');
+    } catch (error) {
+      console.error('Error syncing offline transactions:', error);
+      // Keep transactions in queue for next sync attempt
+    }
+  }, []);
+
   // Monitor online/offline status
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const handleOnline = () => {
+      setIsOnline(true);
+      // Sync offline transactions when connection is restored
+      syncOfflineTransactions();
+    };
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
@@ -42,7 +79,7 @@ export function POSProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [syncOfflineTransactions]);
 
   const addToCart = (productId: string, quantity: number = 1): boolean => {
     if (!productId || quantity <= 0) {
@@ -206,8 +243,6 @@ export function POSProvider({ children }: { children: ReactNode }) {
         const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
         setStoredData('offline_transactions', [...offlineQueue, transaction]);
       }
-    } else {
-      console.warn('localStorage not available. Transaction not persisted.');
     }
 
     clearCart();

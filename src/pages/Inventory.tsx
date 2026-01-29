@@ -8,12 +8,12 @@ import { InventoryFilters } from '../components/inventory/InventoryFilters';
 import { InventorySearchBar } from '../components/inventory/InventorySearchBar';
 import { Product } from '../types';
 import { PERMISSIONS } from '../types/permissions';
-import { Plus, LayoutGrid, List, Trash2, Download } from 'lucide-react';
+import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, RefreshCw } from 'lucide-react';
 
 type ViewMode = 'table' | 'grid';
 
 export function Inventory() {
-  const { products, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts } = useInventory();
+  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts } = useInventory();
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(PERMISSIONS.INVENTORY.CREATE);
   const canUpdate = hasPermission(PERMISSIONS.INVENTORY.UPDATE);
@@ -27,6 +27,69 @@ export function Inventory() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading products...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="glass-card max-w-md mx-auto text-center p-8">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="w-8 h-8 text-red-600" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-900 mb-2">Error Loading Products</h3>
+          <p className="text-slate-600 mb-6">{error}</p>
+          <button 
+            onClick={() => refreshProducts()} 
+            className="btn-primary flex items-center gap-2 mx-auto"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state (no products at all, not filtered)
+  if (products.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="glass-card max-w-md mx-auto text-center p-8">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Package className="w-8 h-8 text-slate-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-900 mb-2">No Products Yet</h3>
+          <p className="text-slate-600 mb-6">
+            Get started by adding your first product to the inventory.
+          </p>
+          {canCreate && (
+            <button 
+              onClick={() => {
+                setEditingProduct(null);
+                setIsModalOpen(true);
+              }} 
+              className="btn-primary flex items-center gap-2 mx-auto"
+            >
+              <Plus className="w-4 h-4" />
+              Add First Product
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Get unique categories
   const categories = useMemo(() => {
@@ -68,7 +131,6 @@ export function Inventory() {
   };
 
   const handleViewProduct = (product: Product) => {
-    // For now, just open edit modal. Can be enhanced with a view-only modal later
     setEditingProduct(product);
     setIsModalOpen(true);
   };
@@ -99,7 +161,6 @@ export function Inventory() {
   };
 
   const handleExport = () => {
-    // Simple CSV export
     const headers = ['SKU', 'Name', 'Category', 'Quantity', 'Cost Price', 'Selling Price', 'Location'];
     const rows = filteredProducts.map(p => [
       p.sku,
@@ -133,6 +194,7 @@ export function Inventory() {
           <h1 className="text-[32px] font-bold text-slate-900 tracking-tight mb-2">Inventory</h1>
           <p className="text-slate-500 text-sm">
             {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''} found
+            {filteredProducts.length !== products.length && ` (of ${products.length} total)`}
           </p>
         </div>
         {canCreate && (
@@ -223,7 +285,26 @@ export function Inventory() {
           )}
 
           {/* Products Display */}
-          {viewMode === 'table' ? (
+          {filteredProducts.length === 0 ? (
+            <div className="glass-card text-center p-12">
+              <Package className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">No Products Match Your Filters</h3>
+              <p className="text-slate-600 mb-4">
+                Try adjusting your search or filters to see more products.
+              </p>
+              {(searchQuery || Object.keys(filters).length > 0) && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFilters({});
+                  }}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          ) : viewMode === 'table' ? (
             <ProductTableView
               products={filteredProducts}
               onEdit={handleEditProduct}
