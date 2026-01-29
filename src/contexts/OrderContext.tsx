@@ -41,9 +41,11 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const data = await handleApiResponse<Order[]>(response);
+        // Ensure we have an array (API may return { data: [] } or similar)
+        const list = Array.isArray(data) ? data : (data && (data as any).data && Array.isArray((data as any).data) ? (data as any).data : []);
         
         // Convert date strings to Date objects
-        const ordersWithDates = (data || []).map((o: any) => ({
+        const ordersWithDates = list.map((o: any) => ({
           ...o,
           createdAt: o.createdAt ? new Date(o.createdAt) : new Date(),
           updatedAt: o.updatedAt ? new Date(o.updatedAt) : new Date(),
