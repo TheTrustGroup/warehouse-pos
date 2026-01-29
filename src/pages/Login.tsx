@@ -27,7 +27,11 @@ export function Login() {
       showToast('success', 'Login successful');
       navigate('/', { replace: true });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Login failed';
+      let message = error instanceof Error ? error.message : 'Login failed';
+      // Show friendly message for network/connection errors (e.g. Safari "Load failed", Chrome "Failed to fetch")
+      if (/load failed|failed to fetch|network error|networkrequestfailed/i.test(message)) {
+        message = 'Cannot reach the server. Check your connection and try again.';
+      }
       showToast('error', message);
     } finally {
       setIsLoading(false);

@@ -116,7 +116,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setProducts(productsWithDates);
     } catch (err) {
       console.error('Error loading products:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load products. Please check your connection.');
+      let message = err instanceof Error ? err.message : 'Failed to load products. Please check your connection.';
+      // Show friendly message for network/connection errors (e.g. "Load failed", "Failed to fetch")
+      if (/load failed|failed to fetch|network error|networkrequestfailed/i.test(message)) {
+        message = 'Cannot reach the server. Check your connection and try again.';
+      }
+      setError(message);
       setProducts([]); // Empty array, not mock data - no localStorage fallback
     } finally {
       setIsLoading(false);

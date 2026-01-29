@@ -140,6 +140,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Login failed:', error);
+      // Throw user-friendly message for network/connection errors
+      if (error instanceof TypeError && /load failed|failed to fetch|network/i.test((error as Error).message)) {
+        throw new Error('Cannot reach the server. Check your connection and try again.');
+      }
       throw error;
     }
   };
