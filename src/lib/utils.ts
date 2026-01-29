@@ -56,6 +56,39 @@ export function getCategoryDisplay(category: unknown): string {
   return String(category);
 }
 
+/** Default location shape when API omits it */
+const DEFAULT_LOCATION = { warehouse: 'Main Store', aisle: '', rack: '', bin: '' };
+
+/**
+ * Safe location display string (API may omit location or return partial).
+ */
+export function getLocationDisplay(location: { aisle?: string; rack?: string; bin?: string } | null | undefined): string {
+  if (location == null) return '—';
+  const a = location.aisle ?? '';
+  const r = location.rack ?? '';
+  const b = location.bin ?? '';
+  const s = [a, r, b].filter(Boolean).join('-');
+  return s || '—';
+}
+
+/**
+ * Ensure product has a location object (for API responses that omit it).
+ */
+export function normalizeProductLocation<T extends { location?: unknown }>(p: T): T & { location: { warehouse: string; aisle: string; rack: string; bin: string } } {
+  const loc = p.location && typeof p.location === 'object' && !Array.isArray(p.location)
+    ? (p.location as { warehouse?: string; aisle?: string; rack?: string; bin?: string })
+    : null;
+  return {
+    ...p,
+    location: {
+      warehouse: loc?.warehouse ?? DEFAULT_LOCATION.warehouse,
+      aisle: loc?.aisle ?? '',
+      rack: loc?.rack ?? '',
+      bin: loc?.bin ?? '',
+    },
+  };
+}
+
 /**
  * Safely formats a date
  * @param date - Date object or string

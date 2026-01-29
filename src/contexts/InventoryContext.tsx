@@ -2,7 +2,7 @@ import { createContext, useContext, useState, ReactNode, useEffect } from 'react
 import { Product } from '../types';
 import { setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL, getApiHeaders, handleApiResponse } from '../lib/api';
-import { getCategoryDisplay } from '../lib/utils';
+import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
 
 interface InventoryContextType {
   products: Product[];
@@ -106,8 +106,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       // Handle API response with proper error handling
       const data = await handleApiResponse<Product[]>(response);
       
-      // Convert date strings back to Date objects
-      const productsWithDates = (data || []).map((p: any) => ({
+      // Convert date strings back to Date objects and ensure location exists (API may omit it)
+      const productsWithDates = (data || []).map((p: any) => normalizeProductLocation({
         ...p,
         createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
         updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),

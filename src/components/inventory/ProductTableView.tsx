@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Product } from '../../types';
-import { formatCurrency, getCategoryDisplay } from '../../lib/utils';
+import { formatCurrency, getCategoryDisplay, getLocationDisplay } from '../../lib/utils';
 import { Pencil, Trash2, Eye, Package } from 'lucide-react';
 
 interface ProductTableViewProps {
@@ -203,7 +203,7 @@ export function ProductTableView({
                     </div>
                   </td>
                   <td className="px-5 py-4 align-middle text-sm text-slate-600 font-medium">
-                    {product.location.aisle}-{product.location.rack}-{product.location.bin}
+                    {getLocationDisplay(product.location)}
                   </td>
                   {(canEdit || canDelete) && (
                     <td className="px-5 py-4 align-middle">

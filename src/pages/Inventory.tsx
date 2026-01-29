@@ -8,7 +8,7 @@ import { InventoryFilters } from '../components/inventory/InventoryFilters';
 import { InventorySearchBar } from '../components/inventory/InventorySearchBar';
 import { Product } from '../types';
 import { PERMISSIONS } from '../types/permissions';
-import { getCategoryDisplay } from '../lib/utils';
+import { getCategoryDisplay, getLocationDisplay } from '../lib/utils';
 import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, RefreshCw } from 'lucide-react';
 
 type ViewMode = 'table' | 'grid';
@@ -161,7 +161,7 @@ export function Inventory() {
       p.quantity,
       p.costPrice,
       p.sellingPrice,
-      `${p.location.aisle}-${p.location.rack}-${p.location.bin}`
+      getLocationDisplay(p.location)
     ]);
 
     const csv = [
