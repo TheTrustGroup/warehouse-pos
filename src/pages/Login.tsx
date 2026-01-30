@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { Lock, Mail } from 'lucide-react';
+import { Lock, Mail, WifiOff } from 'lucide-react';
+
+const SERVER_UNREACHABLE = 'Cannot reach the server. Check your connection and try again.';
 
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const [showOfflineOption, setShowOfflineOption] = useState(false);
+  const { login, loginOffline } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -21,6 +24,7 @@ export function Login() {
       return;
     }
 
+    setShowOfflineOption(false);
     try {
       setIsLoading(true);
       await login(trimmedEmail, trimmedPassword);
@@ -28,14 +32,28 @@ export function Login() {
       navigate('/', { replace: true });
     } catch (error) {
       let message = error instanceof Error ? error.message : 'Login failed';
-      // Show friendly message for network/connection errors (e.g. Safari "Load failed", Chrome "Failed to fetch")
-      if (/load failed|failed to fetch|network error|networkrequestfailed/i.test(message)) {
-        message = 'Cannot reach the server. Check your connection and try again.';
+      const isServerUnreachable =
+        message === SERVER_UNREACHABLE ||
+        /load failed|failed to fetch|network error|networkrequestfailed/i.test(message);
+      if (isServerUnreachable) {
+        message = SERVER_UNREACHABLE;
+        setShowOfflineOption(true);
       }
       showToast('error', message);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleContinueOffline = () => {
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      showToast('error', 'Enter your email first');
+      return;
+    }
+    loginOffline(trimmedEmail);
+    showToast('success', 'Signed in offline. Your local inventory is available.');
+    navigate('/', { replace: true });
   };
 
   return (
@@ -103,6 +121,20 @@ export function Login() {
               'Login'
             )}
           </button>
+
+          {showOfflineOption && (
+            <div className="pt-2 border-t border-slate-200">
+              <p className="text-sm text-slate-600 mb-2">Server unreachable. You can still use the app with your local data:</p>
+              <button
+                type="button"
+                onClick={handleContinueOffline}
+                className="w-full py-2.5 px-4 rounded-xl border-2 border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-colors flex items-center justify-center gap-2"
+              >
+                <WifiOff className="w-4 h-4" />
+                Continue offline
+              </button>
+            </div>
+          )}
         </form>
 
         {/* Footer */}

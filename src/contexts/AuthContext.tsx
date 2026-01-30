@@ -10,6 +10,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  /** Sign in with local data only when the server is unreachable. No API call. */
+  loginOffline: (email: string) => void;
   logout: () => Promise<void>;
   /** Switch role for demo/testing so you can see all inventory and POS features */
   switchRole: (roleId: string) => void;
@@ -112,6 +114,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(DEMO_ROLE_KEY, roleId);
     setUser({ ...user, role: role.id as User['role'], permissions: role.permissions });
     localStorage.setItem('current_user', JSON.stringify({ ...user, role: role.id, permissions: role.permissions }));
+  };
+
+  /**
+   * Sign in using only local data (no server). Use when the server is unreachable
+   * so you can still view and manage warehouse-recorded inventory.
+   */
+  const loginOffline = (email: string) => {
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) return;
+    const adminRole = ROLES.ADMIN;
+    const offlineUser: User = {
+      id: `offline-${crypto.randomUUID()}`,
+      username: trimmedEmail.split('@')[0],
+      email: trimmedEmail,
+      role: 'admin',
+      fullName: trimmedEmail,
+      permissions: adminRole.permissions,
+      isActive: true,
+      lastLogin: new Date(),
+      createdAt: new Date(),
+    };
+    setUser(offlineUser);
+    localStorage.setItem('current_user', JSON.stringify(offlineUser));
   };
 
   /**
@@ -273,6 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         login,
+        loginOffline,
         logout,
         switchRole,
         hasPermission,

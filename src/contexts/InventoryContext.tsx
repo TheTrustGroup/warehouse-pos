@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Product } from '../types';
-import { setStoredData, isStorageAvailable } from '../lib/storage';
+import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL, getApiHeaders, handleApiResponse } from '../lib/api';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
 
@@ -35,18 +35,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * Clear old mock data from localStorage
-   * Detects mock data by checking for mock SKUs or demo user IDs
+   * Clear old mock data from localStorage (transactions/orders only).
+   * Never touch warehouse_products — user-recorded inventory must persist forever.
    */
   const clearMockData = () => {
     if (!isStorageAvailable()) return;
-    
-    const keysToRemove = [
-      'warehouse_products',
-      'transactions',
-      'orders',
-      'offline_transactions',
-    ];
+    const keysToRemove = ['transactions', 'orders', 'offline_transactions'];
     
     keysToRemove.forEach(key => {
       const stored = localStorage.getItem(key);
@@ -82,48 +76,62 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Load products from API
+  /** Normalize product from API or localStorage (dates + location) so it's safe to use. */
+  const normalizeProduct = (p: any): Product =>
+    normalizeProductLocation({
+      ...p,
+      createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
+      updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
+      expiryDate: p.expiryDate ? new Date(p.expiryDate) : null,
+    });
+
+  /**
+   * Load products: API is source of truth for store-admin items; merge with localStorage
+   * so warehouse-recorded items (only in localStorage) are kept forever and never lost.
+   * If API fails, fall back to localStorage so inventory still shows.
+   */
   const loadProducts = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      // Connect to your real API
-      // Try /admin/api/products first (based on discovered endpoints), fallback to /api/products
+
       let response = await fetch(`${API_BASE_URL}/admin/api/products`, {
         headers: getApiHeaders(),
         credentials: 'include',
       });
-      
-      // If 404, try standard endpoint
       if (response.status === 404) {
         response = await fetch(`${API_BASE_URL}/api/products`, {
           headers: getApiHeaders(),
           credentials: 'include',
         });
       }
-      
-      // Handle API response with proper error handling
+
       const data = await handleApiResponse<Product[]>(response);
-      
-      // Convert date strings back to Date objects and ensure location exists (API may omit it)
-      const productsWithDates = (data || []).map((p: any) => normalizeProductLocation({
-        ...p,
-        createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
-        updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
-        expiryDate: p.expiryDate ? new Date(p.expiryDate) : null,
-      }));
-      
-      setProducts(productsWithDates);
+      const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
+
+      // Merge: store-admin items from API + warehouse-recorded items only in localStorage
+      const localRaw = getStoredData<any[]>('warehouse_products', []);
+      const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
+      const apiIds = new Set(apiProducts.map((p) => p.id));
+      const localOnly = localProducts.filter((p) => !apiIds.has(p.id));
+      const merged = [...apiProducts, ...localOnly];
+
+      setProducts(merged);
     } catch (err) {
       console.error('Error loading products:', err);
-      let message = err instanceof Error ? err.message : 'Failed to load products. Please check your connection.';
-      // Show friendly message for network/connection errors (e.g. "Load failed", "Failed to fetch")
-      if (/load failed|failed to fetch|network error|networkrequestfailed/i.test(message)) {
-        message = 'Cannot reach the server. Check your connection and try again.';
-      }
+      const message =
+        /load failed|failed to fetch|network error|networkrequestfailed/i.test(
+          err instanceof Error ? err.message : String(err)
+        )
+          ? 'Cannot reach the server. Check your connection and try again.'
+          : err instanceof Error
+            ? err.message
+            : 'Failed to load products. Please check your connection.';
       setError(message);
-      setProducts([]); // Empty array, not mock data - no localStorage fallback
+      // Fallback to localStorage so warehouse-recorded inventory is never lost
+      const localRaw = getStoredData<any[]>('warehouse_products', []);
+      const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
+      setProducts(localProducts);
     } finally {
       setIsLoading(false);
     }
