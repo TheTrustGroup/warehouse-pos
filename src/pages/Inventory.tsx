@@ -145,14 +145,21 @@ export function Inventory() {
     }
   };
 
-  const handleSubmitProduct = (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const handleSubmitProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (editingProduct) {
       updateProduct(editingProduct.id, productData);
-    } else {
-      addProduct(productData);
+      setIsModalOpen(false);
+      setEditingProduct(null);
+      return;
     }
-    setIsModalOpen(false);
-    setEditingProduct(null);
+    try {
+      await addProduct(productData);
+      setIsModalOpen(false);
+      setEditingProduct(null);
+    } catch (e) {
+      showToast('error', e instanceof Error ? e.message : 'Failed to save product. Write failed.');
+      throw e;
+    }
   };
 
   const handleExport = () => {

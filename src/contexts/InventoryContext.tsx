@@ -8,7 +8,7 @@ interface InventoryContextType {
   products: Product[];
   isLoading: boolean;
   error: string | null;
-  addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateProduct: (id: string, updates: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
   deleteProducts: (ids: string[]) => void;
@@ -88,20 +88,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     });
 
   /**
-   * Prefer local (user-recorded) value when API has 0 or missing. Ensures warehouse-recorded
-   * prices and quantity are never overwritten by API zeros.
-   */
-  const preferLocalNumber = (apiVal: number | null | undefined, localVal: number | null | undefined): number => {
-    const api = apiVal != null && Number.isFinite(Number(apiVal)) ? Number(apiVal) : null;
-    const local = localVal != null && Number.isFinite(Number(localVal)) ? Number(localVal) : null;
-    if (api != null && api !== 0) return api;
-    return local != null ? local : (api ?? 0);
-  };
-
-  /**
-   * Load products: API + localStorage merged. User-recorded values (prices, quantity) are
-   * never overwritten by API zeros — local wins when API has 0 or missing for critical fields.
-   * If API fails, fall back to localStorage so inventory still shows.
+   * Load products: SERVER IS SINGLE SOURCE OF TRUTH.
+   * One fetch to API (backend must implement getInventory() → Supabase).
+   * No client-side merge, SWR, React Query, or refetch logic. On success → use API response only.
+   * On failure (offline) → fallback to localStorage so UI still shows something.
    */
   const loadProducts = async () => {
     try {
@@ -111,38 +101,21 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       let response = await fetch(`${API_BASE_URL}/admin/api/products`, {
         headers: getApiHeaders(),
         credentials: 'include',
+        cache: 'no-store',
       });
       if (response.status === 404) {
         response = await fetch(`${API_BASE_URL}/api/products`, {
           headers: getApiHeaders(),
           credentials: 'include',
+          cache: 'no-store',
         });
       }
 
       const data = await handleApiResponse<Product[]>(response);
       const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
-
-      const localRaw = getStoredData<any[]>('warehouse_products', []);
-      const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
-      const localById = new Map(localProducts.map((p) => [p.id, p]));
-      const apiIds = new Set(apiProducts.map((p) => p.id));
-      const localOnly = localProducts.filter((p) => !apiIds.has(p.id));
-
-      // Merge: API products but prefer local prices/quantity when API has 0 or missing (no automatic overwrite)
-      const mergedApi = apiProducts.map((ap) => {
-        const local = localById.get(ap.id);
-        if (!local) return ap;
-        return {
-          ...ap,
-          costPrice: preferLocalNumber(ap.costPrice, local.costPrice),
-          sellingPrice: preferLocalNumber(ap.sellingPrice, local.sellingPrice),
-          quantity: preferLocalNumber(ap.quantity, local.quantity),
-          reorderLevel: preferLocalNumber(ap.reorderLevel, local.reorderLevel),
-        };
-      });
-      const merged = [...mergedApi, ...localOnly];
-
-      setProducts(merged);
+      // TEMP 24h: truth logging — if refresh clears UI: 0 = fetch problem, >0 = rendering/state problem
+      console.log('INVENTORY READ', apiProducts.length, Date.now());
+      setProducts(apiProducts);
     } catch (err) {
       console.error('Error loading products:', err);
       const message =
@@ -154,16 +127,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             ? err.message
             : 'Failed to load products. Please check your connection.';
       setError(message);
-      // Fallback to localStorage so warehouse-recorded inventory is never lost
       const localRaw = getStoredData<any[]>('warehouse_products', []);
       const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
+      console.log('INVENTORY READ', localProducts.length, Date.now(), '(fallback)');
       setProducts(localProducts);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Clear mock data and load products on mount
+  // Single load on mount. No SWR, React Query, or client refetch logic — server is source of truth.
   useEffect(() => {
     clearMockData();
     loadProducts();
@@ -195,11 +168,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       let response = await fetch(`${API_BASE_URL}/admin/api/products`, {
         headers: getApiHeaders(),
         credentials: 'include',
+        cache: 'no-store',
       });
       if (response.status === 404) {
         response = await fetch(`${API_BASE_URL}/api/products`, {
           headers: getApiHeaders(),
           credentials: 'include',
+          cache: 'no-store',
         });
       }
       if (response.ok) {
@@ -238,26 +213,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return { synced, failed, total };
   };
 
-  /**
-   * Sync a product to the API so it appears in all browsers/devices.
-   * Fire-and-forget; failures leave the product in localStorage only (current browser).
-   */
-  const syncProductToApi = (product: Product) => {
-    const opts = { method: 'POST' as const, headers: getApiHeaders(), credentials: 'include' as const, body: JSON.stringify(productToPayload(product)) };
-    fetch(`${API_BASE_URL}/admin/api/products`, opts)
-      .then((res) => {
-        if (res.status === 404) return fetch(`${API_BASE_URL}/api/products`, opts);
-        return res;
-      })
-      .then((res) => {
-        if (!res.ok) throw new Error('Sync failed');
-      })
-      .catch(() => {
-        // Product stays in localStorage; other browsers won't see it until API is used
-        console.debug('Product sync to API failed (offline or server error). Item saved locally.');
-      });
-  };
-
   /** Persist current list to localStorage immediately so refresh never loses data. */
   const persistProducts = (next: Product[]) => {
     if (isStorageAvailable() && next.length >= 0) {
@@ -265,17 +220,44 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addProduct = (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newProduct: Product = {
+  /**
+   * Add product: WRITE PATH — UI never mutates until DB confirms.
+   * POST to API first; only on success update state with saved item.
+   */
+  const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const payload = productToPayload({
       ...productData,
       id: crypto.randomUUID(),
       createdAt: new Date(),
       updatedAt: new Date(),
-    };
-    const next = [...products, newProduct];
+    });
+    let res = await fetch(`${API_BASE_URL}/admin/api/products`, {
+      method: 'POST',
+      headers: getApiHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+    if (res.status === 404) {
+      res = await fetch(`${API_BASE_URL}/api/products`, {
+        method: 'POST',
+        headers: getApiHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(payload),
+        cache: 'no-store',
+      });
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(err.message || 'Write failed');
+    }
+    const savedRaw = await res.json().catch(() => null);
+    const saved: Product = savedRaw
+      ? normalizeProduct(savedRaw)
+      : normalizeProduct(payload);
+    const next = [...products, saved];
     setProducts(next);
     persistProducts(next);
-    syncProductToApi(newProduct);
   };
 
   const updateProduct = (id: string, updates: Partial<Product>) => {

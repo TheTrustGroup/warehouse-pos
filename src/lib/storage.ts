@@ -19,6 +19,9 @@ export function getStoredData<T>(key: string, defaultValue: T): T {
   }
 }
 
+/** Keys we can clear to free quota when warehouse_products must be saved. */
+const CLEARABLE_KEYS = ['transactions', 'offline_transactions', 'orders'];
+
 /**
  * Safely set data to localStorage
  * @param key - Storage key
@@ -30,10 +33,27 @@ export function setStoredData<T>(key: string, value: T): boolean {
     localStorage.setItem(key, JSON.stringify(value));
     return true;
   } catch (error) {
-    console.error(`Error writing ${key} to localStorage:`, error);
-    // Handle quota exceeded error
     if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-      console.error('localStorage quota exceeded. Consider clearing old data.');
+      // Only try to free space for critical keys (e.g. warehouse_products)
+      if (key === 'warehouse_products') {
+        for (const k of CLEARABLE_KEYS) {
+          try {
+            localStorage.removeItem(k);
+          } catch {
+            /* ignore */
+          }
+        }
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+          return true;
+        } catch {
+          console.error('localStorage quota exceeded. Could not free enough space for warehouse_products.');
+        }
+      } else {
+        console.error('localStorage quota exceeded. Consider clearing old data.');
+      }
+    } else {
+      console.error(`Error writing ${key} to localStorage:`, error);
     }
     return false;
   }

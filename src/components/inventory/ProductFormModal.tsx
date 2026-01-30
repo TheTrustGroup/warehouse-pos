@@ -6,7 +6,7 @@ import { X, Upload } from 'lucide-react';
 interface ProductFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onSubmit: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void | Promise<void>;
   product?: Product | null;
 }
 
@@ -41,6 +41,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
 
   const [tagInput, setTagInput] = useState('');
   const [imagePreview, setImagePreview] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (product) {
@@ -122,10 +123,18 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
     setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
-    onClose();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await Promise.resolve(onSubmit(formData));
+      onClose();
+    } catch {
+      // Parent shows toast; keep modal open
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -470,8 +479,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             <button
               type="submit"
               className="btn-primary"
+              disabled={isSubmitting}
             >
-              {product ? 'Update Product' : 'Add Product'}
+              {isSubmitting ? 'Saving...' : product ? 'Update Product' : 'Add Product'}
             </button>
           </div>
         </form>
