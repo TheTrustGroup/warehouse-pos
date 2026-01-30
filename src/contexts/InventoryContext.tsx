@@ -78,7 +78,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  /** Normalize product from API or localStorage (dates + location) so it's safe to use. */
+  /** Normalize product from API or localStorage (dates + location only). Never touch prices or quantity. */
   const normalizeProduct = (p: any): Product =>
     normalizeProductLocation({
       ...p,
@@ -88,8 +88,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     });
 
   /**
-   * Load products: API is source of truth for store-admin items; merge with localStorage
-   * so warehouse-recorded items (only in localStorage) are kept forever and never lost.
+   * Prefer local (user-recorded) value when API has 0 or missing. Ensures warehouse-recorded
+   * prices and quantity are never overwritten by API zeros.
+   */
+  const preferLocalNumber = (apiVal: number | null | undefined, localVal: number | null | undefined): number => {
+    const api = apiVal != null && Number.isFinite(Number(apiVal)) ? Number(apiVal) : null;
+    const local = localVal != null && Number.isFinite(Number(localVal)) ? Number(localVal) : null;
+    if (api != null && api !== 0) return api;
+    return local != null ? local : (api ?? 0);
+  };
+
+  /**
+   * Load products: API + localStorage merged. User-recorded values (prices, quantity) are
+   * never overwritten by API zeros — local wins when API has 0 or missing for critical fields.
    * If API fails, fall back to localStorage so inventory still shows.
    */
   const loadProducts = async () => {
@@ -111,12 +122,25 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const data = await handleApiResponse<Product[]>(response);
       const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
 
-      // Merge: store-admin items from API + warehouse-recorded items only in localStorage
       const localRaw = getStoredData<any[]>('warehouse_products', []);
       const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
+      const localById = new Map(localProducts.map((p) => [p.id, p]));
       const apiIds = new Set(apiProducts.map((p) => p.id));
       const localOnly = localProducts.filter((p) => !apiIds.has(p.id));
-      const merged = [...apiProducts, ...localOnly];
+
+      // Merge: API products but prefer local prices/quantity when API has 0 or missing (no automatic overwrite)
+      const mergedApi = apiProducts.map((ap) => {
+        const local = localById.get(ap.id);
+        if (!local) return ap;
+        return {
+          ...ap,
+          costPrice: preferLocalNumber(ap.costPrice, local.costPrice),
+          sellingPrice: preferLocalNumber(ap.sellingPrice, local.sellingPrice),
+          quantity: preferLocalNumber(ap.quantity, local.quantity),
+          reorderLevel: preferLocalNumber(ap.reorderLevel, local.reorderLevel),
+        };
+      });
+      const merged = [...mergedApi, ...localOnly];
 
       setProducts(merged);
     } catch (err) {
