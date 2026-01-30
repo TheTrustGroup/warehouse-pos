@@ -258,6 +258,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       });
   };
 
+  /** Persist current list to localStorage immediately so refresh never loses data. */
+  const persistProducts = (next: Product[]) => {
+    if (isStorageAvailable() && next.length >= 0) {
+      setStoredData('warehouse_products', next);
+    }
+  };
+
   const addProduct = (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newProduct: Product = {
       ...productData,
@@ -265,22 +272,30 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    setProducts(prev => [...prev, newProduct]);
+    const next = [...products, newProduct];
+    setProducts(next);
+    persistProducts(next);
     syncProductToApi(newProduct);
   };
 
   const updateProduct = (id: string, updates: Partial<Product>) => {
-    setProducts(prev => prev.map(p => 
+    const next = products.map(p =>
       p.id === id ? { ...p, ...updates, updatedAt: new Date() } : p
-    ));
+    );
+    setProducts(next);
+    persistProducts(next);
   };
 
   const deleteProduct = (id: string) => {
-    setProducts(prev => prev.filter(p => p.id !== id));
+    const next = products.filter(p => p.id !== id);
+    setProducts(next);
+    persistProducts(next);
   };
 
   const deleteProducts = (ids: string[]) => {
-    setProducts(prev => prev.filter(p => !ids.includes(p.id)));
+    const next = products.filter(p => !ids.includes(p.id));
+    setProducts(next);
+    persistProducts(next);
   };
 
   const getProduct = (id: string) => {
