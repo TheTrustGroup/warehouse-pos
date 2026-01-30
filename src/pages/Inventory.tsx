@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useInventory, ProductFilters } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { ProductTableView } from '../components/inventory/ProductTableView';
 import { ProductGridView } from '../components/inventory/ProductGridView';
 import { ProductFormModal } from '../components/inventory/ProductFormModal';
@@ -9,13 +10,15 @@ import { InventorySearchBar } from '../components/inventory/InventorySearchBar';
 import { Product } from '../types';
 import { PERMISSIONS } from '../types/permissions';
 import { getCategoryDisplay, getLocationDisplay } from '../lib/utils';
-import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, RefreshCw, Upload } from 'lucide-react';
 
 type ViewMode = 'table' | 'grid';
 
 export function Inventory() {
-  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts } = useInventory();
+  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi } = useInventory();
   const { hasPermission } = useAuth();
+  const { showToast } = useToast();
+  const [isSyncing, setIsSyncing] = useState(false);
   const canCreate = hasPermission(PERMISSIONS.INVENTORY.CREATE);
   const canUpdate = hasPermission(PERMISSIONS.INVENTORY.UPDATE);
   const canDelete = hasPermission(PERMISSIONS.INVENTORY.DELETE);
@@ -178,6 +181,26 @@ export function Inventory() {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleSyncToServer = async () => {
+    setIsSyncing(true);
+    try {
+      const { synced, failed, total } = await syncLocalInventoryToApi();
+      if (total === 0) {
+        showToast('warning', 'No locally recorded items to sync here. If you added items in another browser (e.g. Safari), open this app in that browser and click "Sync recorded items to server" there to push them so they appear everywhere.');
+      } else if (failed === 0) {
+        showToast('success', `Synced ${synced} item${synced !== 1 ? 's' : ''} to the server. They will appear in all browsers.`);
+      } else if (synced > 0) {
+        showToast('warning', `Synced ${synced} of ${total} items. ${failed} failed (check connection).`);
+      } else {
+        showToast('error', 'Could not reach the server. Try again when connected.');
+      }
+    } catch {
+      showToast('error', 'Sync failed. Check your connection and try again.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -192,15 +215,31 @@ export function Inventory() {
             {filteredProducts.length !== products.length && ` (of ${products.length} total)`}
           </p>
         </div>
-        {canCreate && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={handleAddProduct}
-            className="btn-primary flex items-center gap-2"
+            type="button"
+            onClick={handleSyncToServer}
+            disabled={isSyncing || products.length === 0}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Push items recorded only in this browser to the server so they appear everywhere"
           >
-            <Plus className="w-5 h-5" />
-            Add Product
+            {isSyncing ? (
+              <RefreshCw className="w-5 h-5 animate-spin" />
+            ) : (
+              <Upload className="w-5 h-5" />
+            )}
+            {isSyncing ? 'Syncing…' : 'Sync recorded items to server'}
           </button>
-        )}
+          {canCreate && (
+            <button
+              onClick={handleAddProduct}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Add Product
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Search and View Toggle */}

@@ -16,6 +16,8 @@ interface InventoryContextType {
   searchProducts: (query: string) => Product[];
   filterProducts: (filters: ProductFilters) => Product[];
   refreshProducts: () => Promise<void>;
+  /** Push products that exist only in this browser's storage to the API so they appear everywhere. */
+  syncLocalInventoryToApi: () => Promise<{ synced: number; failed: number; total: number }>;
 }
 
 export interface ProductFilters {
@@ -150,6 +152,88 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   }, [products, isLoading]);
 
+  /** Serialize a product for API POST (dates to ISO strings). */
+  const productToPayload = (product: Product) => ({
+    ...product,
+    createdAt: product.createdAt instanceof Date ? product.createdAt.toISOString() : product.createdAt,
+    updatedAt: product.updatedAt instanceof Date ? product.updatedAt.toISOString() : product.updatedAt,
+    expiryDate: product.expiryDate instanceof Date ? product.expiryDate.toISOString() : product.expiryDate,
+  });
+
+  /**
+   * Push products that exist only in this browser's localStorage to the API
+   * so they appear in all browsers/devices. Use after recording items in one
+   * browser to recover them on the server and elsewhere.
+   */
+  const syncLocalInventoryToApi = async (): Promise<{ synced: number; failed: number; total: number }> => {
+    let apiIds = new Set<string>();
+    try {
+      let response = await fetch(`${API_BASE_URL}/admin/api/products`, {
+        headers: getApiHeaders(),
+        credentials: 'include',
+      });
+      if (response.status === 404) {
+        response = await fetch(`${API_BASE_URL}/api/products`, {
+          headers: getApiHeaders(),
+          credentials: 'include',
+        });
+      }
+      if (response.ok) {
+        const data = await response.json().catch(() => []);
+        const list = Array.isArray(data) ? data : [];
+        apiIds = new Set(list.map((p: any) => p.id));
+      }
+    } catch {
+      return { synced: 0, failed: 0, total: 0 };
+    }
+
+    const localRaw = getStoredData<any[]>('warehouse_products', []);
+    const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
+    const localOnly = localProducts.filter((p) => !apiIds.has(p.id));
+    const total = localOnly.length;
+    if (total === 0) return { synced: 0, failed: 0, total: 0 };
+
+    const opts = (body: string) => ({
+      method: 'POST' as const,
+      headers: getApiHeaders(),
+      credentials: 'include' as const,
+      body,
+    });
+    let synced = 0;
+    let failed = 0;
+    for (const product of localOnly) {
+      try {
+        let res = await fetch(`${API_BASE_URL}/admin/api/products`, opts(JSON.stringify(productToPayload(product))));
+        if (res.status === 404) res = await fetch(`${API_BASE_URL}/api/products`, opts(JSON.stringify(productToPayload(product))));
+        if (res.ok) synced++; else failed++;
+      } catch {
+        failed++;
+      }
+    }
+    await loadProducts();
+    return { synced, failed, total };
+  };
+
+  /**
+   * Sync a product to the API so it appears in all browsers/devices.
+   * Fire-and-forget; failures leave the product in localStorage only (current browser).
+   */
+  const syncProductToApi = (product: Product) => {
+    const opts = { method: 'POST' as const, headers: getApiHeaders(), credentials: 'include' as const, body: JSON.stringify(productToPayload(product)) };
+    fetch(`${API_BASE_URL}/admin/api/products`, opts)
+      .then((res) => {
+        if (res.status === 404) return fetch(`${API_BASE_URL}/api/products`, opts);
+        return res;
+      })
+      .then((res) => {
+        if (!res.ok) throw new Error('Sync failed');
+      })
+      .catch(() => {
+        // Product stays in localStorage; other browsers won't see it until API is used
+        console.debug('Product sync to API failed (offline or server error). Item saved locally.');
+      });
+  };
+
   const addProduct = (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newProduct: Product = {
       ...productData,
@@ -158,6 +242,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       updatedAt: new Date(),
     };
     setProducts(prev => [...prev, newProduct]);
+    syncProductToApi(newProduct);
   };
 
   const updateProduct = (id: string, updates: Partial<Product>) => {
@@ -219,6 +304,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       searchProducts,
       filterProducts,
       refreshProducts: loadProducts,
+      syncLocalInventoryToApi,
     }}>
       {children}
     </InventoryContext.Provider>
