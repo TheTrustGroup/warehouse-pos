@@ -113,8 +113,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       const data = await handleApiResponse<Product[]>(response);
       const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
-      // TEMP 24h: truth logging — if refresh clears UI: 0 = fetch problem, >0 = rendering/state problem
-      console.log('INVENTORY READ', apiProducts.length, Date.now());
       setProducts(apiProducts);
     } catch (err) {
       console.error('Error loading products:', err);
@@ -129,7 +127,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setError(message);
       const localRaw = getStoredData<any[]>('warehouse_products', []);
       const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
-      console.log('INVENTORY READ', localProducts.length, Date.now(), '(fallback)');
       setProducts(localProducts);
     } finally {
       setIsLoading(false);
