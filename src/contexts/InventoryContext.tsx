@@ -249,7 +249,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(err.message || 'Write failed');
+      // 400 = backend rejected payload — log so you can align with API expectations
+      console.error('POST /admin/api/products failed', res.status, err);
+      throw new Error(err.message || err.errors?.[0]?.message || 'Write failed');
     }
     const savedRaw = await res.json().catch(() => null);
     const saved: Product = savedRaw
