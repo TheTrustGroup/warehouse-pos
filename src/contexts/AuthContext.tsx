@@ -157,14 +157,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     const baseOpts = { method: 'POST' as const, headers, credentials: 'include' as const };
 
-    // Log request details for debugging
+    // Log request details for debugging (without exposing password)
     console.log('Login request:', {
       url: `${API_BASE_URL}/admin/api/login`,
       email: trimmedEmail,
       emailLength: trimmedEmail.length,
       passwordLength: trimmedPassword.length,
-      body: loginBody
+      passwordFirstChar: trimmedPassword.charAt(0),
+      passwordLastChar: trimmedPassword.charAt(trimmedPassword.length - 1),
+      passwordHasSpecialChars: /[!@#$%^&*(),.?":{}|<>]/.test(trimmedPassword),
+      body: { email: trimmedEmail, password: '[REDACTED]' }
     });
+    
+    // Log the actual JSON being sent (for debugging - remove in production)
+    console.log('Request payload:', JSON.stringify(loginBody));
 
     try {
       // Try /admin/api/login first (same origin as admin panel)
@@ -191,7 +197,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           statusText: response.statusText,
           url: response.url,
           errorData,
-          requestBody: loginBody
+          requestEmail: trimmedEmail,
+          requestPasswordLength: trimmedPassword.length,
+          // Show password hints without exposing it
+          passwordHint: `Length: ${trimmedPassword.length}, First char: ${trimmedPassword.charAt(0)}, Last char: ${trimmedPassword.charAt(trimmedPassword.length - 1)}`
         });
         
         // Handle validation errors (400, 422) with detailed field messages
