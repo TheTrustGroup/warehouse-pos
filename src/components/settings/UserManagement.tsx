@@ -3,6 +3,7 @@ import { Users as UsersIcon, Plus, Edit, Trash2, Shield, KeyRound, Copy } from '
 import { User } from '../../types';
 import { ROLES } from '../../types/permissions';
 import { emailForRole, DEFAULT_USER_PASSWORD, ROLES_WITH_SHARED_PASSWORD } from '../../constants/defaultCredentials';
+import { useToast } from '../../contexts/ToastContext';
 
 const initialUsers: User[] = Object.values(ROLES).map((role, i) => ({
   id: String(i + 1),
@@ -25,6 +26,7 @@ export function UserManagement() {
     role: 'viewer' as User['role'],
     password: DEFAULT_USER_PASSWORD,
   });
+  const { showToast } = useToast();
 
   const roleColors: Record<string, string> = {
     admin: 'bg-purple-100 text-purple-700',
@@ -47,6 +49,47 @@ export function UserManagement() {
 
   const toggleUserStatus = (id: string) => {
     setUsers(users.map(u => u.id === id ? { ...u, isActive: !u.isActive } : u));
+  };
+
+  const handleCreateUser = () => {
+    // Validate form
+    if (!newUser.fullName.trim()) {
+      showToast('error', 'Please enter a full name');
+      return;
+    }
+
+    const email = newUser.role === 'admin' ? '' : emailForRole(newUser.role);
+    const password = newUser.role === 'admin' ? '' : DEFAULT_USER_PASSWORD;
+    
+    // Create user details string
+    const userDetails = `User Details:
+Full Name: ${newUser.fullName}
+Email: ${email || '(Set in backend)'}
+Role: ${newUser.role}
+Password: ${password || '(Set in backend)'}
+
+Create this user in your backend admin panel with these exact credentials.`;
+    
+    // Copy to clipboard
+    const textToCopy = newUser.role === 'admin' 
+      ? `Full Name: ${newUser.fullName}\nRole: ${newUser.role}\nEmail and Password: Set in backend`
+      : `Email: ${email}\nPassword: ${password}\nRole: ${newUser.role}\nFull Name: ${newUser.fullName}`;
+    
+    navigator.clipboard?.writeText(textToCopy).then(() => {
+      showToast('success', `User details copied to clipboard! Create this user in your backend admin panel:\nEmail: ${email || '(set in backend)'}\nPassword: ${password || '(set in backend)'}\nRole: ${newUser.role}`);
+      
+      // Reset form
+      setNewUser({
+        fullName: '',
+        email: emailForRole('viewer'),
+        role: 'viewer' as User['role'],
+        password: DEFAULT_USER_PASSWORD,
+      });
+      setShowAddUser(false);
+    }).catch(() => {
+      // Fallback if clipboard API fails
+      showToast('warning', userDetails);
+    });
   };
 
   return (
@@ -267,7 +310,13 @@ export function UserManagement() {
             )}
           </div>
           <div className="flex gap-3 mt-4">
-            <button type="button" className="btn-primary">Create User (set in backend)</button>
+            <button 
+              type="button" 
+              onClick={handleCreateUser}
+              className="btn-primary"
+            >
+              Create User (set in backend)
+            </button>
             <button type="button" onClick={() => setShowAddUser(false)} className="btn-secondary">Cancel</button>
           </div>
         </div>
