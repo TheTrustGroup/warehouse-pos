@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Building2, Settings as SettingsIcon, Users, Tag, RotateCcw } from 'lucide-react';
 import { BusinessProfile } from '../components/settings/BusinessProfile';
 import { SystemPreferences } from '../components/settings/SystemPreferences';
@@ -9,8 +10,23 @@ import { useSettings } from '../contexts/SettingsContext';
 type SettingsTab = 'business' | 'system' | 'users' | 'categories';
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('business');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') as SettingsTab | null;
+  const [activeTab, setActiveTab] = useState<SettingsTab>(tabParam && ['business', 'system', 'users', 'categories'].includes(tabParam) ? tabParam : 'business');
   const { resetToDefaults } = useSettings();
+
+  // Update tab when URL param changes
+  useEffect(() => {
+    if (tabParam && ['business', 'system', 'users', 'categories'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  // Update URL when tab changes
+  const handleTabChange = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   const tabs = [
     { id: 'business' as SettingsTab, label: 'Business Profile', icon: Building2 },
@@ -49,7 +65,7 @@ export function Settings() {
           {tabs.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-2 px-4 py-4 border-b-2 font-semibold transition-all duration-200 ${
                 activeTab === tab.id
                   ? 'border-primary-600 text-primary-600'
