@@ -194,8 +194,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           requestBody: loginBody
         });
         
-        // Handle 422 validation errors with detailed field messages
-        if (response.status === 422 && errorData?.errors) {
+        // Handle validation errors (400, 422) with detailed field messages
+        if ((response.status === 400 || response.status === 422) && errorData?.errors) {
           const validationErrors: string[] = [];
           // Check all possible error fields
           Object.keys(errorData.errors).forEach(field => {
@@ -210,7 +210,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
         
-        const msg = errorData?.message || errorData?.error || (response.status === 401 ? 'Invalid email or password' : 'Login failed');
+        // Handle backend error format: {success: false, error: "...", code: "..."}
+        // Priority: errorData.error > errorData.message > default message
+        let msg = errorData?.error || errorData?.message;
+        
+        // Add code context if available for better debugging
+        if (errorData?.code && errorData.code !== 'VALIDATION_ERROR') {
+          msg = msg ? `${msg} (${errorData.code})` : errorData.code;
+        }
+        
+        // If no specific message, use status-based defaults
+        if (!msg) {
+          if (response.status === 401) {
+            msg = 'Invalid email or password';
+          } else if (response.status === 400 || response.status === 422) {
+            msg = 'Validation failed. Please check your email and password format.';
+          } else {
+            msg = 'Login failed';
+          }
+        }
+        
+        // For validation errors without field-specific errors, provide helpful guidance
+        if ((response.status === 400 || response.status === 422) && errorData?.code === 'VALIDATION_ERROR' && !errorData?.errors) {
+          // Generic validation error - provide helpful hints
+          msg = `${msg}. Please check: email format, password (case-sensitive), and ensure the user exists.`;
+        }
+        
         throw new Error(typeof msg === 'string' ? msg : 'Invalid email or password');
       }
 
