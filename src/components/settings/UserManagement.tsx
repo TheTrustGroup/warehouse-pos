@@ -1,24 +1,13 @@
 import { useState } from 'react';
-import { Users as UsersIcon, Plus, Edit, Trash2, Shield, KeyRound, Copy } from 'lucide-react';
+import { Users as UsersIcon, Plus, Shield, KeyRound, Copy } from 'lucide-react';
 import { User } from '../../types';
 import { ROLES } from '../../types/permissions';
 import { emailForRole, DEFAULT_USER_PASSWORD, ROLES_WITH_SHARED_PASSWORD } from '../../constants/defaultCredentials';
 import { useToast } from '../../contexts/ToastContext';
 
-const initialUsers: User[] = Object.values(ROLES).map((role, i) => ({
-  id: String(i + 1),
-  username: role.id,
-  email: emailForRole(role.id),
-  role: role.id as User['role'],
-  fullName: role.name,
-  permissions: role.permissions,
-  isActive: true,
-  lastLogin: new Date(),
-  createdAt: new Date(),
-}));
-
 export function UserManagement() {
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  // Users are managed in the backend - no local state needed
+  const [users] = useState<User[]>([]);
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUser, setNewUser] = useState({
     fullName: '',
@@ -39,16 +28,6 @@ export function UserManagement() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard?.writeText(text);
-  };
-
-  const deleteUser = (id: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      setUsers(users.filter(u => u.id !== id));
-    }
-  };
-
-  const toggleUserStatus = (id: string) => {
-    setUsers(users.map(u => u.id === id ? { ...u, isActive: !u.isActive } : u));
   };
 
   const handleCreateUser = () => {
@@ -159,75 +138,92 @@ Create this user in your backend admin panel with these exact credentials.`;
           </button>
         </div>
 
-      {/* Users Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">User</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Email</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Role</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Last Login</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {users.map(user => (
-              <tr key={user.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                      <span className="text-primary-600 font-semibold">
-                        {user.fullName.split(' ').map(n => n[0]).join('')}
-                      </span>
+      {/* Empty State - Users are managed in backend */}
+      {users.length === 0 && (
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <UsersIcon className="w-8 h-8 text-slate-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-900 mb-2">Users are managed in your backend</h3>
+          <p className="text-slate-600 mb-6 max-w-md mx-auto">
+            User accounts are created and managed in your backend admin panel. Use the "Add User" button above to copy credentials for creating new users in your backend.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <a
+              href="https://extremedeptkidz.com/admin"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary inline-flex items-center gap-2"
+            >
+              <KeyRound className="w-4 h-4" />
+              Go to Backend Admin
+            </a>
+            <a
+              href="/CREATE_USER_IN_BACKEND.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary inline-flex items-center gap-2"
+            >
+              View Setup Guide
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Users Table - Only show if users exist (for future API integration) */}
+      {users.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">User</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Email</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Role</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Last Login</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {users.map(user => (
+                <tr key={user.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+                        <span className="text-primary-600 font-semibold">
+                          {user.fullName.split(' ').map(n => n[0]).join('')}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-900">{user.fullName}</p>
+                        <p className="text-sm text-slate-500">@{user.username}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-slate-900">{user.fullName}</p>
-                      <p className="text-sm text-slate-500">@{user.username}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-slate-600">{user.email}</td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${roleColors[user.role]}`}>
-                    <Shield className="w-3 h-3" />
-                    {user.role}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => toggleUserStatus(user.id)}
-                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{user.email}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${roleColors[user.role]}`}>
+                      <Shield className="w-3 h-3" />
+                      {user.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                       user.isActive
                         ? 'bg-green-100 text-green-700'
                         : 'bg-red-100 text-red-700'
-                    }`}
-                  >
-                    {user.isActive ? 'Active' : 'Inactive'}
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-600">
-                  {user.lastLogin.toLocaleDateString()}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <button className="p-2 hover:bg-blue-50 rounded-lg text-blue-600">
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => deleteUser(user.id)}
-                      className="p-2 hover:bg-red-50 rounded-lg text-red-600"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                    }`}>
+                      {user.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-600">
+                    {user.lastLogin.toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Add User Form */}
       {showAddUser && (
