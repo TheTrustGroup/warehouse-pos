@@ -9,9 +9,9 @@ interface InventoryContextType {
   isLoading: boolean;
   error: string | null;
   addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
-  updateProduct: (id: string, updates: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
-  deleteProducts: (ids: string[]) => void;
+  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  deleteProducts: (ids: string[]) => Promise<void>;
   getProduct: (id: string) => Product | undefined;
   searchProducts: (query: string) => Product[];
   filterProducts: (filters: ProductFilters) => Product[];
@@ -259,21 +259,149 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     persistProducts(next);
   };
 
-  const updateProduct = (id: string, updates: Partial<Product>) => {
-    const next = products.map(p =>
-      p.id === id ? { ...p, ...updates, updatedAt: new Date() } : p
-    );
+  /**
+   * Update product: WRITE PATH — UI never mutates until DB confirms.
+   * PUT to API first; only on success update state with saved item.
+   */
+  const updateProduct = async (id: string, updates: Partial<Product>) => {
+    const product = products.find(p => p.id === id);
+    if (!product) {
+      throw new Error('Product not found');
+    }
+
+    const updatedProduct = { ...product, ...updates, updatedAt: new Date() };
+    const payload = productToPayload(updatedProduct);
+
+    let res = await fetch(`${API_BASE_URL}/admin/api/products/${id}`, {
+      method: 'PUT',
+      headers: getApiHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+    if (res.status === 404) {
+      res = await fetch(`${API_BASE_URL}/api/products/${id}`, {
+        method: 'PUT',
+        headers: getApiHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(payload),
+        cache: 'no-store',
+      });
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: res.statusText }));
+      console.error('PUT /admin/api/products/:id failed', res.status, err);
+      throw new Error(err.message || err.errors?.[0]?.message || 'Update failed');
+    }
+
+    const savedRaw = await res.json().catch(() => null);
+    const saved: Product = savedRaw
+      ? normalizeProduct(savedRaw)
+      : normalizeProduct(updatedProduct);
+    
+    const next = products.map(p => (p.id === id ? saved : p));
     setProducts(next);
     persistProducts(next);
   };
 
-  const deleteProduct = (id: string) => {
+  /**
+   * Delete product: WRITE PATH — UI never mutates until DB confirms.
+   * DELETE to API first; only on success remove from state.
+   */
+  const deleteProduct = async (id: string) => {
+    let res = await fetch(`${API_BASE_URL}/admin/api/products/${id}`, {
+      method: 'DELETE',
+      headers: getApiHeaders(),
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    if (res.status === 404) {
+      res = await fetch(`${API_BASE_URL}/api/products/${id}`, {
+        method: 'DELETE',
+        headers: getApiHeaders(),
+        credentials: 'include',
+        cache: 'no-store',
+      });
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: res.statusText }));
+      console.error('DELETE /admin/api/products/:id failed', res.status, err);
+      throw new Error(err.message || err.errors?.[0]?.message || 'Delete failed');
+    }
+
     const next = products.filter(p => p.id !== id);
     setProducts(next);
     persistProducts(next);
   };
 
-  const deleteProducts = (ids: string[]) => {
+  /**
+   * Delete multiple products: WRITE PATH — UI never mutates until DB confirms.
+   * DELETE to API for each product; only remove from state after all succeed.
+   */
+  const deleteProducts = async (ids: string[]) => {
+    if (ids.length === 0) return;
+
+    // Try bulk delete endpoint first, fallback to individual deletes
+    let bulkSuccess = false;
+    try {
+      let res = await fetch(`${API_BASE_URL}/admin/api/products/bulk`, {
+        method: 'DELETE',
+        headers: getApiHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ ids }),
+        cache: 'no-store',
+      });
+      if (res.status === 404) {
+        res = await fetch(`${API_BASE_URL}/api/products/bulk`, {
+          method: 'DELETE',
+          headers: getApiHeaders(),
+          credentials: 'include',
+          body: JSON.stringify({ ids }),
+          cache: 'no-store',
+        });
+      }
+      if (res.ok) {
+        bulkSuccess = true;
+      }
+    } catch {
+      // Bulk endpoint not available or failed, fall back to individual deletes
+    }
+
+    if (!bulkSuccess) {
+      // Delete individually
+      const errors: string[] = [];
+      for (const id of ids) {
+        try {
+          let res = await fetch(`${API_BASE_URL}/admin/api/products/${id}`, {
+            method: 'DELETE',
+            headers: getApiHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
+          });
+          if (res.status === 404) {
+            res = await fetch(`${API_BASE_URL}/api/products/${id}`, {
+              method: 'DELETE',
+              headers: getApiHeaders(),
+              credentials: 'include',
+              cache: 'no-store',
+            });
+          }
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ message: res.statusText }));
+            errors.push(err.message || 'Delete failed');
+          }
+        } catch (err) {
+          errors.push(err instanceof Error ? err.message : 'Delete failed');
+        }
+      }
+      if (errors.length > 0) {
+        throw new Error(`Failed to delete ${errors.length} product(s): ${errors[0]}`);
+      }
+    }
+
+    // All deletes succeeded, update state
     const next = products.filter(p => !ids.includes(p.id));
     setProducts(next);
     persistProducts(next);

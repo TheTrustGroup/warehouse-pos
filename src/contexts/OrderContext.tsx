@@ -1,9 +1,9 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { Order, OrderStatus, OrderItem, PaymentStatus, DeliveryInfo } from '../types/order';
 import { useInventory } from './InventoryContext';
+import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 import { API_BASE_URL, getApiHeaders, handleApiResponse } from '../lib/api';
-import { v4 as uuidv4 } from 'uuid';
 
 interface OrderContextType {
   orders: Order[];
@@ -26,6 +26,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { products, updateProduct } = useInventory();
+  const { user } = useAuth();
   const { showToast } = useToast();
 
   /**
@@ -120,27 +121,31 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   }, [products]);
 
   // Deduct stock when order goes out for delivery
-  const deductStock = useCallback((items: OrderItem[]) => {
-    items.forEach(item => {
-      const product = products.find(p => p.id === item.productId);
-      if (product) {
-        updateProduct(product.id, {
-          quantity: product.quantity - item.quantity,
-        });
-      }
-    });
+  const deductStock = useCallback(async (items: OrderItem[]) => {
+    await Promise.all(
+      items.map(async (item) => {
+        const product = products.find(p => p.id === item.productId);
+        if (product) {
+          await updateProduct(product.id, {
+            quantity: product.quantity - item.quantity,
+          });
+        }
+      })
+    );
   }, [products, updateProduct]);
 
   // Return stock to inventory (delivery failed or cancelled)
-  const returnStock = useCallback((items: OrderItem[]) => {
-    items.forEach(item => {
-      const product = products.find(p => p.id === item.productId);
-      if (product) {
-        updateProduct(product.id, {
-          quantity: product.quantity + item.quantity,
-        });
-      }
-    });
+  const returnStock = useCallback(async (items: OrderItem[]) => {
+    await Promise.all(
+      items.map(async (item) => {
+        const product = products.find(p => p.id === item.productId);
+        if (product) {
+          await updateProduct(product.id, {
+            quantity: product.quantity + item.quantity,
+          });
+        }
+      })
+    );
   }, [products, updateProduct]);
 
   // Create new order
@@ -151,8 +156,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         reserveStock(orderData.items);
       }
 
-      const newOrder: Order = {
-        id: uuidv4(),
+      const orderPayload = {
         orderNumber: generateOrderNumber(),
         type: orderData.type || 'delivery',
         customer: orderData.customer!,
@@ -162,35 +166,44 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         tax: orderData.tax ?? 0,
         discount: orderData.discount ?? 0,
         total: orderData.total ?? 0,
-        status: 'pending',
-        statusHistory: [
-          {
-            status: 'pending',
-            timestamp: new Date(),
-            updatedBy: 'system',
-            notes: 'Order created',
-          },
-        ],
+        status: 'pending' as OrderStatus,
         delivery: orderData.delivery,
         payment: orderData.payment ?? {
           method: 'cash_on_delivery',
           status: 'pending',
           paidAmount: 0,
         },
-        inventory: {
-          reserved: true,
-          deducted: false,
-          reservedAt: new Date(),
-        },
         notes: orderData.notes,
-        createdBy: 'current-user',
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdBy: user?.id || user?.email || 'system',
       };
 
-      setOrders(prev => [...prev, newOrder]);
-      showToast('success', `Order ${newOrder.orderNumber} created successfully`);
-      return newOrder;
+      // POST to API
+      const response = await fetch(`${API_BASE_URL}/api/orders`, {
+        method: 'POST',
+        headers: getApiHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(orderPayload),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(err.message || err.errors?.[0]?.message || 'Failed to create order');
+      }
+
+      const savedRaw = await handleApiResponse<Order>(response);
+      const savedOrder: Order = {
+        ...savedRaw,
+        createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : new Date(),
+        updatedAt: savedRaw.updatedAt ? new Date(savedRaw.updatedAt) : new Date(),
+        statusHistory: (savedRaw.statusHistory || []).map((h: any) => ({
+          ...h,
+          timestamp: new Date(h.timestamp),
+        })),
+      };
+
+      setOrders(prev => [...prev, savedOrder]);
+      showToast('success', `Order ${savedOrder.orderNumber} created successfully`);
+      return savedOrder;
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Failed to create order');
       throw error;
@@ -211,30 +224,46 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
     // Deduct stock when going out for delivery
     if (status === 'out_for_delivery' && !order.inventory.deducted) {
-      deductStock(order.items);
+      await deductStock(order.items);
       order.inventory.deducted = true;
       order.inventory.deductedAt = new Date();
     }
 
     // Return stock if delivery failed
     if (status === 'failed' && order.inventory.deducted) {
-      returnStock(order.items);
+      await returnStock(order.items);
       order.inventory.deducted = false;
     }
 
-    const updatedOrder: Order = {
-      ...order,
+    // PATCH to API
+    const updatePayload = {
       status,
-      statusHistory: [
-        ...order.statusHistory,
-        {
-          status,
-          timestamp: new Date(),
-          updatedBy: 'current-user',
-          notes: notes ?? `Status updated to ${status}`,
-        },
-      ],
-      updatedAt: new Date(),
+      notes: notes ?? `Status updated to ${status}`,
+      updatedBy: user?.id || user?.email || 'system',
+    };
+
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
+      method: 'PATCH',
+      headers: getApiHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(updatePayload),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ message: response.statusText }));
+      showToast('error', err.message || 'Failed to update order status');
+      throw new Error(err.message || 'Failed to update order status');
+    }
+
+    const savedRaw = await handleApiResponse<Order>(response);
+    const updatedOrder: Order = {
+      ...savedRaw,
+      createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
+      updatedAt: savedRaw.updatedAt ? new Date(savedRaw.updatedAt) : new Date(),
+      statusHistory: (savedRaw.statusHistory || order.statusHistory).map((h: any) => ({
+        ...h,
+        timestamp: new Date(h.timestamp),
+      })),
     };
 
     setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
@@ -248,18 +277,43 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     driverPhone: string
   ) => {
     const order = orders.find(o => o.id === orderId);
-    if (!order) return;
+    if (!order) {
+      showToast('error', 'Order not found');
+      return;
+    }
 
-    const updatedOrder: Order = {
-      ...order,
+    // PATCH to API
+    const updatePayload = {
       delivery: {
-        ...order.delivery,
-        assignedTo: uuidv4(),
         driverName,
         driverPhone,
         attempts: (order.delivery?.attempts ?? 0) + 1,
-      } as Order['delivery'],
-      updatedAt: new Date(),
+      },
+      updatedBy: user?.id || user?.email || 'system',
+    };
+
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/assign-driver`, {
+      method: 'PATCH',
+      headers: getApiHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(updatePayload),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ message: response.statusText }));
+      showToast('error', err.message || 'Failed to assign driver');
+      throw new Error(err.message || 'Failed to assign driver');
+    }
+
+    const savedRaw = await handleApiResponse<Order>(response);
+    const updatedOrder: Order = {
+      ...savedRaw,
+      createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
+      updatedAt: savedRaw.updatedAt ? new Date(savedRaw.updatedAt) : new Date(),
+      statusHistory: (savedRaw.statusHistory || order.statusHistory).map((h: any) => ({
+        ...h,
+        timestamp: new Date(h.timestamp),
+      })),
     };
 
     setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
@@ -269,58 +323,122 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   // Mark as delivered
   const markAsDelivered = async (orderId: string, proof?: Partial<NonNullable<DeliveryInfo['deliveryProof']>>) => {
     const order = orders.find(o => o.id === orderId);
-    if (!order) return;
+    if (!order) {
+      showToast('error', 'Order not found');
+      return;
+    }
 
     const deliveryProof = proof
       ? { ...proof, receivedAt: proof.receivedAt ?? new Date() }
       : undefined;
 
-    const updatedOrder: Order = {
-      ...order,
-      delivery: order.delivery
-        ? {
-            ...order.delivery,
-            actualTime: new Date(),
-            deliveryProof,
-          }
-        : order.delivery,
-      payment: {
-        ...order.payment,
-        status: 'paid' as PaymentStatus,
-        paidAt: new Date(),
+    // PATCH to API
+    const updatePayload = {
+      status: 'delivered' as OrderStatus,
+      delivery: {
+        actualTime: new Date().toISOString(),
+        deliveryProof,
       },
-      updatedAt: new Date(),
+      payment: {
+        status: 'paid' as PaymentStatus,
+        paidAt: new Date().toISOString(),
+      },
+      updatedBy: user?.id || user?.email || 'system',
+    };
+
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/deliver`, {
+      method: 'PATCH',
+      headers: getApiHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(updatePayload),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ message: response.statusText }));
+      showToast('error', err.message || 'Failed to mark order as delivered');
+      throw new Error(err.message || 'Failed to mark order as delivered');
+    }
+
+    const savedRaw = await handleApiResponse<Order>(response);
+    const updatedOrder: Order = {
+      ...savedRaw,
+      createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
+      updatedAt: savedRaw.updatedAt ? new Date(savedRaw.updatedAt) : new Date(),
+      statusHistory: (savedRaw.statusHistory || order.statusHistory).map((h: any) => ({
+        ...h,
+        timestamp: new Date(h.timestamp),
+      })),
     };
 
     setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
-    await updateOrderStatus(orderId, 'delivered', 'Order delivered successfully');
+    showToast('success', 'Order marked as delivered');
   };
 
   // Mark as failed
   const markAsFailed = async (orderId: string, reason: string) => {
     const order = orders.find(o => o.id === orderId);
-    if (!order) return;
+    if (!order) {
+      showToast('error', 'Order not found');
+      return;
+    }
 
-    const updatedOrder: Order = {
-      ...order,
-      delivery: order.delivery
-        ? { ...order.delivery, failureReason: reason }
-        : order.delivery,
-      updatedAt: new Date(),
+    // PATCH to API
+    const updatePayload = {
+      status: 'failed' as OrderStatus,
+      delivery: {
+        failureReason: reason,
+      },
+      notes: `Delivery failed: ${reason}`,
+      updatedBy: user?.id || user?.email || 'system',
     };
 
-    setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/fail`, {
+      method: 'PATCH',
+      headers: getApiHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(updatePayload),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ message: response.statusText }));
+      showToast('error', err.message || 'Failed to mark order as failed');
+      throw new Error(err.message || 'Failed to mark order as failed');
+    }
+
     await updateOrderStatus(orderId, 'failed', `Delivery failed: ${reason}`);
   };
 
   // Cancel order
   const cancelOrder = async (orderId: string, reason: string) => {
     const order = orders.find(o => o.id === orderId);
-    if (!order) return;
+    if (!order) {
+      showToast('error', 'Order not found');
+      return;
+    }
 
     // Return stock if it was deducted
     if (order.inventory.deducted) {
-      returnStock(order.items);
+      await returnStock(order.items);
+    }
+
+    // PATCH to API
+    const updatePayload = {
+      status: 'cancelled' as OrderStatus,
+      notes: `Order cancelled: ${reason}`,
+      updatedBy: user?.id || user?.email || 'system',
+    };
+
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/cancel`, {
+      method: 'PATCH',
+      headers: getApiHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(updatePayload),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ message: response.statusText }));
+      showToast('error', err.message || 'Failed to cancel order');
+      throw new Error(err.message || 'Failed to cancel order');
     }
 
     await updateOrderStatus(orderId, 'cancelled', `Order cancelled: ${reason}`);

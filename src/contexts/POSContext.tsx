@@ -1,9 +1,10 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { Transaction, TransactionItem, Payment } from '../types';
 import { useInventory } from './InventoryContext';
+import { useAuth } from './AuthContext';
 import { generateTransactionNumber, calculateTotal } from '../lib/utils';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
-import { API_BASE_URL, getApiHeaders } from '../lib/api';
+import { API_BASE_URL, getApiHeaders, handleApiResponse } from '../lib/api';
 
 interface POSContextType {
   cart: TransactionItem[];
@@ -27,6 +28,7 @@ const TAX_RATE = 0.15;
 
 export function POSProvider({ children }: { children: ReactNode }) {
   const { products, updateProduct } = useInventory();
+  const { user } = useAuth();
   const [cart, setCart] = useState<TransactionItem[]>([]);
   const [discount, setDiscount] = useState(0);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -214,7 +216,7 @@ export function POSProvider({ children }: { children: ReactNode }) {
       total,
       paymentMethod: payments.length === 1 ? payments[0].method : 'mixed',
       payments,
-      cashier: 'Current User', // Replace with actual user
+      cashier: user?.fullName || user?.email || user?.id || 'system',
       customer,
       status: 'completed',
       syncStatus: isOnline ? 'synced' : 'offline',
@@ -222,18 +224,78 @@ export function POSProvider({ children }: { children: ReactNode }) {
       completedAt: new Date(),
     };
 
-    // Update inventory
-    cart.forEach(item => {
-      const product = products.find(p => p.id === item.productId);
-      if (product && item.quantity > 0) {
-        const newQuantity = Math.max(0, product.quantity - item.quantity);
-        updateProduct(product.id, {
-          quantity: newQuantity,
-        });
-      }
-    });
+    // Update inventory (await all updates)
+    await Promise.all(
+      cart.map(async (item) => {
+        const product = products.find(p => p.id === item.productId);
+        if (product && item.quantity > 0) {
+          const newQuantity = Math.max(0, product.quantity - item.quantity);
+          await updateProduct(product.id, {
+            quantity: newQuantity,
+          });
+        }
+      })
+    );
 
-    // Store transaction
+    // POST to API when online
+    if (isOnline) {
+      try {
+        const transactionPayload = {
+          ...transaction,
+          createdAt: transaction.createdAt.toISOString(),
+          completedAt: transaction.completedAt?.toISOString() || null,
+        };
+
+        const response = await fetch(`${API_BASE_URL}/api/transactions`, {
+          method: 'POST',
+          headers: getApiHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(transactionPayload),
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ message: response.statusText }));
+          // Queue for retry instead of failing completely
+          if (isStorageAvailable()) {
+            const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
+            setStoredData('offline_transactions', [...offlineQueue, transaction]);
+          }
+          throw new Error(err.message || 'Failed to save transaction to server');
+        }
+
+        // Use saved transaction from API if available
+        const savedRaw = await handleApiResponse<Transaction>(response).catch(() => null);
+        if (savedRaw) {
+          const savedTransaction: Transaction = {
+            ...savedRaw,
+            createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : transaction.createdAt,
+            completedAt: savedRaw.completedAt ? new Date(savedRaw.completedAt) : transaction.completedAt,
+          };
+          
+          // Store saved transaction
+          if (isStorageAvailable()) {
+            const transactions = getStoredData<Transaction[]>('transactions', []);
+            setStoredData('transactions', [...transactions, savedTransaction]);
+          }
+          
+          clearCart();
+          return savedTransaction;
+        }
+      } catch (error) {
+        // If API call fails, still store locally and queue for sync
+        console.error('Failed to POST transaction to API:', error);
+        if (isStorageAvailable()) {
+          const transactions = getStoredData<Transaction[]>('transactions', []);
+          setStoredData('transactions', [...transactions, transaction]);
+          const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
+          setStoredData('offline_transactions', [...offlineQueue, transaction]);
+        }
+        // Don't throw - allow transaction to complete locally
+        // User will see warning via toast if needed
+      }
+    }
+
+    // Store transaction locally (for offline or as backup)
     if (isStorageAvailable()) {
       const transactions = getStoredData<Transaction[]>('transactions', []);
       setStoredData('transactions', [...transactions, transaction]);

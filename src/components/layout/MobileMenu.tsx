@@ -11,22 +11,37 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ROLES } from '../../types/permissions';
+import { PERMISSIONS, ROLES } from '../../types/permissions';
 
-const navigation = [
-  { name: 'Dashboard', to: '/', icon: LayoutDashboard },
-  { name: 'Inventory', to: '/inventory', icon: Package },
-  { name: 'Orders', to: '/orders', icon: ClipboardList },
-  { name: 'POS', to: '/pos', icon: ShoppingCart },
-  { name: 'Reports', to: '/reports', icon: BarChart3 },
-  { name: 'Users', to: '/users', icon: Users },
-  { name: 'Settings', to: '/settings', icon: Settings },
+const baseNavigation = [
+  { name: 'Dashboard', to: '/', icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD.VIEW },
+  { name: 'Inventory', to: '/inventory', icon: Package, permission: PERMISSIONS.INVENTORY.VIEW },
+  { name: 'Orders', to: '/orders', icon: ClipboardList, permission: PERMISSIONS.ORDERS.VIEW },
+  { name: 'POS', to: '/pos', icon: ShoppingCart, permission: PERMISSIONS.POS.ACCESS },
+  {
+    name: 'Reports',
+    to: '/reports',
+    icon: BarChart3,
+    anyPermissions: [
+      PERMISSIONS.REPORTS.VIEW_SALES,
+      PERMISSIONS.REPORTS.VIEW_INVENTORY,
+      PERMISSIONS.REPORTS.VIEW_PROFIT,
+    ],
+  },
+  { name: 'Users', to: '/users', icon: Users, permission: PERMISSIONS.USERS.VIEW },
+  { name: 'Settings', to: '/settings', icon: Settings, permission: PERMISSIONS.SETTINGS.VIEW },
 ];
 
 export function MobileMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
-  const { user, logout, switchRole } = useAuth();
+  const { user, hasPermission, hasAnyPermission, logout, switchRole } = useAuth();
+
+  const navigation = baseNavigation.filter(
+    (item) =>
+      ('permission' in item && item.permission && hasPermission(item.permission)) ||
+      ('anyPermissions' in item && item.anyPermissions && hasAnyPermission(item.anyPermissions))
+  );
 
   const handleLogout = () => {
     setIsOpen(false);
@@ -77,19 +92,21 @@ export function MobileMenu() {
             ))}
           </nav>
           <div className="p-4 border-t border-slate-200/30 space-y-3">
-            <label className="block">
-              <span className="text-xs font-medium text-slate-500 block mb-1">Role</span>
-              <select
-                value={user?.role ?? 'viewer'}
-                onChange={(e) => { switchRole(e.target.value); setIsOpen(false); }}
-                className="w-full rounded-lg border border-slate-200/60 bg-white px-3 py-2 text-sm font-medium text-slate-900"
-                aria-label="Switch role"
-              >
-                {Object.values(ROLES).map((role) => (
-                  <option key={role.id} value={role.id}>{role.name}</option>
-                ))}
-              </select>
-            </label>
+            {!import.meta.env.PROD && (
+              <label className="block">
+                <span className="text-xs font-medium text-slate-500 block mb-1">Role</span>
+                <select
+                  value={user?.role ?? 'viewer'}
+                  onChange={(e) => { switchRole(e.target.value); setIsOpen(false); }}
+                  className="w-full rounded-lg border border-slate-200/60 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+                  aria-label="Switch role"
+                >
+                  {Object.values(ROLES).map((role) => (
+                    <option key={role.id} value={role.id}>{role.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button
               type="button"
               onClick={handleLogout}

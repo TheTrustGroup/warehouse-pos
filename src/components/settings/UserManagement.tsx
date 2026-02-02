@@ -51,53 +51,55 @@ export function UserManagement() {
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      {/* Default logins for other roles only; admin stays as you set it */}
-      <div className="glass-card p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <KeyRound className="w-5 h-5 text-primary-600" />
-          <h3 className="text-lg font-bold text-slate-900">Logins for other roles</h3>
+      {/* Default logins section hidden in production */}
+      {!import.meta.env.PROD && (
+        <div className="glass-card p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <KeyRound className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-bold text-slate-900">Logins for other roles</h3>
+          </div>
+          <p className="text-sm text-slate-600 mb-4">
+            Keep admin credentials as you have them. For <strong>manager, cashier, warehouse, driver, viewer</strong> use: email <strong>role@extremedeptkidz.com</strong>, password <strong>{DEFAULT_USER_PASSWORD}</strong> (same for all).
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-slate-700">Role</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-700">Email (login)</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-700">Password</th>
+                  <th className="px-4 py-3 w-10" aria-label="Copy" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {Object.values(ROLES)
+                  .filter((role) => ROLES_WITH_SHARED_PASSWORD.includes(role.id as typeof ROLES_WITH_SHARED_PASSWORD[number]))
+                  .map((role) => (
+                    <tr key={role.id} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${roleColors[role.id]}`}>
+                          {role.name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-slate-800">{emailForRole(role.id)}</td>
+                      <td className="px-4 py-3 font-mono text-slate-800">{DEFAULT_USER_PASSWORD}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(`${emailForRole(role.id)}\t${DEFAULT_USER_PASSWORD}`)}
+                          className="p-1.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
+                          title="Copy email and password"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <p className="text-sm text-slate-600 mb-4">
-          Keep admin credentials as you have them. For <strong>manager, cashier, warehouse, driver, viewer</strong> use: email <strong>role@extremedeptkidz.com</strong>, password <strong>{DEFAULT_USER_PASSWORD}</strong> (same for all).
-        </p>
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-slate-700">Role</th>
-                <th className="px-4 py-3 text-left font-medium text-slate-700">Email (login)</th>
-                <th className="px-4 py-3 text-left font-medium text-slate-700">Password</th>
-                <th className="px-4 py-3 w-10" aria-label="Copy" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {Object.values(ROLES)
-                .filter((role) => ROLES_WITH_SHARED_PASSWORD.includes(role.id as typeof ROLES_WITH_SHARED_PASSWORD[number]))
-                .map((role) => (
-                  <tr key={role.id} className="hover:bg-slate-50/50">
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${roleColors[role.id]}`}>
-                        {role.name}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-slate-800">{emailForRole(role.id)}</td>
-                    <td className="px-4 py-3 font-mono text-slate-800">{DEFAULT_USER_PASSWORD}</td>
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(`${emailForRole(role.id)}\t${DEFAULT_USER_PASSWORD}`)}
-                        className="p-1.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
-                        title="Copy email and password"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
 
       <div className="glass-card animate-fade-in-up">
         <div className="flex items-center justify-between mb-6">
@@ -184,17 +186,24 @@ export function UserManagement() {
         </table>
       </div>
 
-      {/* Add User Form – other roles: role@extremedeptkidz.com / EDK-!@#; admin set separately */}
+      {/* Add User Form */}
       {showAddUser && (
         <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
           <h3 className="font-semibold text-slate-900 mb-2">Add New User</h3>
-          <p className="text-sm text-slate-600 mb-4">
-            {newUser.role !== 'admin' ? (
-              <>Email: <strong>{newUser.role}@extremedeptkidz.com</strong>. Password: <strong>{DEFAULT_USER_PASSWORD}</strong> (same for all other roles).</>
-            ) : (
-              <>Admin: set email and password in your backend. Keep your existing admin credentials.</>
-            )}
-          </p>
+          {!import.meta.env.PROD && (
+            <p className="text-sm text-slate-600 mb-4">
+              {newUser.role !== 'admin' ? (
+                <>Email: <strong>{newUser.role}@extremedeptkidz.com</strong>. Password: <strong>{DEFAULT_USER_PASSWORD}</strong> (same for all other roles).</>
+              ) : (
+                <>Admin: set email and password in your backend. Keep your existing admin credentials.</>
+              )}
+            </p>
+          )}
+          {import.meta.env.PROD && (
+            <p className="text-sm text-slate-600 mb-4">
+              User credentials are managed in the backend. Contact your administrator to create new users.
+            </p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
@@ -231,26 +240,30 @@ export function UserManagement() {
                 className="input-field w-full bg-slate-100 font-mono text-slate-700"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-              <input
-                type="text"
-                value={newUser.role === 'admin' ? '' : newUser.password}
-                readOnly
-                placeholder={newUser.role === 'admin' ? 'Set in backend' : undefined}
-                className="input-field w-full bg-slate-100 font-mono text-slate-700"
-              />
-            </div>
-            {newUser.role !== 'admin' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Confirm password</label>
-                <input
-                  type="text"
-                  value={DEFAULT_USER_PASSWORD}
-                  readOnly
-                  className="input-field w-full bg-slate-100 font-mono text-slate-700"
-                />
-              </div>
+            {!import.meta.env.PROD && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                  <input
+                    type="text"
+                    value={newUser.role === 'admin' ? '' : newUser.password}
+                    readOnly
+                    placeholder={newUser.role === 'admin' ? 'Set in backend' : undefined}
+                    className="input-field w-full bg-slate-100 font-mono text-slate-700"
+                  />
+                </div>
+                {newUser.role !== 'admin' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Confirm password</label>
+                    <input
+                      type="text"
+                      value={DEFAULT_USER_PASSWORD}
+                      readOnly
+                      className="input-field w-full bg-slate-100 font-mono text-slate-700"
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
           <div className="flex gap-3 mt-4">

@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useInventory, ProductFilters } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -18,6 +19,7 @@ export function Inventory() {
   const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi } = useInventory();
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
+  const [searchParams] = useSearchParams();
   const [isSyncing, setIsSyncing] = useState(false);
   const canCreate = hasPermission(PERMISSIONS.INVENTORY.CREATE);
   const canUpdate = hasPermission(PERMISSIONS.INVENTORY.UPDATE);
@@ -28,6 +30,22 @@ export function Inventory() {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<ProductFilters>({});
+
+  // Handle URL query params on mount
+  useEffect(() => {
+    const q = searchParams.get('q');
+    const filterParam = searchParams.get('filter');
+    
+    if (q) {
+      setSearchQuery(q);
+    }
+    
+    if (filterParam === 'lowStock') {
+      setFilters({ lowStock: true });
+    } else if (filterParam === 'outOfStock') {
+      setFilters({ outOfStock: true });
+    }
+  }, [searchParams]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -130,26 +148,42 @@ export function Inventory() {
     setIsModalOpen(true);
   };
 
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
     if (confirm('Are you sure you want to delete this product?')) {
-      deleteProduct(id);
-      setSelectedIds(prev => prev.filter(sid => sid !== id));
+      try {
+        await deleteProduct(id);
+        setSelectedIds(prev => prev.filter(sid => sid !== id));
+        showToast('success', 'Product deleted successfully');
+      } catch (error) {
+        showToast('error', error instanceof Error ? error.message : 'Failed to delete product');
+      }
     }
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
     if (confirm(`Are you sure you want to delete ${selectedIds.length} product(s)?`)) {
-      deleteProducts(selectedIds);
-      setSelectedIds([]);
+      try {
+        await deleteProducts(selectedIds);
+        setSelectedIds([]);
+        showToast('success', `${selectedIds.length} product(s) deleted successfully`);
+      } catch (error) {
+        showToast('error', error instanceof Error ? error.message : 'Failed to delete products');
+      }
     }
   };
 
   const handleSubmitProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (editingProduct) {
-      updateProduct(editingProduct.id, productData);
-      setIsModalOpen(false);
-      setEditingProduct(null);
+      try {
+        await updateProduct(editingProduct.id, productData);
+        setIsModalOpen(false);
+        setEditingProduct(null);
+        showToast('success', 'Product updated successfully');
+      } catch (error) {
+        showToast('error', error instanceof Error ? error.message : 'Failed to update product');
+        throw error;
+      }
       return;
     }
     try {

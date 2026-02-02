@@ -21,7 +21,27 @@ const Reports = lazy(() => import('./pages/Reports').then(m => ({ default: m.Rep
 const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
 
-const Users = () => <div className="card"><h2 className="text-2xl font-bold">Users</h2></div>;
+const Users = () => (
+  <div className="space-y-8">
+    <div className="animate-fade-in-up">
+      <h1 className="text-[32px] font-bold text-slate-900 tracking-tight mb-1">Users</h1>
+      <p className="text-slate-500 text-sm">User management coming soon</p>
+    </div>
+    <div className="glass-card text-center p-12">
+      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      </div>
+      <h3 className="text-lg font-semibold text-slate-900 mb-2">User Management</h3>
+      <p className="text-slate-600">
+        User management features are currently under development. This page will allow you to manage user accounts, roles, and permissions.
+      </p>
+    </div>
+  </div>
+);
+
+const NotFound = lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
 
 /**
  * Protected Routes Wrapper
@@ -128,8 +148,8 @@ function App() {
                         />
                       </Route>
 
-                      {/* Catch all */}
-                      <Route path="*" element={<Navigate to="/" replace />} />
+                      {/* Catch all - 404 page */}
+                      <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>
                   <KeyboardShortcuts />

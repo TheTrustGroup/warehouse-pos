@@ -1,4 +1,5 @@
 import { Package, DollarSign, AlertTriangle, ShoppingBag } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { StatCard } from '../components/dashboard/StatCard';
 import { SalesChart } from '../components/dashboard/SalesChart';
 import { TopProducts } from '../components/dashboard/TopProducts';
@@ -10,6 +11,7 @@ import { InventoryActivity } from '../types';
 
 export function Dashboard() {
   const { products } = useInventory();
+  const navigate = useNavigate();
 
   // Calculate stats from real product data
   const stats = useMemo(() => {
@@ -108,7 +110,11 @@ export function Dashboard() {
               <p className="text-sm text-amber-700 mb-3">
                 You have {stats.lowStockItems} product{stats.lowStockItems > 1 ? 's' : ''} running low on stock.
               </p>
-              <button className="text-sm font-semibold text-amber-900 hover:text-amber-700 transition-colors">
+              <button
+                type="button"
+                onClick={() => navigate('/inventory?filter=lowStock')}
+                className="text-sm font-semibold text-amber-900 hover:text-amber-700 transition-colors"
+              >
                 View Low Stock Items →
               </button>
             </div>
@@ -127,7 +133,11 @@ export function Dashboard() {
               <p className="text-sm text-red-700 mb-3">
                 You have {stats.outOfStockItems} product{stats.outOfStockItems > 1 ? 's' : ''} out of stock.
               </p>
-              <button className="text-sm font-semibold text-red-900 hover:text-red-700 transition-colors">
+              <button
+                type="button"
+                onClick={() => navigate('/inventory?filter=outOfStock')}
+                className="text-sm font-semibold text-red-900 hover:text-red-700 transition-colors"
+              >
                 Restock Now →
               </button>
             </div>
