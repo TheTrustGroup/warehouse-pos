@@ -1,5 +1,5 @@
 // src/components/layout/Sidebar.tsx - Premium Figma-Inspired Design
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -32,19 +32,13 @@ const baseNavigation = [
 ];
 
 export function Sidebar() {
-  const { user, hasPermission, hasAnyPermission, logout, switchRole } = useAuth();
-  const navigate = useNavigate();
+  const { user, hasPermission, hasAnyPermission, switchRole } = useAuth();
 
   const navigation = baseNavigation.filter(
     (item) =>
       ('permission' in item && item.permission && hasPermission(item.permission)) ||
       ('anyPermissions' in item && item.anyPermissions && hasAnyPermission(item.anyPermissions))
   );
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login', { replace: true });
-  };
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-[280px] bg-glass border-r border-white/40 flex flex-col shadow-glass backdrop-blur-xl">
@@ -76,7 +70,7 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* User Profile with Role selector and Logout */}
+      {/* User Profile with Role selector */}
       <div className="p-4 border-t border-slate-200/30 space-y-3">
         <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 hover:bg-slate-50/80 transition-all group">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm shadow-lg">
@@ -88,13 +82,6 @@ export function Sidebar() {
             </p>
             <p className="text-xs text-slate-500 font-medium">Role</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-red-600 hover:text-red-700 font-medium transition-colors"
-            type="button"
-          >
-            Logout
-          </button>
         </div>
         {!import.meta.env.PROD && (
           <label className="block">

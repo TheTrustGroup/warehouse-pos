@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Menu, X, LogOut } from 'lucide-react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { Menu, X } from 'lucide-react';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -34,20 +34,13 @@ const baseNavigation = [
 
 export function MobileMenu() {
   const [isOpen, setIsOpen] = useState(false);
-  const navigate = useNavigate();
-  const { user, hasPermission, hasAnyPermission, logout, switchRole } = useAuth();
+  const { user, hasPermission, hasAnyPermission, switchRole } = useAuth();
 
   const navigation = baseNavigation.filter(
     (item) =>
       ('permission' in item && item.permission && hasPermission(item.permission)) ||
       ('anyPermissions' in item && item.anyPermissions && hasAnyPermission(item.anyPermissions))
   );
-
-  const handleLogout = () => {
-    setIsOpen(false);
-    logout();
-    navigate('/login', { replace: true });
-  };
 
   return (
     <>
@@ -107,14 +100,6 @@ export function MobileMenu() {
                 </select>
               </label>
             )}
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-              Log out
-            </button>
           </div>
         </aside>
       </div>
