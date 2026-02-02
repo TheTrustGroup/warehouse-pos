@@ -157,6 +157,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     const baseOpts = { method: 'POST' as const, headers, credentials: 'include' as const };
 
+    // Log request details for debugging
+    console.log('Login request:', {
+      url: `${API_BASE_URL}/admin/api/login`,
+      email: trimmedEmail,
+      emailLength: trimmedEmail.length,
+      passwordLength: trimmedPassword.length,
+      body: loginBody
+    });
+
     try {
       // Try /admin/api/login first (same origin as admin panel)
       let response = await fetch(`${API_BASE_URL}/admin/api/login`, { ...baseOpts, body: JSON.stringify(loginBody) });
@@ -165,7 +174,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Invalid email or password' }));
+        // Read response as text first so we can log it and parse it
+        const responseText = await response.text();
+        console.error('Raw error response text:', responseText);
+        
+        let errorData: any;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (e) {
+          errorData = { message: responseText || 'Invalid email or password' };
+        }
+        
+        // Log full error response for debugging
+        console.error('Login error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url,
+          errorData,
+          requestBody: loginBody
+        });
+        
+        // Handle 422 validation errors with detailed field messages
+        if (response.status === 422 && errorData?.errors) {
+          const validationErrors: string[] = [];
+          // Check all possible error fields
+          Object.keys(errorData.errors).forEach(field => {
+            const fieldErrors = errorData.errors[field];
+            if (fieldErrors) {
+              const errorMsg = Array.isArray(fieldErrors) ? fieldErrors.join(', ') : String(fieldErrors);
+              validationErrors.push(`${field.charAt(0).toUpperCase() + field.slice(1)}: ${errorMsg}`);
+            }
+          });
+          if (validationErrors.length > 0) {
+            throw new Error(validationErrors.join('; '));
+          }
+        }
+        
         const msg = errorData?.message || errorData?.error || (response.status === 401 ? 'Invalid email or password' : 'Login failed');
         throw new Error(typeof msg === 'string' ? msg : 'Invalid email or password');
       }
