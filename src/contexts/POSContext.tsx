@@ -4,7 +4,14 @@ import { useInventory } from './InventoryContext';
 import { useAuth } from './AuthContext';
 import { generateTransactionNumber, calculateTotal } from '../lib/utils';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
-import { API_BASE_URL, getApiHeaders, handleApiResponse } from '../lib/api';
+import { API_BASE_URL } from '../lib/api';
+import { apiPost } from '../lib/apiClient';
+import {
+  getOfflineTransactionQueue,
+  enqueueOfflineTransaction,
+  clearOfflineTransactionQueue,
+  isIndexedDBAvailable,
+} from '../lib/offlineDb';
 
 interface POSContextType {
   cart: TransactionItem[];
@@ -34,34 +41,36 @@ export function POSProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   /**
-   * Sync offline transactions to API when connection is restored
+   * Sync offline transactions to API when connection is restored.
+   * Uses IndexedDB queue when available, else localStorage.
    */
   const syncOfflineTransactions = useCallback(async () => {
-    if (!isStorageAvailable()) return;
-    
-    const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
+    let offlineQueue: Transaction[] = [];
+    if (isIndexedDBAvailable()) {
+      offlineQueue = await getOfflineTransactionQueue<Transaction>();
+    } else if (isStorageAvailable()) {
+      offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
+    }
     if (offlineQueue.length === 0) return;
 
     try {
-      // Send each offline transaction to API
       for (const transaction of offlineQueue) {
-        const response = await fetch(`${API_BASE_URL}/api/transactions`, {
-          method: 'POST',
-          headers: getApiHeaders(),
-          credentials: 'include',
-          body: JSON.stringify(transaction),
+        const payload = {
+          ...transaction,
+          createdAt: transaction.createdAt instanceof Date ? transaction.createdAt.toISOString() : transaction.createdAt,
+          completedAt: transaction.completedAt instanceof Date ? transaction.completedAt?.toISOString() : transaction.completedAt,
+        };
+        await apiPost(API_BASE_URL, '/api/transactions', payload, {
+          idempotencyKey: transaction.id || transaction.transactionNumber,
         });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to sync transaction ${transaction.transactionNumber}`);
-        }
       }
-      
-      // Clear offline queue after successful sync
-      localStorage.removeItem('offline_transactions');
+      if (isIndexedDBAvailable()) {
+        await clearOfflineTransactionQueue();
+      } else if (isStorageAvailable()) {
+        localStorage.removeItem('offline_transactions');
+      }
     } catch (error) {
       console.error('Error syncing offline transactions:', error);
-      // Keep transactions in queue for next sync attempt
     }
   }, []);
 
@@ -237,74 +246,54 @@ export function POSProvider({ children }: { children: ReactNode }) {
       })
     );
 
-    // POST to API when online
+    // POST to API when online (resilient client with idempotency)
     if (isOnline) {
       try {
         const transactionPayload = {
           ...transaction,
           createdAt: transaction.createdAt.toISOString(),
-          completedAt: transaction.completedAt?.toISOString() || null,
+          completedAt: transaction.completedAt?.toISOString() ?? null,
         };
-
-        const response = await fetch(`${API_BASE_URL}/api/transactions`, {
-          method: 'POST',
-          headers: getApiHeaders(),
-          credentials: 'include',
-          body: JSON.stringify(transactionPayload),
+        const savedRaw = await apiPost<Transaction>(API_BASE_URL, '/api/transactions', transactionPayload, {
+          idempotencyKey: transaction.id,
         });
-
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({ message: response.statusText }));
-          // Queue for retry instead of failing completely
-          if (isStorageAvailable()) {
-            const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
-            setStoredData('offline_transactions', [...offlineQueue, transaction]);
-          }
-          throw new Error(err.message || 'Failed to save transaction to server');
-        }
-
-        // Use saved transaction from API if available
-        const savedRaw = await handleApiResponse<Transaction>(response).catch(() => null);
         if (savedRaw) {
           const savedTransaction: Transaction = {
             ...savedRaw,
             createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : transaction.createdAt,
             completedAt: savedRaw.completedAt ? new Date(savedRaw.completedAt) : transaction.completedAt,
           };
-          
-          // Store saved transaction
           if (isStorageAvailable()) {
             const transactions = getStoredData<Transaction[]>('transactions', []);
             setStoredData('transactions', [...transactions, savedTransaction]);
           }
-          
           clearCart();
           return savedTransaction;
         }
       } catch (error) {
-        // If API call fails, still store locally and queue for sync
-        console.error('Failed to POST transaction to API:', error);
         if (isStorageAvailable()) {
           const transactions = getStoredData<Transaction[]>('transactions', []);
           setStoredData('transactions', [...transactions, transaction]);
+        }
+        if (isIndexedDBAvailable()) {
+          await enqueueOfflineTransaction(transaction as unknown as Record<string, unknown>);
+        } else if (isStorageAvailable()) {
           const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
           setStoredData('offline_transactions', [...offlineQueue, transaction]);
         }
-        // Don't throw - allow transaction to complete locally
-        // User will see warning via toast if needed
       }
     }
 
-    // Store transaction locally (for offline or as backup)
+    // Store locally and queue for sync when offline or API failed
     if (isStorageAvailable()) {
       const transactions = getStoredData<Transaction[]>('transactions', []);
       setStoredData('transactions', [...transactions, transaction]);
-
-      // If offline, queue for sync
-      if (!isOnline) {
-        const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
-        setStoredData('offline_transactions', [...offlineQueue, transaction]);
-      }
+    }
+    if (!isOnline && isIndexedDBAvailable()) {
+      await enqueueOfflineTransaction(transaction as unknown as Record<string, unknown>);
+    } else if (!isOnline && isStorageAvailable()) {
+      const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
+      setStoredData('offline_transactions', [...offlineQueue, transaction]);
     }
 
     clearCart();

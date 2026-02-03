@@ -1,5 +1,6 @@
 import { Component, ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { reportError } from '../../lib/observability';
 
 interface Props {
   children: ReactNode;
@@ -20,8 +21,8 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: any) {
-    console.error('Error caught by boundary:', error, errorInfo);
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    reportError(error, { componentStack: errorInfo.componentStack });
   }
 
   render() {

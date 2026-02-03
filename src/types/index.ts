@@ -31,6 +31,8 @@ export interface Product {
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
+  /** Optional version for optimistic locking; backend may return and require on update. */
+  version?: number;
 }
 
 export interface Transaction {

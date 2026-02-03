@@ -3,7 +3,10 @@ import { Order, OrderStatus, OrderItem, PaymentStatus, DeliveryInfo } from '../t
 import { useInventory } from './InventoryContext';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
-import { API_BASE_URL, getApiHeaders, handleApiResponse } from '../lib/api';
+import { API_BASE_URL } from '../lib/api';
+import { apiGet, apiPost, apiPatch } from '../lib/apiClient';
+import { reportError } from '../lib/observability';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface OrderContextType {
   orders: Order[];
@@ -29,67 +32,56 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { showToast } = useToast();
 
+  const normalizeOrder = (o: any): Order => ({
+    ...o,
+    createdAt: o.createdAt ? new Date(o.createdAt) : new Date(),
+    updatedAt: o.updatedAt ? new Date(o.updatedAt) : new Date(),
+    statusHistory: (o.statusHistory || []).map((h: any) => ({
+      ...h,
+      timestamp: new Date(h.timestamp),
+    })),
+    delivery: o.delivery ? {
+      ...o.delivery,
+      scheduledTime: o.delivery.scheduledTime ? new Date(o.delivery.scheduledTime) : null,
+      actualTime: o.delivery.actualTime ? new Date(o.delivery.actualTime) : null,
+      deliveryProof: o.delivery.deliveryProof ? {
+        ...o.delivery.deliveryProof,
+        receivedAt: o.delivery.deliveryProof.receivedAt ? new Date(o.delivery.deliveryProof.receivedAt) : null,
+      } : null,
+    } : null,
+    payment: o.payment ? {
+      ...o.payment,
+      paidAt: o.payment.paidAt ? new Date(o.payment.paidAt) : null,
+    } : null,
+    inventory: o.inventory ? {
+      ...o.inventory,
+      reservedAt: o.inventory.reservedAt ? new Date(o.inventory.reservedAt) : null,
+      deductedAt: o.inventory.deductedAt ? new Date(o.inventory.deductedAt) : null,
+    } : null,
+  });
+
   /**
-   * Load orders from API
+   * Load orders from API (resilient client).
    */
   const loadOrders = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/orders`, {
-        headers: getApiHeaders(),
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const data = await handleApiResponse<Order[]>(response);
-        // Ensure we have an array (API may return { data: [] } or similar)
-        const list = Array.isArray(data) ? data : (data && (data as any).data && Array.isArray((data as any).data) ? (data as any).data : []);
-        
-        // Convert date strings to Date objects
-        const ordersWithDates = list.map((o: any) => ({
-          ...o,
-          createdAt: o.createdAt ? new Date(o.createdAt) : new Date(),
-          updatedAt: o.updatedAt ? new Date(o.updatedAt) : new Date(),
-          statusHistory: (o.statusHistory || []).map((h: any) => ({
-            ...h,
-            timestamp: new Date(h.timestamp),
-          })),
-          delivery: o.delivery ? {
-            ...o.delivery,
-            scheduledTime: o.delivery.scheduledTime ? new Date(o.delivery.scheduledTime) : null,
-            actualTime: o.delivery.actualTime ? new Date(o.delivery.actualTime) : null,
-            deliveryProof: o.delivery.deliveryProof ? {
-              ...o.delivery.deliveryProof,
-              receivedAt: o.delivery.deliveryProof.receivedAt ? new Date(o.delivery.deliveryProof.receivedAt) : null,
-            } : null,
-          } : null,
-          payment: o.payment ? {
-            ...o.payment,
-            paidAt: o.payment.paidAt ? new Date(o.payment.paidAt) : null,
-          } : null,
-          inventory: o.inventory ? {
-            ...o.inventory,
-            reservedAt: o.inventory.reservedAt ? new Date(o.inventory.reservedAt) : null,
-            deductedAt: o.inventory.deductedAt ? new Date(o.inventory.deductedAt) : null,
-          } : null,
-        }));
-        
-        setOrders(ordersWithDates);
-      } else {
-        setOrders([]);
-      }
+      const data = await apiGet<Order[] | { data: Order[] }>(API_BASE_URL, '/api/orders');
+      const list = Array.isArray(data) ? data : (data && (data as any).data && Array.isArray((data as any).data) ? (data as any).data : []);
+      setOrders(list.map((o: any) => normalizeOrder(o)));
     } catch (error) {
-      console.error('Error loading orders:', error);
+      reportError(error, { context: 'loadOrders' });
       setOrders([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Load orders from API on mount
   useEffect(() => {
     loadOrders();
   }, []);
+
+  useRealtimeSync({ onSync: loadOrders, intervalMs: 60_000 });
 
   // Save orders to localStorage for offline support (only real API data)
   useEffect(() => {
@@ -177,29 +169,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         createdBy: user?.id || user?.email || 'system',
       };
 
-      // POST to API
-      const response = await fetch(`${API_BASE_URL}/api/orders`, {
-        method: 'POST',
-        headers: getApiHeaders(),
-        credentials: 'include',
-        body: JSON.stringify(orderPayload),
+      const savedRaw = await apiPost<Order>(API_BASE_URL, '/api/orders', orderPayload, {
+        idempotencyKey: orderPayload.orderNumber,
       });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(err.message || err.errors?.[0]?.message || 'Failed to create order');
-      }
-
-      const savedRaw = await handleApiResponse<Order>(response);
-      const savedOrder: Order = {
-        ...savedRaw,
-        createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : new Date(),
-        updatedAt: savedRaw.updatedAt ? new Date(savedRaw.updatedAt) : new Date(),
-        statusHistory: (savedRaw.statusHistory || []).map((h: any) => ({
-          ...h,
-          timestamp: new Date(h.timestamp),
-        })),
-      };
+      const savedOrder = normalizeOrder(savedRaw);
 
       setOrders(prev => [...prev, savedOrder]);
       showToast('success', `Order ${savedOrder.orderNumber} created successfully`);
@@ -235,39 +208,24 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       order.inventory.deducted = false;
     }
 
-    // PATCH to API
     const updatePayload = {
       status,
       notes: notes ?? `Status updated to ${status}`,
       updatedBy: user?.id || user?.email || 'system',
     };
 
-    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
-      method: 'PATCH',
-      headers: getApiHeaders(),
-      credentials: 'include',
-      body: JSON.stringify(updatePayload),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ message: response.statusText }));
-      showToast('error', err.message || 'Failed to update order status');
-      throw new Error(err.message || 'Failed to update order status');
+    try {
+      const savedRaw = await apiPatch<Order>(API_BASE_URL, `/api/orders/${orderId}`, updatePayload);
+      const updatedOrder: Order = {
+        ...normalizeOrder(savedRaw),
+        createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
+      };
+      setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
+      showToast('success', `Order status updated to ${status}`);
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Failed to update order status');
+      throw error;
     }
-
-    const savedRaw = await handleApiResponse<Order>(response);
-    const updatedOrder: Order = {
-      ...savedRaw,
-      createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
-      updatedAt: savedRaw.updatedAt ? new Date(savedRaw.updatedAt) : new Date(),
-      statusHistory: (savedRaw.statusHistory || order.statusHistory).map((h: any) => ({
-        ...h,
-        timestamp: new Date(h.timestamp),
-      })),
-    };
-
-    setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
-    showToast('success', `Order status updated to ${status}`);
   };
 
   // Assign driver
@@ -292,28 +250,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       updatedBy: user?.id || user?.email || 'system',
     };
 
-    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/assign-driver`, {
-      method: 'PATCH',
-      headers: getApiHeaders(),
-      credentials: 'include',
-      body: JSON.stringify(updatePayload),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ message: response.statusText }));
-      showToast('error', err.message || 'Failed to assign driver');
-      throw new Error(err.message || 'Failed to assign driver');
-    }
-
-    const savedRaw = await handleApiResponse<Order>(response);
+    const savedRaw = await apiPatch<Order>(API_BASE_URL, `/api/orders/${orderId}/assign-driver`, updatePayload);
     const updatedOrder: Order = {
-      ...savedRaw,
+      ...normalizeOrder(savedRaw),
       createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
-      updatedAt: savedRaw.updatedAt ? new Date(savedRaw.updatedAt) : new Date(),
-      statusHistory: (savedRaw.statusHistory || order.statusHistory).map((h: any) => ({
-        ...h,
-        timestamp: new Date(h.timestamp),
-      })),
     };
 
     setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
@@ -346,28 +286,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       updatedBy: user?.id || user?.email || 'system',
     };
 
-    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/deliver`, {
-      method: 'PATCH',
-      headers: getApiHeaders(),
-      credentials: 'include',
-      body: JSON.stringify(updatePayload),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ message: response.statusText }));
-      showToast('error', err.message || 'Failed to mark order as delivered');
-      throw new Error(err.message || 'Failed to mark order as delivered');
-    }
-
-    const savedRaw = await handleApiResponse<Order>(response);
+    const savedRaw = await apiPatch<Order>(API_BASE_URL, `/api/orders/${orderId}/deliver`, updatePayload);
     const updatedOrder: Order = {
-      ...savedRaw,
+      ...normalizeOrder(savedRaw),
       createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
-      updatedAt: savedRaw.updatedAt ? new Date(savedRaw.updatedAt) : new Date(),
-      statusHistory: (savedRaw.statusHistory || order.statusHistory).map((h: any) => ({
-        ...h,
-        timestamp: new Date(h.timestamp),
-      })),
     };
 
     setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
@@ -392,19 +314,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       updatedBy: user?.id || user?.email || 'system',
     };
 
-    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/fail`, {
-      method: 'PATCH',
-      headers: getApiHeaders(),
-      credentials: 'include',
-      body: JSON.stringify(updatePayload),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ message: response.statusText }));
-      showToast('error', err.message || 'Failed to mark order as failed');
-      throw new Error(err.message || 'Failed to mark order as failed');
-    }
-
+    await apiPatch(API_BASE_URL, `/api/orders/${orderId}/fail`, updatePayload);
     await updateOrderStatus(orderId, 'failed', `Delivery failed: ${reason}`);
   };
 
@@ -428,19 +338,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       updatedBy: user?.id || user?.email || 'system',
     };
 
-    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/cancel`, {
-      method: 'PATCH',
-      headers: getApiHeaders(),
-      credentials: 'include',
-      body: JSON.stringify(updatePayload),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ message: response.statusText }));
-      showToast('error', err.message || 'Failed to cancel order');
-      throw new Error(err.message || 'Failed to cancel order');
-    }
-
+    await apiPatch(API_BASE_URL, `/api/orders/${orderId}/cancel`, updatePayload);
     await updateOrderStatus(orderId, 'cancelled', `Order cancelled: ${reason}`);
   };
 

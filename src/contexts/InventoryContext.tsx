@@ -1,8 +1,12 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
-import { API_BASE_URL, getApiHeaders, handleApiResponse } from '../lib/api';
+import { API_BASE_URL } from '../lib/api';
+import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from '../lib/apiClient';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
+import { loadProductsFromDb, saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
+import { reportError } from '../lib/observability';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface InventoryContextType {
   products: Product[];
@@ -89,35 +93,34 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   /**
    * Load products: SERVER IS SINGLE SOURCE OF TRUTH.
-   * One fetch to API (backend must implement getInventory() → Supabase).
-   * No client-side merge, SWR, React Query, or refetch logic. On success → use API response only.
-   * On failure (offline) → fallback to localStorage so UI still shows something.
+   * Uses resilient client (retries, circuit breaker). On failure → fallback to localStorage/IndexedDB.
    */
-  const loadProducts = async () => {
+  const loadProducts = async (signal?: AbortSignal) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      let response = await fetch(`${API_BASE_URL}/admin/api/products`, {
-        headers: getApiHeaders(),
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      if (response.status === 404) {
-        response = await fetch(`${API_BASE_URL}/api/products`, {
-          headers: getApiHeaders(),
-          credentials: 'include',
-          cache: 'no-store',
-        });
+      try {
+        let data: Product[] | null = null;
+        try {
+          data = await apiGet<Product[]>(API_BASE_URL, '/admin/api/products', { signal });
+        } catch {
+          data = await apiGet<Product[]>(API_BASE_URL, '/api/products', { signal });
+        }
+        const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
+        setProducts(apiProducts);
+        if (isIndexedDBAvailable()) {
+          saveProductsToDb(apiProducts).catch(() => {});
+        }
+      } catch (apiErr) {
+        if (apiErr instanceof Error && apiErr.name === 'AbortError') return;
+        throw apiErr;
       }
-
-      const data = await handleApiResponse<Product[]>(response);
-      const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
-      setProducts(apiProducts);
     } catch (err) {
-      console.error('Error loading products:', err);
+      if (err instanceof Error && err.name === 'AbortError') return;
+      reportError(err, { context: 'loadProducts' });
       const message =
-        /load failed|failed to fetch|network error|networkrequestfailed/i.test(
+        /load failed|failed to fetch|network error|networkrequestfailed|temporarily unavailable/i.test(
           err instanceof Error ? err.message : String(err)
         )
           ? 'Cannot reach the server. Check your connection and try again.'
@@ -125,6 +128,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             ? err.message
             : 'Failed to load products. Please check your connection.';
       setError(message);
+      if (isIndexedDBAvailable()) {
+        const fromDb = await loadProductsFromDb<any>();
+        if (fromDb.length > 0) {
+          setProducts(fromDb.map((p: any) => normalizeProduct(p)));
+          return;
+        }
+      }
       const localRaw = getStoredData<any[]>('warehouse_products', []);
       const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
       setProducts(localProducts);
@@ -133,11 +143,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Single load on mount. No SWR, React Query, or client refetch logic — server is source of truth.
+  // Single load on mount with AbortController for cleanup.
   useEffect(() => {
     clearMockData();
-    loadProducts();
+    const ac = new AbortController();
+    loadProducts(ac.signal);
+    return () => ac.abort();
   }, []);
+
+  // Real-time: poll when tab visible so multiple tabs/devices get updates.
+  useRealtimeSync({ onSync: () => loadProducts(), intervalMs: 60_000 });
 
   // Save to localStorage whenever products change (for offline support)
   useEffect(() => {
@@ -146,36 +161,28 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   }, [products, isLoading]);
 
-  /** Serialize a product for API POST (dates to ISO strings). */
+  /** Serialize a product for API POST/PUT (dates to ISO strings). Preserves version for optimistic locking. */
   const productToPayload = (product: Product) => ({
     ...product,
     createdAt: product.createdAt instanceof Date ? product.createdAt.toISOString() : product.createdAt,
     updatedAt: product.updatedAt instanceof Date ? product.updatedAt.toISOString() : product.updatedAt,
     expiryDate: product.expiryDate instanceof Date ? product.expiryDate.toISOString() : product.expiryDate,
+    ...(product.version !== undefined && { version: product.version }),
   });
 
   /**
-   * Push products that exist only in this browser's localStorage to the API
-   * so they appear in all browsers/devices. Use after recording items in one
-   * browser to recover them on the server and elsewhere.
+   * Push products that exist only in this browser's storage to the API
+   * so they appear in all browsers/devices.
    */
   const syncLocalInventoryToApi = async (): Promise<{ synced: number; failed: number; total: number }> => {
     let apiIds = new Set<string>();
     try {
-      let response = await fetch(`${API_BASE_URL}/admin/api/products`, {
-        headers: getApiHeaders(),
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      if (response.status === 404) {
-        response = await fetch(`${API_BASE_URL}/api/products`, {
-          headers: getApiHeaders(),
-          credentials: 'include',
-          cache: 'no-store',
-        });
-      }
-      if (response.ok) {
-        const data = await response.json().catch(() => []);
+      try {
+        const data = await apiGet<any[]>(API_BASE_URL, '/admin/api/products');
+        const list = Array.isArray(data) ? data : [];
+        apiIds = new Set(list.map((p: any) => p.id));
+      } catch {
+        const data = await apiGet<any[]>(API_BASE_URL, '/api/products');
         const list = Array.isArray(data) ? data : [];
         apiIds = new Set(list.map((p: any) => p.id));
       }
@@ -189,19 +196,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const total = localOnly.length;
     if (total === 0) return { synced: 0, failed: 0, total: 0 };
 
-    const opts = (body: string) => ({
-      method: 'POST' as const,
-      headers: getApiHeaders(),
-      credentials: 'include' as const,
-      body,
-    });
     let synced = 0;
     let failed = 0;
     for (const product of localOnly) {
       try {
-        let res = await fetch(`${API_BASE_URL}/admin/api/products`, opts(JSON.stringify(productToPayload(product))));
-        if (res.status === 404) res = await fetch(`${API_BASE_URL}/api/products`, opts(JSON.stringify(productToPayload(product))));
-        if (res.ok) synced++; else failed++;
+        try {
+          await apiPost(API_BASE_URL, '/admin/api/products', productToPayload(product));
+        } catch {
+          await apiPost(API_BASE_URL, '/api/products', productToPayload(product));
+        }
+        synced++;
       } catch {
         failed++;
       }
@@ -210,16 +214,18 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return { synced, failed, total };
   };
 
-  /** Persist current list to localStorage immediately so refresh never loses data. */
+  /** Persist current list to localStorage and IndexedDB. */
   const persistProducts = (next: Product[]) => {
     if (isStorageAvailable() && next.length >= 0) {
       setStoredData('warehouse_products', next);
     }
+    if (isIndexedDBAvailable()) {
+      saveProductsToDb(next).catch(() => {});
+    }
   };
 
   /**
-   * Add product: WRITE PATH — UI never mutates until DB confirms.
-   * POST to API first; only on success update state with saved item.
+   * Add product: WRITE PATH — uses resilient client (retries, circuit breaker).
    */
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     const payload = productToPayload({
@@ -228,40 +234,20 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    let res = await fetch(`${API_BASE_URL}/admin/api/products`, {
-      method: 'POST',
-      headers: getApiHeaders(),
-      credentials: 'include',
-      body: JSON.stringify(payload),
-      cache: 'no-store',
-    });
-    if (res.status === 404) {
-      res = await fetch(`${API_BASE_URL}/api/products`, {
-        method: 'POST',
-        headers: getApiHeaders(),
-        credentials: 'include',
-        body: JSON.stringify(payload),
-        cache: 'no-store',
-      });
+    let savedRaw: any = null;
+    try {
+      savedRaw = await apiPost<any>(API_BASE_URL, '/admin/api/products', payload);
+    } catch {
+      savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', payload);
     }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: res.statusText }));
-      // 400 = backend rejected payload — log so you can align with API expectations
-      console.error('POST /admin/api/products failed', res.status, err);
-      throw new Error(err.message || err.errors?.[0]?.message || 'Write failed');
-    }
-    const savedRaw = await res.json().catch(() => null);
-    const saved: Product = savedRaw
-      ? normalizeProduct(savedRaw)
-      : normalizeProduct(payload);
+    const saved: Product = savedRaw ? normalizeProduct(savedRaw) : normalizeProduct(payload);
     const next = [...products, saved];
     setProducts(next);
     persistProducts(next);
   };
 
   /**
-   * Update product: WRITE PATH — UI never mutates until DB confirms.
-   * PUT to API first; only on success update state with saved item.
+   * Update product: WRITE PATH. Handles 409 Conflict (version/ETag) — refresh and show message.
    */
   const updateProduct = async (id: string, updates: Partial<Product>) => {
     const product = products.find(p => p.id === id);
@@ -272,125 +258,98 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const updatedProduct = { ...product, ...updates, updatedAt: new Date() };
     const payload = productToPayload(updatedProduct);
 
-    let res = await fetch(`${API_BASE_URL}/admin/api/products/${id}`, {
-      method: 'PUT',
-      headers: getApiHeaders(),
-      credentials: 'include',
-      body: JSON.stringify(payload),
-      cache: 'no-store',
-    });
-    if (res.status === 404) {
-      res = await fetch(`${API_BASE_URL}/api/products/${id}`, {
-        method: 'PUT',
-        headers: getApiHeaders(),
-        credentials: 'include',
-        body: JSON.stringify(payload),
-        cache: 'no-store',
-      });
+    try {
+      let savedRaw: any = null;
+      try {
+        savedRaw = await apiPut<any>(API_BASE_URL, `/admin/api/products/${id}`, payload);
+      } catch (err: any) {
+        if (err?.status === 409) {
+          await loadProducts();
+          throw new Error(
+            'Someone else updated this product. The list has been refreshed — please try your change again.'
+          );
+        }
+        throw err;
+      }
+      if (!savedRaw) {
+        try {
+          savedRaw = await apiPut<any>(API_BASE_URL, `/api/products/${id}`, payload);
+        } catch (err: any) {
+          if (err?.status === 409) {
+            await loadProducts();
+            throw new Error(
+              'Someone else updated this product. The list has been refreshed — please try your change again.'
+            );
+          }
+          throw err;
+        }
+      }
+      const saved: Product = savedRaw ? normalizeProduct(savedRaw) : normalizeProduct(updatedProduct);
+      const next = products.map(p => (p.id === id ? saved : p));
+      setProducts(next);
+      persistProducts(next);
+    } catch (err: any) {
+      if (err?.status === 409) {
+        await loadProducts();
+        throw new Error(
+          'Someone else updated this product. The list has been refreshed — please try your change again.'
+        );
+      }
+      throw err;
     }
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: res.statusText }));
-      console.error('PUT /admin/api/products/:id failed', res.status, err);
-      throw new Error(err.message || err.errors?.[0]?.message || 'Update failed');
-    }
-
-    const savedRaw = await res.json().catch(() => null);
-    const saved: Product = savedRaw
-      ? normalizeProduct(savedRaw)
-      : normalizeProduct(updatedProduct);
-    
-    const next = products.map(p => (p.id === id ? saved : p));
-    setProducts(next);
-    persistProducts(next);
   };
 
   /**
-   * Delete product: WRITE PATH — UI never mutates until DB confirms.
-   * DELETE to API first; only on success remove from state.
+   * Delete product: WRITE PATH — uses resilient client.
    */
   const deleteProduct = async (id: string) => {
-    let res = await fetch(`${API_BASE_URL}/admin/api/products/${id}`, {
-      method: 'DELETE',
-      headers: getApiHeaders(),
-      credentials: 'include',
-      cache: 'no-store',
-    });
-    if (res.status === 404) {
-      res = await fetch(`${API_BASE_URL}/api/products/${id}`, {
-        method: 'DELETE',
-        headers: getApiHeaders(),
-        credentials: 'include',
-        cache: 'no-store',
-      });
+    try {
+      await apiDelete(API_BASE_URL, `/admin/api/products/${id}`);
+    } catch {
+      await apiDelete(API_BASE_URL, `/api/products/${id}`);
     }
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: res.statusText }));
-      console.error('DELETE /admin/api/products/:id failed', res.status, err);
-      throw new Error(err.message || err.errors?.[0]?.message || 'Delete failed');
-    }
-
     const next = products.filter(p => p.id !== id);
     setProducts(next);
     persistProducts(next);
   };
 
   /**
-   * Delete multiple products: WRITE PATH — UI never mutates until DB confirms.
-   * DELETE to API for each product; only remove from state after all succeed.
+   * Delete multiple products: WRITE PATH. Tries bulk then individual deletes.
    */
   const deleteProducts = async (ids: string[]) => {
     if (ids.length === 0) return;
 
-    // Try bulk delete endpoint first, fallback to individual deletes
     let bulkSuccess = false;
     try {
-      let res = await fetch(`${API_BASE_URL}/admin/api/products/bulk`, {
+      await apiRequest({
+        baseUrl: API_BASE_URL,
+        path: '/admin/api/products/bulk',
         method: 'DELETE',
-        headers: getApiHeaders(),
-        credentials: 'include',
         body: JSON.stringify({ ids }),
-        cache: 'no-store',
       });
-      if (res.status === 404) {
-        res = await fetch(`${API_BASE_URL}/api/products/bulk`, {
-          method: 'DELETE',
-          headers: getApiHeaders(),
-          credentials: 'include',
-          body: JSON.stringify({ ids }),
-          cache: 'no-store',
-        });
-      }
-      if (res.ok) {
-        bulkSuccess = true;
-      }
+      bulkSuccess = true;
     } catch {
-      // Bulk endpoint not available or failed, fall back to individual deletes
+      try {
+        await apiRequest({
+          baseUrl: API_BASE_URL,
+          path: '/api/products/bulk',
+          method: 'DELETE',
+          body: JSON.stringify({ ids }),
+        });
+        bulkSuccess = true;
+      } catch {
+        // both bulk endpoints failed
+      }
     }
 
     if (!bulkSuccess) {
-      // Delete individually
       const errors: string[] = [];
       for (const id of ids) {
         try {
-          let res = await fetch(`${API_BASE_URL}/admin/api/products/${id}`, {
-            method: 'DELETE',
-            headers: getApiHeaders(),
-            credentials: 'include',
-            cache: 'no-store',
-          });
-          if (res.status === 404) {
-            res = await fetch(`${API_BASE_URL}/api/products/${id}`, {
-              method: 'DELETE',
-              headers: getApiHeaders(),
-              credentials: 'include',
-              cache: 'no-store',
-            });
-          }
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ message: res.statusText }));
-            errors.push(err.message || 'Delete failed');
+          try {
+            await apiDelete(API_BASE_URL, `/admin/api/products/${id}`);
+          } catch {
+            await apiDelete(API_BASE_URL, `/api/products/${id}`);
           }
         } catch (err) {
           errors.push(err instanceof Error ? err.message : 'Delete failed');
@@ -401,7 +360,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // All deletes succeeded, update state
     const next = products.filter(p => !ids.includes(p.id));
     setProducts(next);
     persistProducts(next);

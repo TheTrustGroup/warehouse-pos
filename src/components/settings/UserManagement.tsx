@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Users as UsersIcon, Plus, Shield, KeyRound, Copy } from 'lucide-react';
 import { User } from '../../types';
 import { ROLES } from '../../types/permissions';
-import { emailForRole, DEFAULT_USER_PASSWORD, ROLES_WITH_SHARED_PASSWORD } from '../../constants/defaultCredentials';
+import { emailForRole, getDefaultUserPassword, ROLES_WITH_SHARED_PASSWORD } from '../../constants/defaultCredentials';
 import { useToast } from '../../contexts/ToastContext';
 
 export function UserManagement() {
@@ -13,7 +13,7 @@ export function UserManagement() {
     fullName: '',
     email: emailForRole('viewer'),
     role: 'viewer' as User['role'],
-    password: DEFAULT_USER_PASSWORD,
+    password: getDefaultUserPassword(),
   });
   const { showToast } = useToast();
 
@@ -38,7 +38,7 @@ export function UserManagement() {
     }
 
     const email = newUser.role === 'admin' ? '' : emailForRole(newUser.role);
-    const password = newUser.role === 'admin' ? '' : DEFAULT_USER_PASSWORD;
+    const password = newUser.role === 'admin' ? '' : getDefaultUserPassword();
     
     // Create user details string
     const userDetails = `User Details:
@@ -62,7 +62,7 @@ Create this user in your backend admin panel with these exact credentials.`;
         fullName: '',
         email: emailForRole('viewer'),
         role: 'viewer' as User['role'],
-        password: DEFAULT_USER_PASSWORD,
+        password: getDefaultUserPassword(),
       });
       setShowAddUser(false);
     }).catch(() => {
@@ -81,7 +81,7 @@ Create this user in your backend admin panel with these exact credentials.`;
             <h3 className="text-lg font-bold text-slate-900">Logins for other roles</h3>
           </div>
           <p className="text-sm text-slate-600 mb-4">
-            Keep admin credentials as you have them. For <strong>manager, cashier, warehouse, driver, viewer</strong> use: email <strong>role@extremedeptkidz.com</strong>, password <strong>{DEFAULT_USER_PASSWORD}</strong> (same for all).
+            Keep admin credentials as you have them. For <strong>manager, cashier, warehouse, driver, viewer</strong> use: email <strong>role@extremedeptkidz.com</strong>, password <strong>{getDefaultUserPassword() || '(set in backend)'}</strong> (same for all).
           </p>
           <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="w-full text-sm">
@@ -104,11 +104,11 @@ Create this user in your backend admin panel with these exact credentials.`;
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-slate-800">{emailForRole(role.id)}</td>
-                      <td className="px-4 py-3 font-mono text-slate-800">{DEFAULT_USER_PASSWORD}</td>
+                      <td className="px-4 py-3 font-mono text-slate-800">{getDefaultUserPassword() || '—'}</td>
                       <td className="px-4 py-3">
                         <button
                           type="button"
-                          onClick={() => copyToClipboard(`${emailForRole(role.id)}\t${DEFAULT_USER_PASSWORD}`)}
+                          onClick={() => copyToClipboard(`${emailForRole(role.id)}\t${getDefaultUserPassword()}`)}
                           className="p-1.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
                           title="Copy email and password"
                         >
@@ -232,7 +232,7 @@ Create this user in your backend admin panel with these exact credentials.`;
           {!import.meta.env.PROD && (
             <p className="text-sm text-slate-600 mb-4">
               {newUser.role !== 'admin' ? (
-                <>Email: <strong>{newUser.role}@extremedeptkidz.com</strong>. Password: <strong>{DEFAULT_USER_PASSWORD}</strong> (same for all other roles).</>
+                <>Email: <strong>{newUser.role}@extremedeptkidz.com</strong>. Password: <strong>{getDefaultUserPassword() || '(set in backend)'}</strong> (same for all other roles).</>
               ) : (
                 <>Admin: set email and password in your backend. Keep your existing admin credentials.</>
               )}
@@ -260,7 +260,7 @@ Create this user in your backend admin panel with these exact credentials.`;
                 value={newUser.role}
                 onChange={(e) => {
                   const role = e.target.value as User['role'];
-                  setNewUser((u) => ({ ...u, role, email: emailForRole(role), password: DEFAULT_USER_PASSWORD }));
+                  setNewUser((u) => ({ ...u, role, email: emailForRole(role), password: getDefaultUserPassword() }));
                 }}
                 className="input-field w-full"
               >
@@ -296,7 +296,7 @@ Create this user in your backend admin panel with these exact credentials.`;
                     <label className="block text-sm font-medium text-slate-700 mb-1">Confirm password</label>
                     <input
                       type="text"
-                      value={DEFAULT_USER_PASSWORD}
+                      value={getDefaultUserPassword()}
                       readOnly
                       className="input-field w-full bg-slate-100 font-mono text-slate-700"
                     />
