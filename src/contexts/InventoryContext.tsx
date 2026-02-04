@@ -118,9 +118,33 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           data = await apiGet<Product[]>(API_BASE_URL, '/api/products', { signal });
         }
         const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
-        setProducts(apiProducts);
+        const apiIds = new Set(apiProducts.map((p) => p.id));
+        // Keep products that exist only locally (e.g. added while offline or when API failed) so inventory never vanishes
+        let localOnly: Product[] = [];
+        if (isStorageAvailable()) {
+          try {
+            const localRaw = getStoredData<any[]>('warehouse_products', []);
+            const localList = Array.isArray(localRaw) ? localRaw : [];
+            for (const p of localList) {
+              if (!p || typeof p !== 'object' || !p.id || apiIds.has(p.id)) continue;
+              try {
+                localOnly.push(normalizeProduct(p));
+                apiIds.add(p.id);
+              } catch {
+                /* skip malformed */
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+        const merged = [...apiProducts, ...localOnly];
+        setProducts(merged);
         if (isIndexedDBAvailable()) {
-          saveProductsToDb(apiProducts).catch(() => {});
+          saveProductsToDb(merged).catch(() => {});
+        }
+        if (isStorageAvailable() && localOnly.length > 0) {
+          setStoredData('warehouse_products', merged);
         }
       } catch (apiErr) {
         if (apiErr instanceof Error && apiErr.name === 'AbortError') return;
@@ -309,16 +333,20 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       } catch {
         // API failed (405, network, etc.): save locally so the product never vanishes
         const saved: Product = normalizeProduct(payload);
-        const next = [...products, saved];
-        setProducts(next);
-        persistProducts(next);
+        setProducts((prev) => {
+          const next = [...prev, saved];
+          persistProducts(next);
+          return next;
+        });
         throw new Error(ADD_PRODUCT_SAVED_LOCALLY);
       }
     }
     const saved: Product = savedRaw ? normalizeProduct(savedRaw) : normalizeProduct(payload);
-    const next = [...products, saved];
-    setProducts(next);
-    persistProducts(next);
+    setProducts((prev) => {
+      const next = [...prev, saved];
+      persistProducts(next);
+      return next;
+    });
   };
 
   /**
