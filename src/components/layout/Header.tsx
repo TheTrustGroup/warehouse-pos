@@ -8,10 +8,17 @@ export function Header() {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      navigate('/login', { replace: true });
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const handleSearch = (e: FormEvent<HTMLFormElement>) => {
@@ -45,12 +52,17 @@ export function Header() {
         <button
           type="button"
           onClick={handleLogout}
-          className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium transition-colors"
+          disabled={isLoggingOut}
+          className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium transition-colors disabled:opacity-60 disabled:pointer-events-none"
           title="Log out"
           aria-label="Log out"
         >
-          <LogOut className="w-5 h-5" />
-          <span className="hidden sm:inline">Log out</span>
+          {isLoggingOut ? (
+            <span className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" aria-hidden />
+          ) : (
+            <LogOut className="w-5 h-5" />
+          )}
+          <span className="hidden sm:inline">{isLoggingOut ? 'Signing out…' : 'Log out'}</span>
         </button>
         {/* Notifications - Coming soon */}
         <button

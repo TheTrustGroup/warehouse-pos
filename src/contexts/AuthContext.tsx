@@ -1,14 +1,27 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, useRef, ReactNode, useEffect, useCallback } from 'react';
 import { User } from '../types';
 import { ROLES, Permission } from '../types/permissions';
 import { API_BASE_URL, handleApiResponse } from '../lib/api';
 
 const DEMO_ROLE_KEY = 'warehouse_demo_role';
 
+/** Inactivity timeout: require re-login after this many ms without user activity (default 30 min) */
+const INACTIVITY_TIMEOUT_MS = (() => {
+  const min = Number(import.meta.env.VITE_INACTIVITY_TIMEOUT_MIN);
+  return min > 0 ? min * 60 * 1000 : 30 * 60 * 1000;
+})();
+
+/** Throttle activity updates to at most once per 30 seconds */
+const ACTIVITY_THROTTLE_MS = 30 * 1000;
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** True when user was signed out due to inactivity (show message on login page) */
+  sessionExpired: boolean;
+  /** Clear the session-expired message (call from Login on mount) */
+  clearSessionExpired: () => void;
   login: (email: string, password: string) => Promise<void>;
   /** Sign in with local data only when the server is unreachable. No API call. */
   loginOffline: (email: string) => void;
@@ -47,11 +60,64 @@ function normalizeUserData(userData: any): User {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const lastActivityRef = useRef<number>(Date.now());
+  const lastThrottleRef = useRef<number>(0);
+
+  const clearSessionExpired = useCallback(() => setSessionExpired(false), []);
 
   // Check authentication status on mount
   useEffect(() => {
     checkAuthStatus();
   }, []);
+
+  // Track user activity for inactivity timeout (only when authenticated)
+  useEffect(() => {
+    if (!user) return;
+
+    const touchActivity = () => {
+      const now = Date.now();
+      if (now - lastThrottleRef.current < ACTIVITY_THROTTLE_MS) return;
+      lastThrottleRef.current = now;
+      lastActivityRef.current = now;
+    };
+
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'] as const;
+    events.forEach((ev) => window.addEventListener(ev, touchActivity));
+    const onFocus = () => touchActivity();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && touchActivity());
+
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, touchActivity));
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [user]);
+
+  // Inactivity check: sign out and require re-login when session has been dormant too long
+  useEffect(() => {
+    if (!user || INACTIVITY_TIMEOUT_MS <= 0) return;
+
+    const interval = setInterval(() => {
+      if (!user) return;
+      const elapsed = Date.now() - lastActivityRef.current;
+      if (elapsed >= INACTIVITY_TIMEOUT_MS) {
+        setSessionExpired(true);
+        setUser(null);
+        localStorage.removeItem('current_user');
+        localStorage.removeItem('auth_token');
+        try {
+          fetch(`${API_BASE_URL}/admin/api/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+          fetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+        } catch {
+          // ignore
+        }
+      }
+    }, 60 * 1000); // check every minute
+
+    return () => clearInterval(interval);
+  }, [user]);
 
   /**
    * Check if user is authenticated by calling the API
@@ -76,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (demoRole) {
           normalizedUser = { ...normalizedUser, role: demoRole.id as User['role'], permissions: demoRole.permissions };
         }
+        lastActivityRef.current = Date.now();
         setUser(normalizedUser);
         localStorage.setItem('current_user', JSON.stringify(normalizedUser));
       } else {
@@ -260,6 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (demoRole) {
         normalizedUser = { ...normalizedUser, role: demoRole.id as User['role'], permissions: demoRole.permissions };
       }
+      lastActivityRef.current = Date.now();
       setUser(normalizedUser);
       localStorage.setItem('current_user', JSON.stringify(normalizedUser));
       const token = data?.token ?? data?.access_token ?? data?.data?.token;
@@ -375,6 +443,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: !!user,
         isLoading,
+        sessionExpired,
+        clearSessionExpired,
         login,
         loginOffline,
         logout,

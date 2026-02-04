@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { Lock, Mail, WifiOff } from 'lucide-react';
+import { Lock, Mail, WifiOff, Clock } from 'lucide-react';
 
 const SERVER_UNREACHABLE = 'Cannot reach the server. Check your connection and try again.';
 
@@ -11,9 +11,13 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showOfflineOption, setShowOfflineOption] = useState(false);
-  const { login, loginOffline } = useAuth();
+  const { login, loginOffline, sessionExpired, clearSessionExpired } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    clearSessionExpired();
+  }, [clearSessionExpired]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +70,16 @@ export function Login() {
           </h1>
           <p className="text-slate-600">Warehouse & POS System</p>
         </div>
+
+        {sessionExpired && (
+          <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+            <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">Session expired</p>
+              <p className="text-sm text-amber-700 mt-0.5">You were signed out due to inactivity. Please sign in again.</p>
+            </div>
+          </div>
+        )}
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
