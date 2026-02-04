@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useInventory, ProductFilters } from '../contexts/InventoryContext';
+import { useInventory, ProductFilters, ADD_PRODUCT_SAVED_LOCALLY } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { ProductTableView } from '../components/inventory/ProductTableView';
@@ -190,9 +190,17 @@ export function Inventory() {
       await addProduct(productData);
       setIsModalOpen(false);
       setEditingProduct(null);
+      showToast('success', 'Product added successfully');
     } catch (e) {
-      showToast('error', e instanceof Error ? e.message : 'Failed to save product. Write failed.');
-      throw e;
+      const msg = e instanceof Error ? e.message : 'Failed to save product. Write failed.';
+      if (msg === ADD_PRODUCT_SAVED_LOCALLY) {
+        setIsModalOpen(false);
+        setEditingProduct(null);
+        showToast('warning', msg);
+      } else {
+        showToast('error', msg);
+        throw e;
+      }
     }
   };
 

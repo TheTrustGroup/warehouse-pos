@@ -35,6 +35,10 @@ export interface ProductFilters {
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
+/** Message thrown when addProduct saves locally due to API failure. UI closes modal and shows warning toast. */
+export const ADD_PRODUCT_SAVED_LOCALLY =
+  'Product saved locally. It will sync to the server when connection is available.';
+
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -286,7 +290,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Add product: WRITE PATH — uses resilient client (retries, circuit breaker).
+   * Add product: WRITE PATH. Always persists so inventory never vanishes.
+   * Tries API first; on failure saves to local state + localStorage + IndexedDB and throws so UI can show "saved locally" message.
    */
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     const payload = productToPayload({
@@ -299,7 +304,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     try {
       savedRaw = await apiPost<any>(API_BASE_URL, '/admin/api/products', payload);
     } catch {
-      savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', payload);
+      try {
+        savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', payload);
+      } catch {
+        // API failed (405, network, etc.): save locally so the product never vanishes
+        const saved: Product = normalizeProduct(payload);
+        const next = [...products, saved];
+        setProducts(next);
+        persistProducts(next);
+        throw new Error(ADD_PRODUCT_SAVED_LOCALLY);
+      }
     }
     const saved: Product = savedRaw ? normalizeProduct(savedRaw) : normalizeProduct(payload);
     const next = [...products, saved];

@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -12,14 +13,14 @@ import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { KeyboardShortcuts } from './components/ui/KeyboardShortcuts';
 import { PERMISSIONS } from './types/permissions';
 
-// Lazy load pages for code splitting
-const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
-const Inventory = lazy(() => import('./pages/Inventory').then(m => ({ default: m.Inventory })));
-const POS = lazy(() => import('./pages/POS').then(m => ({ default: m.POS })));
-const Orders = lazy(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
-const Reports = lazy(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
-const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
-const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
+// Lazy load pages with retry so first load after login doesn't show "Something went wrong" on chunk failure
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const Inventory = lazyWithRetry(() => import('./pages/Inventory').then(m => ({ default: m.Inventory })));
+const POS = lazyWithRetry(() => import('./pages/POS').then(m => ({ default: m.POS })));
+const Orders = lazyWithRetry(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
+const Reports = lazyWithRetry(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
+const Settings = lazyWithRetry(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
+const Login = lazyWithRetry(() => import('./pages/Login').then(m => ({ default: m.Login })));
 
 const Users = () => {
   const navigate = useNavigate();
@@ -56,7 +57,7 @@ const Users = () => {
   );
 };
 
-const NotFound = lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
+const NotFound = lazyWithRetry(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
 
 /**
  * Protected Routes Wrapper
