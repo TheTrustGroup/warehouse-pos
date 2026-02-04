@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, useRef, ReactNode, useEffect } from 'react';
 import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL } from '../lib/api';
@@ -39,6 +39,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
   /**
    * Clear old mock data from localStorage (transactions/orders only).
@@ -148,12 +149,67 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Single load on mount with AbortController for cleanup.
+  // On mount: show cached products immediately when available so entering Inventory doesn't show a full-screen "Loading products..." spinner. Then refresh from API (silent if we had cache).
   useEffect(() => {
     clearMockData();
+    mountedRef.current = true;
     const ac = new AbortController();
-    loadProducts(ac.signal);
-    return () => ac.abort();
+    let hadCache = false;
+
+    const toProducts = (list: any[]): Product[] => {
+      const out: Product[] = [];
+      for (const p of list) {
+        if (p == null || typeof p !== 'object') continue;
+        try {
+          out.push(normalizeProduct(p));
+        } catch {
+          // skip malformed cache entries
+        }
+      }
+      return out;
+    };
+
+    // Synchronous read: if we have localStorage cache, show it immediately (avoids "Loading products..." flash when re-entering Inventory).
+    if (isStorageAvailable()) {
+      try {
+        const localRaw = getStoredData<any[]>('warehouse_products', []);
+        const list = Array.isArray(localRaw) ? localRaw : [];
+        const productsFromCache = toProducts(list);
+        if (productsFromCache.length > 0) {
+          setProducts(productsFromCache);
+          setIsLoading(false);
+          setError(null);
+          hadCache = true;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    (async () => {
+      try {
+        if (!hadCache && isIndexedDBAvailable()) {
+          const fromDb = await loadProductsFromDb<any>();
+          const list = Array.isArray(fromDb) ? fromDb : [];
+          const productsFromCache = toProducts(list);
+          if (productsFromCache.length > 0 && mountedRef.current) {
+            setProducts(productsFromCache);
+            setIsLoading(false);
+            setError(null);
+            hadCache = true;
+          }
+        }
+      } catch {
+        // ignore cache read errors; will do full load below
+      }
+      if (!mountedRef.current) return;
+      await loadProducts(ac.signal, hadCache ? { silent: true } : undefined);
+    })();
+
+    return () => {
+      mountedRef.current = false;
+      ac.abort();
+    };
   }, []);
 
   // Real-time: poll when tab visible so multiple tabs/devices get updates. Silent so the page doesn't flash "Loading products..." and wipe the Add Product section.
