@@ -94,11 +94,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /**
    * Load products: SERVER IS SINGLE SOURCE OF TRUTH.
    * Uses resilient client (retries, circuit breaker). On failure → fallback to localStorage/IndexedDB.
+   * @param signal - AbortSignal for cancellation (e.g. on unmount).
+   * @param options.silent - If true, do not show full-page loading (for background refresh). Default false.
    */
-  const loadProducts = async (signal?: AbortSignal) => {
+  const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
     try {
-      setIsLoading(true);
-      setError(null);
+      if (!silent) {
+        setIsLoading(true);
+        setError(null);
+      }
 
       try {
         let data: Product[] | null = null;
@@ -127,7 +132,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           : err instanceof Error
             ? err.message
             : 'Failed to load products. Please check your connection.';
-      setError(message);
+      if (!silent) setError(message);
       if (isIndexedDBAvailable()) {
         const fromDb = await loadProductsFromDb<any>();
         if (fromDb.length > 0) {
@@ -151,8 +156,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return () => ac.abort();
   }, []);
 
-  // Real-time: poll when tab visible so multiple tabs/devices get updates.
-  useRealtimeSync({ onSync: () => loadProducts(), intervalMs: 60_000 });
+  // Real-time: poll when tab visible so multiple tabs/devices get updates. Silent so the page doesn't flash "Loading products..." and wipe the Add Product section.
+  useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true }), intervalMs: 60_000 });
 
   // Save to localStorage whenever products change (for offline support)
   useEffect(() => {
