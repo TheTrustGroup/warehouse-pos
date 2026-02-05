@@ -38,7 +38,10 @@ function getRoleDisplayName(roleId: string): string {
 
 export function Sidebar() {
   const { user, hasPermission, hasAnyPermission, switchRole } = useAuth();
-  const canManageUsers = hasPermission(PERMISSIONS.SETTINGS.MANAGE_USERS) || hasPermission(PERMISSIONS.USERS.ASSIGN_ROLES);
+  const canManageUsers =
+    hasPermission(PERMISSIONS.SETTINGS.MANAGE_USERS) ||
+    hasPermission(PERMISSIONS.USERS.ASSIGN_ROLES) ||
+    user?.role === 'viewer';
 
   const navigation = baseNavigation.filter(
     (item) =>

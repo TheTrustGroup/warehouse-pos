@@ -14,11 +14,14 @@ function getRoleDisplayName(roleId: string): string {
 export function Header() {
   const navigate = useNavigate();
   const { user, logout, switchRole, hasPermission } = useAuth();
+  // Show role switcher to admins, or to anyone so viewer/accountant isn't stuck (e.g. production build without VITE_SUPER_ADMIN_EMAILS)
   const canSwitchRole =
-    user?.role === 'admin' ||
-    user?.role === 'super_admin' ||
-    hasPermission(PERMISSIONS.SETTINGS.MANAGE_USERS) ||
-    hasPermission(PERMISSIONS.USERS.ASSIGN_ROLES);
+    !!user &&
+    (user.role === 'admin' ||
+      user.role === 'super_admin' ||
+      hasPermission(PERMISSIONS.SETTINGS.MANAGE_USERS) ||
+      hasPermission(PERMISSIONS.USERS.ASSIGN_ROLES) ||
+      user.role === 'viewer');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
