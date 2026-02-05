@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useInventory, ProductFilters, ADD_PRODUCT_SAVED_LOCALLY } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
+import { API_BASE_URL } from '../lib/api';
 import { useToast } from '../contexts/ToastContext';
 import { ProductTableView } from '../components/inventory/ProductTableView';
 import { ProductGridView } from '../components/inventory/ProductGridView';
@@ -246,7 +247,10 @@ export function Inventory() {
       } else if (synced > 0) {
         showToast('warning', `Synced ${synced} of ${total} items. ${failed} failed (check connection).`);
       } else {
-        showToast('error', 'Could not reach the server. Try again when connected.');
+        const devHint = import.meta.env.DEV
+          ? ` Backend: ${API_BASE_URL}. For local dev, run "cd inventory-server && npm run dev" and set VITE_API_BASE_URL=http://localhost:3001 in .env.local.`
+          : '';
+        showToast('error', `Could not reach the server. Try again when connected.${devHint}`);
       }
     } catch {
       showToast('error', 'Sync failed. Check your connection and try again.');
