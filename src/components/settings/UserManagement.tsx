@@ -273,9 +273,9 @@ Create this user in your backend admin panel with these exact credentials.`;
               <label className="block text-sm font-medium text-slate-700 mb-1">Email (login)</label>
               <input
                 type="email"
-                value={newUser.role === 'admin' ? '' : (newUser.email || emailForRole(newUser.role))}
-                readOnly={newUser.role !== 'admin'}
-                placeholder={newUser.role === 'admin' ? 'Set in backend' : undefined}
+                value={newUser.role === 'admin' || newUser.role === 'super_admin' ? '' : (newUser.email || emailForRole(newUser.role))}
+                readOnly={newUser.role === 'admin' || newUser.role === 'super_admin'}
+                placeholder={newUser.role === 'admin' || newUser.role === 'super_admin' ? 'Set in backend / VITE_SUPER_ADMIN_EMAILS' : undefined}
                 className="input-field w-full bg-slate-100 font-mono text-slate-700"
               />
             </div>
@@ -285,9 +285,9 @@ Create this user in your backend admin panel with these exact credentials.`;
                   <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
                   <input
                     type="text"
-                    value={newUser.role === 'admin' ? '' : newUser.password}
+                    value={newUser.role === 'admin' || newUser.role === 'super_admin' ? '' : newUser.password}
                     readOnly
-                    placeholder={newUser.role === 'admin' ? 'Set in backend' : undefined}
+                    placeholder={newUser.role === 'admin' || newUser.role === 'super_admin' ? 'Set in backend' : undefined}
                     className="input-field w-full bg-slate-100 font-mono text-slate-700"
                   />
                 </div>

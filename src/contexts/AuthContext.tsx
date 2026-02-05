@@ -37,20 +37,33 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Comma-separated list of emails that are always treated as Super Admin (your current logins). Set in .env as VITE_SUPER_ADMIN_EMAILS. */
+function getSuperAdminEmails(): Set<string> {
+  const raw = import.meta.env.VITE_SUPER_ADMIN_EMAILS;
+  if (!raw || typeof raw !== 'string') return new Set();
+  return new Set(raw.split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean));
+}
+
 /**
- * Normalize user data from API response
+ * Normalize user data from API response.
+ * If user email is in VITE_SUPER_ADMIN_EMAILS, role is forced to super_admin so your credentials stay full access.
  */
 function normalizeUserData(userData: any): User {
-  const role = ROLES[userData.role?.toUpperCase?.()] || ROLES.VIEWER;
+  const roleKey = userData.role?.toUpperCase?.()?.replace(/\s+/g, '_');
+  const role = ROLES[roleKey] ?? (userData.role === 'super_admin' ? ROLES.SUPER_ADMIN : null) ?? ROLES.VIEWER;
+  const superAdminEmails = getSuperAdminEmails();
+  const email = (userData.email ?? '').trim().toLowerCase();
+  const isSuperAdmin = superAdminEmails.has(email);
+  const effectiveRole = isSuperAdmin ? ROLES.SUPER_ADMIN : role;
   
   return {
     id: userData.id,
     username: userData.username || userData.email?.split('@')[0] || 'user',
     email: userData.email,
-    role: userData.role || 'viewer',
+    role: (isSuperAdmin ? 'super_admin' : role.id) as User['role'],
     fullName: userData.fullName || userData.name || userData.email,
     avatar: userData.avatar,
-    permissions: userData.permissions || role.permissions,
+    permissions: userData.permissions ?? effectiveRole.permissions,
     isActive: userData.isActive !== undefined ? userData.isActive : true,
     lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : new Date(),
     createdAt: userData.createdAt ? new Date(userData.createdAt) : new Date(),

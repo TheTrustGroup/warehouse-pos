@@ -75,12 +75,21 @@ export interface Role {
   isSystem: boolean;
 }
 
+const ALL_PERMISSIONS = Object.values(PERMISSIONS).flatMap(p => Object.values(p));
+
 export const ROLES: Record<string, Role> = {
+  SUPER_ADMIN: {
+    id: 'super_admin',
+    name: 'Super Admin',
+    description: 'Full system access; can manage users and assign roles to staff',
+    permissions: ALL_PERMISSIONS,
+    isSystem: true,
+  },
   ADMIN: {
     id: 'admin',
     name: 'Administrator',
     description: 'Full system access',
-    permissions: Object.values(PERMISSIONS).flatMap(p => Object.values(p)),
+    permissions: ALL_PERMISSIONS,
     isSystem: true,
   },
 

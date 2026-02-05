@@ -31,8 +31,14 @@ const baseNavigation = [
   { name: 'Settings', to: '/settings', icon: Settings, permission: PERMISSIONS.SETTINGS.VIEW },
 ];
 
+function getRoleDisplayName(roleId: string): string {
+  const key = roleId === 'super_admin' ? 'SUPER_ADMIN' : roleId.toUpperCase();
+  return ROLES[key]?.name ?? roleId;
+}
+
 export function Sidebar() {
   const { user, hasPermission, hasAnyPermission, switchRole } = useAuth();
+  const canManageUsers = hasPermission(PERMISSIONS.SETTINGS.MANAGE_USERS) || hasPermission(PERMISSIONS.USERS.ASSIGN_ROLES);
 
   const navigation = baseNavigation.filter(
     (item) =>
@@ -70,7 +76,7 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* User Profile with Role selector */}
+      {/* User Profile with Role */}
       <div className="p-4 border-t border-slate-200/30 space-y-3">
         <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 hover:bg-slate-50/80 transition-all group">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm shadow-lg">
@@ -80,12 +86,12 @@ export function Sidebar() {
             <p className="text-sm font-semibold text-slate-900 truncate">
               {user?.fullName}
             </p>
-            <p className="text-xs text-slate-500 font-medium">Role</p>
+            <p className="text-xs text-slate-600 font-medium">{user?.role ? getRoleDisplayName(user.role) : '—'}</p>
           </div>
         </div>
-        {!import.meta.env.PROD && (
+        {canManageUsers && (
           <label className="block">
-            <span className="sr-only">Switch role</span>
+            <span className="sr-only">Switch role (for testing)</span>
             <select
               value={user?.role ?? 'viewer'}
               onChange={(e) => switchRole(e.target.value)}

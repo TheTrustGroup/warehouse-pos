@@ -93,7 +93,7 @@ export interface User {
   id: string;
   username: string;
   email: string;
-  role: 'admin' | 'manager' | 'cashier' | 'warehouse' | 'driver' | 'viewer';
+  role: 'super_admin' | 'admin' | 'manager' | 'cashier' | 'warehouse' | 'driver' | 'viewer';
   fullName: string;
   avatar?: string;
   permissions: string[];

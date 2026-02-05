@@ -32,9 +32,15 @@ const baseNavigation = [
   { name: 'Settings', to: '/settings', icon: Settings, permission: PERMISSIONS.SETTINGS.VIEW },
 ];
 
+function getRoleDisplayName(roleId: string): string {
+  const key = roleId === 'super_admin' ? 'SUPER_ADMIN' : roleId.toUpperCase();
+  return ROLES[key]?.name ?? roleId;
+}
+
 export function MobileMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const { user, hasPermission, hasAnyPermission, switchRole } = useAuth();
+  const canManageUsers = hasPermission(PERMISSIONS.SETTINGS.MANAGE_USERS) || hasPermission(PERMISSIONS.USERS.ASSIGN_ROLES);
 
   const navigation = baseNavigation.filter(
     (item) =>
@@ -85,9 +91,15 @@ export function MobileMenu() {
             ))}
           </nav>
           <div className="p-4 border-t border-slate-200/30 space-y-3">
-            {!import.meta.env.PROD && (
+            {user && (
+              <p className="text-xs text-slate-500">
+                <span className="font-medium text-slate-600">Role: </span>
+                {getRoleDisplayName(user.role)}
+              </p>
+            )}
+            {canManageUsers && (
               <label className="block">
-                <span className="text-xs font-medium text-slate-500 block mb-1">Role</span>
+                <span className="text-xs font-medium text-slate-500 block mb-1">Switch role (testing)</span>
                 <select
                   value={user?.role ?? 'viewer'}
                   onChange={(e) => { switchRole(e.target.value); setIsOpen(false); }}

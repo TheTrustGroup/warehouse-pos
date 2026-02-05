@@ -11,10 +11,11 @@ This app limits features by **role**. Each employee gets one role; the app shows
 - **PERMISSIONS** – List of every capability (e.g. `inventory.create`, `pos.access`, `orders.view`).
 - **ROLES** – Each role has a **name**, **description**, and **permissions** array.
 
-| Role ID   | Name                  | Typical use                          |
-|-----------|------------------------|--------------------------------------|
-| `admin`   | Administrator          | Full access                          |
-| `manager` | Store Manager          | Operations, no user delete           |
+| Role ID      | Name                  | Typical use                          |
+|--------------|------------------------|--------------------------------------|
+| `super_admin`| Super Admin            | Full access; your current logins (see below) |
+| `admin`      | Administrator          | Full access                          |
+| `manager`    | Store Manager          | Operations, no user delete           |
 | `cashier` | Sales Person / Cashier | POS, orders, limited discount        |
 | `warehouse` | Warehouse Staff      | Inventory + orders                   |
 | `driver`  | Delivery Driver        | Orders (view, update status)         |
@@ -24,7 +25,22 @@ The **sidebar**, **pages**, and **buttons** (Add Product, Edit, Delete, etc.) al
 
 ---
 
-## 2. How you assign a role to an employee
+## 2. Super Admin (your current logins)
+
+To keep **your** credentials as full Super Admin regardless of what the API returns:
+
+1. In **warehouse-pos** set the env var **`VITE_SUPER_ADMIN_EMAILS`** to your login email(s), comma-separated.
+   - **Local:** in `warehouse-pos/.env.local` add:  
+     `VITE_SUPER_ADMIN_EMAILS=your@email.com`
+   - **Production:** add the same to your host’s env or build config (e.g. Vercel/Netlify env vars).
+
+2. When you log in with that email, the app forces your role to **Super Admin** and gives you all permissions (Dashboard, Inventory, POS, Reports, **Settings**, **User Management**, role switcher).
+
+3. You can add **staff with other roles** later in **Settings → Users** (create manager, cashier, warehouse, driver, viewer). Their logins are set in your backend; use the email format in the table below for non–super-admin roles.
+
+---
+
+## 3. How you assign a role to an employee
 
 **Role assignment is done in your backend / main admin**, not in this warehouse app’s UI.
 
@@ -57,7 +73,7 @@ So: **you give access by assigning a role (and optionally permissions) to each e
 
 ---
 
-## 3. Changing what each role can do
+## 4. Changing what each role can do
 
 To change what a role is allowed to do **in this app**:
 
