@@ -15,18 +15,24 @@ const getAllowedOrigins = (): string[] => {
 function corsHeaders(request: NextRequest): HeadersInit {
   const origins = getAllowedOrigins();
   const origin = request.headers.get('origin') || '';
-  const allowOrigin =
-    origins.includes('*') || origins.length === 0
-      ? '*'
-      : origins.includes(origin)
-        ? origin
-        : origins[0];
-  return {
+  // With credentials, browser requires a specific origin (not *). Prefer reflecting request origin.
+  let allowOrigin: string;
+  if (origins.includes('*') || origins.length === 0) {
+    allowOrigin = origin || '*';
+  } else {
+    allowOrigin = origins.includes(origin) ? origin : origins[0];
+  }
+  const headers: HeadersInit = {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key',
     'Access-Control-Max-Age': '86400',
   };
+  // Required when frontend sends credentials: 'include'
+  if (allowOrigin !== '*') {
+    (headers as Record<string, string>)['Access-Control-Allow-Credentials'] = 'true';
+  }
+  return headers;
 }
 
 export function middleware(request: NextRequest) {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { API_BASE_URL } from '../lib/api';
 import { Lock, Mail, WifiOff, Clock } from 'lucide-react';
 
 const SERVER_UNREACHABLE = 'Cannot reach the server. Check your connection and try again.';
@@ -139,6 +140,7 @@ export function Login() {
           {showOfflineOption && (
             <div className="pt-2 border-t border-slate-200">
               <p className="text-sm text-slate-600 mb-2">Server unreachable. You can still use the app with your local data:</p>
+              <p className="text-xs text-slate-500 mb-2 break-all">API: {API_BASE_URL}</p>
               <button
                 type="button"
                 onClick={handleContinueOffline}
