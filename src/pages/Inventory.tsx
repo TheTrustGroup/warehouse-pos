@@ -234,6 +234,7 @@ export function Inventory() {
     window.URL.revokeObjectURL(url);
   };
 
+  /** Single sync entry point: used only by the unsynced banner CTA. Do not add another sync button elsewhere (UI clarity, single-responsibility). */
   const handleSyncToServer = async () => {
     setIsSyncing(true);
     try {
@@ -256,10 +257,10 @@ export function Inventory() {
 
   return (
     <div className="space-y-8">
-      {/* Unsynced banner: items only on this device — must sync for cross-device consistency */}
+      {/* SINGLE SYNC ENTRY POINT: Sync is a system-level action. Only this banner CTA triggers sync — no duplicate in header (clarity, single-responsibility). */}
       {unsyncedCount > 0 && (
-        <div className="animate-fade-in-up rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3 flex items-center justify-between gap-4">
-          <p className="text-amber-900 font-medium">
+        <div className="animate-fade-in-up rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <p className="text-amber-900 font-medium flex-1">
             <AlertTriangle className="inline-block w-5 h-5 mr-2 align-middle text-amber-600" />
             {unsyncedCount} item{unsyncedCount !== 1 ? 's' : ''} only on this device. They will not appear on other devices until synced.
           </p>
@@ -267,15 +268,16 @@ export function Inventory() {
             type="button"
             onClick={handleSyncToServer}
             disabled={isSyncing}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50 min-h-[44px] min-w-[44px] touch-manipulation"
+            aria-label="Sync to server now"
           >
             {isSyncing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
             {isSyncing ? 'Syncing…' : 'Sync to server now'}
           </button>
         </div>
       )}
-      {/* Header */}
-      <div className="flex items-center justify-between animate-fade-in-up">
+      {/* Inventory header: primary CTA is Add Product only. Sync lives in banner above — no duplicate button here. */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between animate-fade-in-up">
         <div>
           <h1 className="text-[32px] font-bold text-slate-900 tracking-tight mb-1">Inventory</h1>
           <p className="text-slate-500 text-sm mb-2">
@@ -286,31 +288,16 @@ export function Inventory() {
             {filteredProducts.length !== products.length && ` (of ${products.length} total)`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        {canCreate && (
           <button
-            type="button"
-            onClick={handleSyncToServer}
-            disabled={isSyncing || products.length === 0}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title="Push items recorded only in this browser to the server so they appear everywhere"
+            onClick={handleAddProduct}
+            className="btn-primary flex items-center justify-center gap-2 min-h-[44px] px-5 py-3 touch-manipulation w-full sm:w-auto"
+            aria-label="Add product"
           >
-            {isSyncing ? (
-              <RefreshCw className="w-5 h-5 animate-spin" />
-            ) : (
-              <Upload className="w-5 h-5" />
-            )}
-            {isSyncing ? 'Syncing…' : 'Sync recorded items to server'}
+            <Plus className="w-5 h-5" />
+            Add Product
           </button>
-          {canCreate && (
-            <button
-              onClick={handleAddProduct}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              Add Product
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Search and View Toggle */}

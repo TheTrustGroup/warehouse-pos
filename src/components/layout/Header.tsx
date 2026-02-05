@@ -1,27 +1,13 @@
 // src/components/layout/Header.tsx - Premium Glass Header
+// Role switcher lives ONLY in Sidebar + MobileMenu (bottom/nav). Removed from header to avoid duplicate global-state controls and reduce cognitive load (HIG: clarity > density).
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Bell, LogOut } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ROLES } from '../../types/permissions';
-import { PERMISSIONS } from '../../types/permissions';
-
-function getRoleDisplayName(roleId: string): string {
-  const key = roleId === 'super_admin' ? 'SUPER_ADMIN' : roleId.toUpperCase();
-  return ROLES[key]?.name ?? roleId;
-}
 
 export function Header() {
   const navigate = useNavigate();
-  const { user, logout, switchRole, hasPermission } = useAuth();
-  // Show role switcher to admins, or to anyone so viewer/accountant isn't stuck (e.g. production build without VITE_SUPER_ADMIN_EMAILS)
-  const canSwitchRole =
-    !!user &&
-    (user.role === 'admin' ||
-      user.role === 'super_admin' ||
-      hasPermission(PERMISSIONS.SETTINGS.MANAGE_USERS) ||
-      hasPermission(PERMISSIONS.USERS.ASSIGN_ROLES) ||
-      user.role === 'viewer');
+  const { logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -61,33 +47,14 @@ export function Header() {
         </form>
       </div>
 
-      {/* Right Section */}
-      <div className="flex items-center gap-2 flex-wrap justify-end">
-        {/* Role: show current role and switcher for admins */}
-        {user && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 hidden sm:inline">{getRoleDisplayName(user.role)}</span>
-            {canSwitchRole && (
-              <select
-                value={user.role ?? 'viewer'}
-                onChange={(e) => switchRole(e.target.value)}
-                className="rounded-lg border border-slate-200/60 bg-white/90 px-3 py-2 text-sm font-medium text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 min-w-[140px]"
-                aria-label="Switch role"
-                title="Switch role (for testing)"
-              >
-                {Object.values(ROLES).map((role) => (
-                  <option key={role.id} value={role.id}>{role.name}</option>
-                ))}
-              </select>
-            )}
-          </div>
-        )}
-        {/* Log out - visible on all screens including mobile */}
+      {/* Right Section: search, logout, alerts only. Role switch is in sidebar/mobile menu only. */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Log out - visible on all screens including mobile; min touch target 44px */}
         <button
           type="button"
           onClick={handleLogout}
           disabled={isLoggingOut}
-          className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium transition-colors disabled:opacity-60 disabled:pointer-events-none"
+          className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium transition-colors disabled:opacity-60 disabled:pointer-events-none min-h-[44px] min-w-[44px] touch-manipulation"
           title="Log out"
           aria-label="Log out"
         >
@@ -98,10 +65,10 @@ export function Header() {
           )}
           <span className="hidden sm:inline">{isLoggingOut ? 'Signing out…' : 'Log out'}</span>
         </button>
-        {/* Notifications - Coming soon */}
+        {/* Notifications - Coming soon; 44px touch target */}
         <button
           type="button"
-          className="relative p-2.5 hover:bg-slate-50/80 rounded-xl transition-all duration-200 group min-w-[44px] min-h-[44px] flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+          className="relative p-2.5 hover:bg-slate-50/80 rounded-xl transition-all duration-200 group min-w-[44px] min-h-[44px] flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
           aria-label="View notifications"
           title="Notifications coming soon"
           disabled
