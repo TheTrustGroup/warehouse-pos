@@ -3,10 +3,22 @@ import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Bell, LogOut } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { ROLES } from '../../types/permissions';
+import { PERMISSIONS } from '../../types/permissions';
+
+function getRoleDisplayName(roleId: string): string {
+  const key = roleId === 'super_admin' ? 'SUPER_ADMIN' : roleId.toUpperCase();
+  return ROLES[key]?.name ?? roleId;
+}
 
 export function Header() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout, switchRole, hasPermission } = useAuth();
+  const canSwitchRole =
+    user?.role === 'admin' ||
+    user?.role === 'super_admin' ||
+    hasPermission(PERMISSIONS.SETTINGS.MANAGE_USERS) ||
+    hasPermission(PERMISSIONS.USERS.ASSIGN_ROLES);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -47,7 +59,26 @@ export function Header() {
       </div>
 
       {/* Right Section */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap justify-end">
+        {/* Role: show current role and switcher for admins */}
+        {user && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 hidden sm:inline">{getRoleDisplayName(user.role)}</span>
+            {canSwitchRole && (
+              <select
+                value={user.role ?? 'viewer'}
+                onChange={(e) => switchRole(e.target.value)}
+                className="rounded-lg border border-slate-200/60 bg-white/90 px-3 py-2 text-sm font-medium text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 min-w-[140px]"
+                aria-label="Switch role"
+                title="Switch role (for testing)"
+              >
+                {Object.values(ROLES).map((role) => (
+                  <option key={role.id} value={role.id}>{role.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
         {/* Log out - visible on all screens including mobile */}
         <button
           type="button"
