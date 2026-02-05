@@ -1,7 +1,16 @@
 /**
- * INVENTORY — SINGLE SOURCE OF TRUTH
+ * INVENTORY — SINGLE SOURCE OF TRUTH (inventory-server app only)
  * Server only. Direct DB reads. No caching. No fallback.
  * Uses real Supabase schema: Category, Product, ProductVariant.
+ *
+ * AUTHORITATIVE DATA STORE (this app):
+ * - What database? Supabase (SUPABASE_URL). Tables: Product, ProductVariant, Category.
+ * - Same in all environments? Only if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set per env. We throw if missing (no default).
+ * - Warehouse vs storefront? This inventory-server is a SEPARATE app from the warehouse React UI. The warehouse UI calls
+ *   API_BASE_URL (extremedeptkidz.com) for /api/products — that backend may or may not be this app. For single source of truth,
+ *   warehouse and storefront must hit the SAME backend and same DB. If this app serves them, use same env (same DB) everywhere.
+ * - Credentials identical? SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set; no fallback.
+ * - Table differs by env? We use fixed table names (Product, ProductVariant). Fail if env vars missing.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -9,7 +18,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const getSupabase = (): SupabaseClient => {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required');
+  if (!url || !key) {
+    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required. Do not run with fallback defaults.');
+  }
   return createClient(url, key, { auth: { persistSession: false } });
 };
 

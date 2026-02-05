@@ -16,7 +16,7 @@ import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, Refre
 type ViewMode = 'table' | 'grid';
 
 export function Inventory() {
-  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi } = useInventory();
+  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi, unsyncedCount } = useInventory();
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
   const [searchParams] = useSearchParams();
@@ -173,6 +173,10 @@ export function Inventory() {
     }
   };
 
+  /**
+   * RELIABILITY: "Saved" success is only shown when addProduct/updateProduct resolve.
+   * Those resolve only after: API 2xx + read-after-write verification. No silent failure; errors surface as blocking toasts.
+   */
   const handleSubmitProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (editingProduct) {
       try {
@@ -252,6 +256,24 @@ export function Inventory() {
 
   return (
     <div className="space-y-8">
+      {/* Unsynced banner: items only on this device — must sync for cross-device consistency */}
+      {unsyncedCount > 0 && (
+        <div className="animate-fade-in-up rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3 flex items-center justify-between gap-4">
+          <p className="text-amber-900 font-medium">
+            <AlertTriangle className="inline-block w-5 h-5 mr-2 align-middle text-amber-600" />
+            {unsyncedCount} item{unsyncedCount !== 1 ? 's' : ''} only on this device. They will not appear on other devices until synced.
+          </p>
+          <button
+            type="button"
+            onClick={handleSyncToServer}
+            disabled={isSyncing}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50"
+          >
+            {isSyncing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+            {isSyncing ? 'Syncing…' : 'Sync to server now'}
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between animate-fade-in-up">
         <div>

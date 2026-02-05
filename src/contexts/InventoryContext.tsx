@@ -1,3 +1,18 @@
+/**
+ * INVENTORY LIFECYCLE FLOW (single source of truth: backend at API_BASE_URL)
+ *
+ * 1. UI form (Inventory.tsx ProductFormModal) → local state
+ * 2. Submit → addProduct() / updateProduct() in this context
+ * 3. apiPost/apiPut(API_BASE_URL, '/admin/api/products' or '/api/products') → API route (external backend)
+ * 4. Backend: validation → database write (authoritative). This repo does NOT contain that backend.
+ * 5. DB: owned by backend. Same DB must back both warehouse and storefront.
+ * 6. Read: loadProducts() → apiGet(products) → normalize → setProducts(); optional merge of "localOnly" from localStorage (client cache only)
+ * 7. Cache: localStorage 'warehouse_products', IndexedDB 'products' — NOT source of truth; cross-device requires server.
+ * 8. UI: products state → ProductTableView / ProductGridView
+ *
+ * HIGH RISK: When API fails, addProduct currently saves to local state + localStorage + IndexedDB and throws ADD_PRODUCT_SAVED_LOCALLY.
+ * That creates "fake persistence": user sees "saved locally" but other devices see nothing. We never show "Saved" for server without confirmed write + read-back.
+ */
 import { createContext, useContext, useState, useRef, ReactNode, useEffect } from 'react';
 import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
@@ -7,6 +22,13 @@ import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
 import { loadProductsFromDb, saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
 import { reportError } from '../lib/observability';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import {
+  logInventoryCreate,
+  logInventoryUpdate,
+  logInventoryRead,
+  logInventoryDelete,
+  logInventoryError,
+} from '../lib/inventoryLogger';
 
 interface InventoryContextType {
   products: Product[];
@@ -21,7 +43,9 @@ interface InventoryContextType {
   filterProducts: (filters: ProductFilters) => Product[];
   refreshProducts: () => Promise<void>;
   /** Push products that exist only in this browser's storage to the API so they appear everywhere. */
-  syncLocalInventoryToApi: () => Promise<{ synced: number; failed: number; total: number }>;
+  syncLocalInventoryToApi: () => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>;
+  /** Number of products that exist only on this device (not yet on server). Always 0 when API is source of truth. */
+  unsyncedCount: number;
 }
 
 export interface ProductFilters {
@@ -44,6 +68,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  /** Ids of products saved only locally (API failed). Cleared when sync succeeds. Used for unsyncedCount and background sync. */
+  const [localOnlyIds, setLocalOnlyIds] = useState<Set<string>>(() => new Set());
+  const syncRef = useRef<(() => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>) | null>(null);
 
   /**
    * Clear old mock data from localStorage (transactions/orders only).
@@ -141,8 +168,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const merged = [...apiProducts, ...localOnly];
         setProducts(merged);
         if (isIndexedDBAvailable()) {
-          saveProductsToDb(merged).catch(() => {});
+          saveProductsToDb(merged).catch((e) => {
+            reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: merged.length });
+          });
         }
+        logInventoryRead({ listLength: merged.length, environment: import.meta.env.PROD ? 'production' : 'development' });
         if (isStorageAvailable() && localOnly.length > 0) {
           setStoredData('warehouse_products', merged);
         }
@@ -250,6 +280,56 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   }, [products, isLoading]);
 
+  /**
+   * Read-after-write verification: re-fetch from server and ensure the saved record exists.
+   * No write is considered successful unless the record can be immediately re-queried.
+   * Throws on mismatch so UI never shows "Saved" for unverified persistence.
+   */
+  const readAfterWriteVerify = async (productId: string): Promise<Product> => {
+    let list: any[] = [];
+    try {
+      const data = await apiGet<any[]>(API_BASE_URL, '/admin/api/products');
+      list = Array.isArray(data) ? data : [];
+    } catch {
+      const data = await apiGet<any[]>(API_BASE_URL, '/api/products');
+      list = Array.isArray(data) ? data : [];
+    }
+    const found = list.find((p: any) => p && p.id === productId);
+    if (!found) {
+      logInventoryError('Read-after-write verification failed: saved product not found', {
+        productId,
+        listLength: list.length,
+      });
+      throw new Error('Save succeeded but verification failed. Please refresh the list.');
+    }
+    return normalizeProduct(found);
+  };
+
+  /**
+   * Read-after-delete verification: re-fetch list and ensure deleted id(s) are no longer present.
+   * If any id still appears, backend did not persist delete — throw and do not remove from local state.
+   */
+  const readAfterDeleteVerify = async (deletedIds: string[]): Promise<void> => {
+    if (deletedIds.length === 0) return;
+    let list: any[] = [];
+    try {
+      const data = await apiGet<any[]>(API_BASE_URL, '/admin/api/products');
+      list = Array.isArray(data) ? data : [];
+    } catch {
+      const data = await apiGet<any[]>(API_BASE_URL, '/api/products');
+      list = Array.isArray(data) ? data : [];
+    }
+    const stillPresent = deletedIds.filter((id) => list.some((p: any) => p && p.id === id));
+    if (stillPresent.length > 0) {
+      logInventoryError('Read-after-delete verification failed: deleted product(s) still present', {
+        productId: stillPresent[0],
+        deletedIds: stillPresent,
+        listLength: list.length,
+      });
+      throw new Error('Delete succeeded but verification failed. Please refresh the list.');
+    }
+  };
+
   /** Serialize a product for API POST/PUT (dates to ISO strings). Preserves version for optimistic locking. */
   const productToPayload = (product: Product) => ({
     ...product,
@@ -261,9 +341,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   /**
    * Push products that exist only in this browser's storage to the API
-   * so they appear in all browsers/devices.
+   * so they appear in all browsers/devices. Returns syncedIds so we can clear localOnlyIds.
    */
-  const syncLocalInventoryToApi = async (): Promise<{ synced: number; failed: number; total: number }> => {
+  const syncLocalInventoryToApi = async (): Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }> => {
     let apiIds = new Set<string>();
     try {
       try {
@@ -276,15 +356,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         apiIds = new Set(list.map((p: any) => p.id));
       }
     } catch {
-      return { synced: 0, failed: 0, total: 0 };
+      return { synced: 0, failed: 0, total: 0, syncedIds: [] };
     }
 
     const localRaw = getStoredData<any[]>('warehouse_products', []);
     const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
     const localOnly = localProducts.filter((p) => !apiIds.has(p.id));
     const total = localOnly.length;
-    if (total === 0) return { synced: 0, failed: 0, total: 0 };
+    if (total === 0) return { synced: 0, failed: 0, total: 0, syncedIds: [] };
 
+    const syncedIds: string[] = [];
     let synced = 0;
     let failed = 0;
     for (const product of localOnly) {
@@ -295,44 +376,70 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           await apiPost(API_BASE_URL, '/api/products', productToPayload(product));
         }
         synced++;
+        syncedIds.push(product.id);
       } catch {
         failed++;
       }
     }
+    if (syncedIds.length > 0) setLocalOnlyIds((prev) => {
+      const next = new Set(prev);
+      syncedIds.forEach((id) => next.delete(id));
+      return next;
+    });
     await loadProducts();
-    return { synced, failed, total };
+    return { synced, failed, total, syncedIds };
   };
 
-  /** Persist current list to localStorage and IndexedDB. */
+  syncRef.current = syncLocalInventoryToApi;
+  useEffect(() => {
+    if (localOnlyIds.size === 0) return;
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      syncRef.current?.().catch(() => {});
+    }, 120_000);
+    return () => clearInterval(interval);
+  }, [localOnlyIds.size]);
+
+  /** Persist current list to localStorage and IndexedDB (best-effort cache only; server is source of truth). */
   const persistProducts = (next: Product[]) => {
     if (isStorageAvailable() && next.length >= 0) {
       setStoredData('warehouse_products', next);
     }
     if (isIndexedDBAvailable()) {
-      saveProductsToDb(next).catch(() => {});
+      saveProductsToDb(next).catch((e) => {
+        reportError(e instanceof Error ? e : new Error(String(e)), { context: 'persistProducts', listLength: next.length });
+      });
     }
   };
 
   /**
-   * Add product: WRITE PATH. Always persists so inventory never vanishes.
-   * Tries API first; on failure saves to local state + localStorage + IndexedDB and throws so UI can show "saved locally" message.
+   * Add product: WRITE PATH. Atomic from client perspective: validate → POST with idempotency → read-after-write verify.
+   * Only consider successful when DB confirms and record can be re-queried. Otherwise throw (no "Saved" without verification).
+   * On API failure we save locally and throw ADD_PRODUCT_SAVED_LOCALLY so UI never shows server "Saved" for local-only.
    */
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
+    if (!productData?.name?.trim?.()) throw new Error('Product name is required');
+    const stableId = crypto.randomUUID();
     const payload = productToPayload({
       ...productData,
-      id: crypto.randomUUID(),
+      id: stableId,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
     let savedRaw: any = null;
     try {
-      savedRaw = await apiPost<any>(API_BASE_URL, '/admin/api/products', payload);
+      savedRaw = await apiPost<any>(API_BASE_URL, '/admin/api/products', payload, {
+        idempotencyKey: stableId,
+      });
     } catch {
       try {
-        savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', payload);
+        savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', payload, {
+          idempotencyKey: stableId,
+        });
       } catch {
-        // API failed (405, network, etc.): save locally so the product never vanishes
+        // API failed: save locally so the product never vanishes; do NOT show server "Saved"
         const saved: Product = normalizeProduct(payload);
+        setLocalOnlyIds((prev) => new Set(prev).add(saved.id));
         setProducts((prev) => {
           const next = [...prev, saved];
           persistProducts(next);
@@ -341,7 +448,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         throw new Error(ADD_PRODUCT_SAVED_LOCALLY);
       }
     }
-    const saved: Product = savedRaw ? normalizeProduct(savedRaw) : normalizeProduct(payload);
+    const idToVerify = (savedRaw && savedRaw.id) || stableId;
+    const verified = await readAfterWriteVerify(idToVerify);
+    const saved: Product = verified;
+    logInventoryCreate({ productId: saved.id, sku: saved.sku, listLength: products.length + 1 });
     setProducts((prev) => {
       const next = [...prev, saved];
       persistProducts(next);
@@ -350,21 +460,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Update product: WRITE PATH. Handles 409 Conflict (version/ETag) — refresh and show message.
+   * Update product: WRITE PATH. Version check (409) prevents concurrent overwrite; read-after-write ensures persistence.
+   * No success without DB commit and verified re-read.
    */
   const updateProduct = async (id: string, updates: Partial<Product>) => {
     const product = products.find(p => p.id === id);
-    if (!product) {
-      throw new Error('Product not found');
-    }
+    if (!product) throw new Error('Product not found');
 
     const updatedProduct = { ...product, ...updates, updatedAt: new Date() };
     const payload = productToPayload(updatedProduct);
 
-    try {
-      let savedRaw: any = null;
+    const doPut = async (): Promise<any> => {
       try {
-        savedRaw = await apiPut<any>(API_BASE_URL, `/admin/api/products/${id}`, payload);
+        return await apiPut<any>(API_BASE_URL, `/admin/api/products/${id}`, payload);
       } catch (err: any) {
         if (err?.status === 409) {
           await loadProducts();
@@ -374,36 +482,33 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         throw err;
       }
-      if (!savedRaw) {
-        try {
-          savedRaw = await apiPut<any>(API_BASE_URL, `/api/products/${id}`, payload);
-        } catch (err: any) {
-          if (err?.status === 409) {
-            await loadProducts();
-            throw new Error(
-              'Someone else updated this product. The list has been refreshed — please try your change again.'
-            );
-          }
-          throw err;
+    };
+
+    try {
+      await doPut();
+    } catch (e) {
+      try {
+        await apiPut<any>(API_BASE_URL, `/api/products/${id}`, payload);
+      } catch (err: any) {
+        if (err?.status === 409) {
+          await loadProducts();
+          throw new Error(
+            'Someone else updated this product. The list has been refreshed — please try your change again.'
+          );
         }
+        throw err;
       }
-      const saved: Product = savedRaw ? normalizeProduct(savedRaw) : normalizeProduct(updatedProduct);
-      const next = products.map(p => (p.id === id ? saved : p));
-      setProducts(next);
-      persistProducts(next);
-    } catch (err: any) {
-      if (err?.status === 409) {
-        await loadProducts();
-        throw new Error(
-          'Someone else updated this product. The list has been refreshed — please try your change again.'
-        );
-      }
-      throw err;
     }
+
+    const verified = await readAfterWriteVerify(id);
+    logInventoryUpdate({ productId: id, sku: product.sku });
+    const next = products.map(p => (p.id === id ? verified : p));
+    setProducts(next);
+    persistProducts(next);
   };
 
   /**
-   * Delete product: WRITE PATH — uses resilient client.
+   * Delete product: WRITE PATH. Read-after-delete verification — no "Deleted" without confirmed absence.
    */
   const deleteProduct = async (id: string) => {
     try {
@@ -411,6 +516,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     } catch {
       await apiDelete(API_BASE_URL, `/api/products/${id}`);
     }
+    await readAfterDeleteVerify([id]);
+    logInventoryDelete({ productId: id });
     const next = products.filter(p => p.id !== id);
     setProducts(next);
     persistProducts(next);
@@ -463,6 +570,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    await readAfterDeleteVerify(ids);
+    ids.forEach((id) => logInventoryDelete({ productId: id }));
     const next = products.filter(p => !ids.includes(p.id));
     setProducts(next);
     persistProducts(next);
@@ -514,6 +623,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       filterProducts,
       refreshProducts: loadProducts,
       syncLocalInventoryToApi,
+      unsyncedCount: localOnlyIds.size,
     }}>
       {children}
     </InventoryContext.Provider>

@@ -9,7 +9,9 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "ci:inventory": "node scripts/ci-inventory-invariants.mjs",
+    "ci": "npm run ci:inventory && npm run test && npm run build"
   },
   "dependencies": {
     "@ericblade/quagga2": "^1.8.1",
@@ -39,6 +41,7 @@
     "typescript": "^5.2.2",
 "vite": "^5.0.8",
     "vitest": "^2.0.0",
-    "jsdom": "^25.0.0"
+    "jsdom": "^25.0.0",
+    "@testing-library/react": "^14.0.0"
   }
 }
