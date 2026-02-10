@@ -149,12 +149,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const userData = await handleApiResponse<User>(response);
-        let normalizedUser = normalizeUserData(userData);
-        const demoRoleId = typeof localStorage !== 'undefined' ? localStorage.getItem(DEMO_ROLE_KEY) : null;
-        const demoRole = demoRoleId ? Object.values(ROLES).find((r) => r.id === demoRoleId) : null;
-        if (demoRole) {
-          normalizedUser = { ...normalizedUser, role: demoRole.id as User['role'], permissions: demoRole.permissions };
-        }
+        const normalizedUser = normalizeUserData(userData);
+        // Do not apply persisted demo role: use backend role so cashier sees cashier features only.
+        if (typeof localStorage !== 'undefined') localStorage.removeItem(DEMO_ROLE_KEY);
         lastActivityRef.current = Date.now();
         setUser(normalizedUser);
         localStorage.setItem('current_user', JSON.stringify(normalizedUser));
@@ -334,12 +331,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!userPayload || typeof userPayload !== 'object') {
         throw new Error('Invalid login response');
       }
-      let normalizedUser = normalizeUserData(userPayload);
-      const demoRoleId = typeof localStorage !== 'undefined' ? localStorage.getItem(DEMO_ROLE_KEY) : null;
-      const demoRole = demoRoleId ? Object.values(ROLES).find((r) => r.id === demoRoleId) : null;
-      if (demoRole) {
-        normalizedUser = { ...normalizedUser, role: demoRole.id as User['role'], permissions: demoRole.permissions };
-      }
+      const normalizedUser = normalizeUserData(userPayload);
+      // Use backend role only on login so cashier gets cashier permissions, not a previously stored demo role.
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(DEMO_ROLE_KEY);
       lastActivityRef.current = Date.now();
       setUser(normalizedUser);
       localStorage.setItem('current_user', JSON.stringify(normalizedUser));
@@ -373,6 +367,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       localStorage.removeItem('current_user');
       localStorage.removeItem('auth_token');
+      localStorage.removeItem(DEMO_ROLE_KEY);
       // No full page redirect: re-render lets ProtectedRoutes return <Navigate to="/login" />,
       // avoiding "Importing a module script failed" from cached index/chunks after deploy.
     }
