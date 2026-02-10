@@ -144,7 +144,7 @@ export async function getWarehouseProducts(
   const { data: rows, error, count } = await query.range(offset, offset + limit - 1);
   if (error) throw error;
 
-  const productRows = (rows ?? []) as WarehouseProductRow[];
+  const productRows = (rows ?? []) as unknown as WarehouseProductRow[];
   if (productRows.length === 0) {
     return { data: [], total: count ?? 0 };
   }

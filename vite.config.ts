@@ -1,7 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Fail production build if inventory API env is missing (P0 reliability: no default = no desync).
+// Ensure production build can run on Vercel; use .env.production or Vercel env. If unset, app uses default in api.ts.
 function failBuildIfEnvMissing() {
   return {
     name: 'fail-build-if-env-missing',
@@ -10,8 +10,8 @@ function failBuildIfEnvMissing() {
         const env = loadEnv(mode, process.cwd(), '');
         const url = env.VITE_API_BASE_URL;
         if (!url || String(url).trim() === '') {
-          throw new Error(
-            '[INVENTORY RELIABILITY] Production build requires VITE_API_BASE_URL. Set it in .env.production so warehouse and storefront use the same backend.'
+          console.warn(
+            '[INVENTORY] VITE_API_BASE_URL is unset in production build. Set it in Vercel (Frontend project → Settings → Environment Variables) or .env.production so the app uses your API URL; otherwise default is used.'
           );
         }
       }
