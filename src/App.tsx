@@ -15,6 +15,20 @@ import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { KeyboardShortcuts } from './components/ui/KeyboardShortcuts';
 import { PERMISSIONS } from './types/permissions';
 
+/** Default landing: Dashboard if user has permission; otherwise redirect to first allowed route (e.g. POS for cashiers). */
+function DefaultRoute() {
+  const { hasPermission, hasAnyPermission } = useAuth();
+  if (hasPermission(PERMISSIONS.DASHBOARD.VIEW)) {
+    return <Dashboard />;
+  }
+  if (hasPermission(PERMISSIONS.POS.ACCESS)) return <Navigate to="/pos" replace />;
+  if (hasPermission(PERMISSIONS.INVENTORY.VIEW)) return <Navigate to="/inventory" replace />;
+  if (hasPermission(PERMISSIONS.ORDERS.VIEW)) return <Navigate to="/orders" replace />;
+  if (hasAnyPermission([PERMISSIONS.REPORTS.VIEW_SALES, PERMISSIONS.REPORTS.VIEW_INVENTORY, PERMISSIONS.REPORTS.VIEW_PROFIT])) return <Navigate to="/reports" replace />;
+  if (hasPermission(PERMISSIONS.SETTINGS.VIEW)) return <Navigate to="/settings" replace />;
+  return <Navigate to="/pos" replace />;
+}
+
 // Lazy load pages with retry so first load after login doesn't show "Something went wrong" on chunk failure
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const Inventory = lazyWithRetry(() => import('./pages/Inventory').then(m => ({ default: m.Inventory })));
@@ -107,8 +121,8 @@ function App() {
                         <Route
                           index
                           element={
-                            <ProtectedRoute permission={PERMISSIONS.DASHBOARD.VIEW}>
-                              <Dashboard />
+                            <ProtectedRoute>
+                              <DefaultRoute />
                             </ProtectedRoute>
                           }
                         />

@@ -103,12 +103,19 @@ export function POS() {
     setCompletedTransaction(null);
   };
 
-  /* POS: one primary action = Complete Payment; cart + totals always visible; destructive (clear cart) separated */
+  /* POS: one primary action = Complete Payment; cart + totals always visible; show which store/warehouse. */
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Point of Sale</h1>
         <p className="text-slate-500 text-sm">Process sales and transactions</p>
+        {(currentStore || currentWarehouse) && (
+          <p className="text-sm text-slate-600 font-medium mt-1 flex items-center gap-2 flex-wrap">
+            {currentStore && <span><Store className="w-4 h-4 inline-block mr-1" aria-hidden />{currentStore.name}</span>}
+            {currentStore && currentWarehouse && <span className="text-slate-400">•</span>}
+            {currentWarehouse && <span><MapPin className="w-4 h-4 inline-block mr-1" aria-hidden />{currentWarehouse.name}</span>}
+          </p>
+        )}
       </div>
 
       {warehouseRequired && (

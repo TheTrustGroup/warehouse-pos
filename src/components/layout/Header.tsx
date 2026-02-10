@@ -5,10 +5,12 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Bell, LogOut, MapPin } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWarehouse } from '../../contexts/WarehouseContext';
+import { useStore } from '../../contexts/StoreContext';
 
 export function Header() {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { currentStore } = useStore();
   const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse, refreshWarehouses, isLoading } = useWarehouse();
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -50,10 +52,16 @@ export function Header() {
         </form>
       </div>
 
-      {/* Warehouse selector: always visible; dropdown when list loaded, else label + retry so it never looks faded. */}
-      <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
-        <MapPin className="w-4 h-4 text-slate-600" aria-hidden />
-        {warehouses.length > 0 ? (
+      {/* Store & warehouse: show current location so POS/staff know which store they're at. */}
+      <div className="hidden sm:flex items-center gap-3 flex-shrink-0">
+        {currentStore && (
+          <span className="text-sm font-medium text-slate-700 whitespace-nowrap" title="Current store">
+            Store: <strong className="text-slate-900">{currentStore.name}</strong>
+          </span>
+        )}
+        <div className="flex items-center gap-2">
+          <MapPin className="w-4 h-4 text-slate-600" aria-hidden />
+          {warehouses.length > 0 ? (
           <select
             value={currentWarehouseId || ''}
             onChange={(e) => setCurrentWarehouseId(e.target.value)}
@@ -82,6 +90,7 @@ export function Header() {
             Reload
           </button>
         )}
+        </div>
       </div>
 
       {/* Right Section: search, logout, alerts only. Role switch is in sidebar/mobile menu only. */}

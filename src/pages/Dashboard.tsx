@@ -19,8 +19,8 @@ import { formatCurrency } from '../lib/utils';
 export function Dashboard() {
   const { products } = useInventory();
   const { user } = useAuth();
-  const { stores } = useStore();
-  const { warehouses } = useWarehouse();
+  const { stores, currentStore } = useStore();
+  const { warehouses, currentWarehouse } = useWarehouse();
   const navigate = useNavigate();
   const [todaySales, setTodaySales] = useState(0);
   const [todayTransactions, setTodayTransactions] = useState(0);
@@ -98,9 +98,15 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       <div className="animate-fade-in-up">
-        <h1 className="text-[32px] font-bold text-slate-900 tracking-tight mb-1">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Dashboard</h1>
         <p className="text-slate-500 text-sm mb-2">Inventory, suppliers & point of sale in one place</p>
-        <p className="text-slate-500 text-sm">Welcome back! Here's what's happening today.</p>
+        {(currentStore || currentWarehouse) && (
+          <p className="text-sm text-slate-600 font-medium flex items-center gap-2 flex-wrap">
+            <StoreIcon className="w-4 h-4 text-slate-500" aria-hidden />
+            You&apos;re at: {currentStore?.name ?? '—'}{currentStore && currentWarehouse ? ', ' : ''}{currentWarehouse?.name ?? ''}
+          </p>
+        )}
+        <p className="text-slate-500 text-sm mt-1">Welcome back! Here&apos;s what&apos;s happening today.</p>
       </div>
 
       {/* Stats Grid */}
