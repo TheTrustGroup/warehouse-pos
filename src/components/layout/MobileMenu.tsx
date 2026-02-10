@@ -40,10 +40,8 @@ function getRoleDisplayName(roleId: string): string {
 export function MobileMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const { user, hasPermission, hasAnyPermission, switchRole } = useAuth();
-  const canManageUsers =
-    hasPermission(PERMISSIONS.SETTINGS.MANAGE_USERS) ||
-    hasPermission(PERMISSIONS.USERS.ASSIGN_ROLES) ||
-    user?.role === 'viewer';
+  // Hardening: only admins see "Switch role" (testing). Others cannot try to switch; backend enforces 403.
+  const canSeeSwitchRole = user?.role === 'admin' || user?.role === 'super_admin';
 
   const navigation = baseNavigation.filter(
     (item) =>
@@ -102,7 +100,7 @@ export function MobileMenu() {
                 {getRoleDisplayName(user.role)}
               </p>
             )}
-            {canManageUsers && (
+            {canSeeSwitchRole && (
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 block mb-1">Switch role (testing)</span>
                 <select

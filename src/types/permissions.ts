@@ -1,3 +1,8 @@
+/**
+ * RBAC: permission strings for UI gating. Backend is the authority — never trust client for role.
+ * Cashier: POS + view products/orders only. No dashboard, reports, users, settings, inventory editing.
+ */
+
 export const PERMISSIONS = {
   DASHBOARD: {
     VIEW: 'dashboard.view',

@@ -1,22 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, sessionUserToJson } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
-function stubUser(email: string) {
-  const now = new Date().toISOString();
-  return {
-    id: 'api-stub-user',
-    username: email.split('@')[0] || 'user',
-    email,
-    role: 'admin',
-    fullName: email,
-    isActive: true,
-    lastLogin: now,
-    createdAt: now,
-  };
-}
+/** Current user from session. Role from server only. */
+export async function GET(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
 
-export async function GET() {
-  const user = stubUser('user@warehouse.local');
-  return NextResponse.json(user);
+  return NextResponse.json(sessionUserToJson(auth));
 }

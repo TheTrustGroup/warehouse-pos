@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteWarehouseProductsBulk } from '@/lib/data/warehouseProducts';
+import { requireAdmin } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
 export async function DELETE(request: NextRequest) {
+  const auth = requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
   try {
     const body = await request.json().catch(() => ({}));
     const ids = Array.isArray(body.ids) ? body.ids : [];

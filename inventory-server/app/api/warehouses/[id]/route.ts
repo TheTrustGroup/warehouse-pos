@@ -1,12 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getWarehouseById } from '@/lib/data/warehouses';
+import { requireAuth } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   try {
     const warehouse = await getWarehouseById(id);

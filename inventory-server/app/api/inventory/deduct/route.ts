@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processSaleDeductions } from '@/lib/data/warehouseInventory';
+import { requirePosRole } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
-/** POST /api/inventory/deduct — atomic batch deduction for POS sale. */
+/** POST /api/inventory/deduct — atomic batch deduction for POS sale. Cashier+ only. */
 export async function POST(request: NextRequest) {
+  const auth = requirePosRole(request);
+  if (auth instanceof NextResponse) return auth;
   try {
     const body = await request.json();
     const warehouseId = body.warehouseId as string;

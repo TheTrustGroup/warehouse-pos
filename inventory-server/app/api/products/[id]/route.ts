@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getWarehouseProductById, updateWarehouseProduct, deleteWarehouseProduct } from '@/lib/data/warehouseProducts';
+import { requireAuth, requireAdmin } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +8,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   const { searchParams } = new URL(request.url);
   const warehouseId = searchParams.get('warehouse_id') ?? undefined;
@@ -27,6 +30,8 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   try {
     const body = await request.json();
@@ -44,9 +49,11 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   try {
     await deleteWarehouseProduct(id);

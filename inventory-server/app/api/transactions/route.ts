@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processSale } from '@/lib/data/transactions';
+import { requirePosRole } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
-/** POST /api/transactions — persist sale (transaction + items + deduct + stock_movements). Atomic. */
+/** POST /api/transactions — persist sale. Cashier+ only. */
 export async function POST(request: NextRequest) {
+  const auth = requirePosRole(request);
+  if (auth instanceof NextResponse) return auth;
   try {
     const body = await request.json();
     const warehouseId = body.warehouseId ?? body.warehouse_id;

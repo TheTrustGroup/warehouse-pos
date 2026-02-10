@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getWarehouseProducts, createWarehouseProduct } from '@/lib/data/warehouseProducts';
+import { requireAdmin } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  const auth = requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
   try {
     const { searchParams } = new URL(request.url);
     const warehouseId = searchParams.get('warehouse_id') ?? undefined;
@@ -19,6 +22,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
   try {
     const body = await request.json();
     const created = await createWarehouseProduct(body);

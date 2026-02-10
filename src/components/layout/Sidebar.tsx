@@ -38,10 +38,8 @@ function getRoleDisplayName(roleId: string): string {
 
 export function Sidebar() {
   const { user, hasPermission, hasAnyPermission, switchRole } = useAuth();
-  const canManageUsers =
-    hasPermission(PERMISSIONS.SETTINGS.MANAGE_USERS) ||
-    hasPermission(PERMISSIONS.USERS.ASSIGN_ROLES) ||
-    user?.role === 'viewer';
+  // Hardening: only admins see "Switch role" (testing). Others cannot try to switch; backend enforces 403.
+  const canSeeSwitchRole = user?.role === 'admin' || user?.role === 'super_admin';
 
   const navigation = baseNavigation.filter(
     (item) =>
@@ -91,7 +89,7 @@ export function Sidebar() {
             <p className="text-xs text-slate-600 font-medium">{user?.role ? getRoleDisplayName(user.role) : '—'}</p>
           </div>
         </div>
-        {canManageUsers && (
+        {canSeeSwitchRole && (
           <label className="block">
             <span className="sr-only">Switch role (for testing)</span>
             <select
