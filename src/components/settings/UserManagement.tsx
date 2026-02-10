@@ -411,29 +411,34 @@ Create this user in your backend admin panel with these exact credentials.`;
           <MapPin className="w-5 h-5 text-primary-600" aria-hidden />
           <h3 className="text-lg font-semibold text-slate-900">Store & warehouse access</h3>
         </div>
-        <p className="text-sm text-slate-600 mb-4">
-          Assign which store(s) and warehouse(s) a user can use in POS. No assignment = access to all (legacy). Use the login email of the user.
+        <p className="text-sm text-slate-600 mb-5">
+          Assign which store(s) and warehouse(s) a user can use in POS. No assignment = access to all (legacy). Enter the user&apos;s login email below.
         </p>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">User email (login)</label>
-            <div className="flex gap-2 flex-wrap">
-              <input
-                type="email"
-                value={scopeEmail}
-                onChange={(e) => setScopeEmail(e.target.value)}
-                onBlur={() => scopeEmail.trim() && loadScopesForEmail(scopeEmail)}
-                placeholder="e.g. cashier@extremedeptkidz.com"
-                className="input-field flex-1 min-w-[200px]"
-                aria-label="User email for scope"
-              />
+        <div className="space-y-5">
+          {/* User email: full-width editable field so any email can be entered */}
+          <div className="space-y-2">
+            <label htmlFor="user-scope-email" className="block text-sm font-medium text-slate-700">
+              User email (login)
+            </label>
+            <input
+              id="user-scope-email"
+              type="email"
+              value={scopeEmail}
+              onChange={(e) => setScopeEmail(e.target.value)}
+              onBlur={() => scopeEmail.trim() && loadScopesForEmail(scopeEmail)}
+              placeholder="e.g. cashier@extremedeptkidz.com"
+              autoComplete="off"
+              className="input-field w-full max-w-md"
+              aria-label="User email for scope assignment"
+            />
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => loadScopesForEmail(scopeEmail)}
                 disabled={loadingScopes || !scopeEmail.trim()}
                 className="btn-secondary"
               >
-                {loadingScopes ? 'Loading…' : 'Load'}
+                {loadingScopes ? 'Loading…' : 'Load current'}
               </button>
               {showAddUser && suggestedScopeEmail && (
                 <button
@@ -446,7 +451,9 @@ Create this user in your backend admin panel with these exact credentials.`;
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+          {/* Store + warehouse picker */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Store</label>
               <select
@@ -485,31 +492,36 @@ Create this user in your backend admin panel with these exact credentials.`;
           >
             Add location
           </button>
+
+          {/* Assigned locations: card layout */}
           {scopeList.length > 0 && (
-            <div>
-              <p className="text-sm font-medium text-slate-700 mb-2">Assigned locations</p>
-              <ul className="space-y-2">
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-slate-700">Assigned locations</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {scopeList.map((entry, i) => (
-                  <li key={`${entry.storeId}-${entry.warehouseId}-${i}`} className="flex items-center justify-between gap-2 py-2 px-3 bg-slate-50 rounded-xl border border-slate-200/60">
-                    <span className="text-sm text-slate-800">
+                  <div
+                    key={`${entry.storeId}-${entry.warehouseId}-${i}`}
+                    className="flex items-center justify-between gap-3 p-4 rounded-xl border border-slate-200/80 bg-white shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <span className="text-sm font-medium text-slate-800 truncate">
                       {entry.storeName ?? entry.storeId} → {entry.warehouseName ?? entry.warehouseId}
                     </span>
                     <button
                       type="button"
                       onClick={() => removeScopeEntry(i)}
-                      className="btn-action btn-action-delete"
+                      className="btn-action btn-action-delete flex-shrink-0"
                       aria-label="Remove location"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
               <button
                 type="button"
                 onClick={handleSaveScopes}
                 disabled={savingScopes}
-                className="btn-primary mt-3"
+                className="btn-primary mt-2 w-full sm:w-auto min-w-[200px]"
               >
                 {savingScopes ? 'Saving…' : 'Save store & warehouse access'}
               </button>
