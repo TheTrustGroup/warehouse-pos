@@ -69,10 +69,12 @@ export function setSessionCookie(
   role: BackendRole
 ): void {
   const value = setCookiePayload({ email: email.trim().toLowerCase(), role });
+  const isProduction = process.env.NODE_ENV === 'production';
+  // Production: SameSite=None so the cookie is sent when frontend (e.g. warehouse.extremedeptkidz.com) calls API on another origin. Requires Secure.
   response.cookies.set(COOKIE_NAME, value, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: MAX_AGE_SEC,
     path: '/',
   });

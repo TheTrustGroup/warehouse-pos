@@ -117,7 +117,7 @@ export async function getWarehouseProductById(id: string, warehouseId?: string):
   return rowToApi(data as WarehouseProductRow, qty);
 }
 
-/** POST: create one. Uses warehouseId from body (or default) to set initial quantity in warehouse_inventory. */
+/** POST: create one. Uses warehouseId from body (or default) to set initial quantity in warehouse_inventory. All-or-nothing: if inventory step fails, product row is removed. */
 export async function createWarehouseProduct(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const supabase = getSupabase();
   const id: string = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : crypto.randomUUID();
@@ -127,7 +127,12 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
   if (error) throw error;
   const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
   const quantity = Number(body.quantity) ?? 0;
-  await ensureQuantity(wid, id, quantity);
+  try {
+    await ensureQuantity(wid, id, quantity);
+  } catch (e) {
+    await supabase.from(TABLE).delete().eq('id', id);
+    throw e;
+  }
   return rowToApi(data as WarehouseProductRow, quantity);
 }
 

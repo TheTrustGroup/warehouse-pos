@@ -144,11 +144,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
 
       try {
+        // Try /api/products first so one round-trip for all roles (admin + cashier). Avoids 403-then-200 delay for non-admins.
         let data: Product[] | null = null;
         try {
-          data = await apiGet<Product[]>(API_BASE_URL, productsPath('/admin/api/products'), { signal });
-        } catch {
           data = await apiGet<Product[]>(API_BASE_URL, productsPath('/api/products'), { signal });
+        } catch {
+          data = await apiGet<Product[]>(API_BASE_URL, productsPath('/admin/api/products'), { signal });
         }
         const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
         const apiIds = new Set(apiProducts.map((p) => p.id));
@@ -290,8 +291,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
 
     (async () => {
-      try {
-        if (!hadCache && isIndexedDBAvailable()) {
+      // Start API fetch immediately; run IndexedDB read in parallel so we don't delay the first paint.
+      const loadProductsPromise = loadProducts(ac.signal, hadCache ? { silent: true } : undefined);
+      if (!hadCache && isIndexedDBAvailable()) {
+        try {
           const fromDb = await loadProductsFromDb<any>();
           const list = Array.isArray(fromDb) ? fromDb : [];
           const productsFromCache = toProducts(list);
@@ -301,12 +304,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             setError(null);
             hadCache = true;
           }
+        } catch {
+          // ignore cache read errors
         }
-      } catch {
-        // ignore cache read errors; will do full load below
       }
       if (!mountedRef.current) return;
-      await loadProducts(ac.signal, hadCache ? { silent: true } : undefined);
+      await loadProductsPromise;
     })();
 
     return () => {
@@ -333,10 +336,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const readAfterWriteVerify = async (productId: string): Promise<Product> => {
     let list: any[] = [];
     try {
-      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/admin/api/products'));
+      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/api/products'));
       list = Array.isArray(data) ? data : [];
     } catch {
-      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/api/products'));
+      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/admin/api/products'));
       list = Array.isArray(data) ? data : [];
     }
     const found = list.find((p: any) => p && p.id === productId);
@@ -358,10 +361,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     if (deletedIds.length === 0) return;
     let list: any[] = [];
     try {
-      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/admin/api/products'));
+      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/api/products'));
       list = Array.isArray(data) ? data : [];
     } catch {
-      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/api/products'));
+      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/admin/api/products'));
       list = Array.isArray(data) ? data : [];
     }
     const stillPresent = deletedIds.filter((id) => list.some((p: any) => p && p.id === id));

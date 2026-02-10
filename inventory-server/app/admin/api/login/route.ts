@@ -22,7 +22,16 @@ export async function POST(request: NextRequest) {
     });
     setSessionCookie(response, email, role);
     return response;
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (process.env.NODE_ENV === 'production' && msg.includes('SESSION_SECRET')) {
+      console.error('[auth] Login failed: SESSION_SECRET not set in production.');
+      return NextResponse.json(
+        { error: 'Server configuration error. Please contact the administrator.' },
+        { status: 503 }
+      );
+    }
+    console.error('[auth] Login failed:', err);
     return NextResponse.json({ error: 'Login failed' }, { status: 400 });
   }
 }
