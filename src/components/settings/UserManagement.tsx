@@ -415,7 +415,7 @@ Create this user in your backend admin panel with these exact credentials.`;
           Assign which store(s) and warehouse(s) a user can use in POS. No assignment = access to all (legacy). Enter the user&apos;s login email below.
         </p>
         <div className="text-sm text-slate-600 mb-5 p-3 rounded-lg bg-primary-50/50 border border-primary-100">
-          <strong className="text-slate-700">How POS logins work:</strong> The system grants role from the <strong>email username</strong> (part before @). Use <code className="px-1 py-0.5 bg-white rounded text-xs">cashier@…</code> or <code className="px-1 py-0.5 bg-white rounded text-xs">cashier_maintown@…</code> for POS; <code className="px-1 py-0.5 bg-white rounded text-xs">viewer@…</code> gives view-only. Create the user in your auth backend with that email, then assign their store/warehouse here.
+          <strong className="text-slate-700">How POS logins work:</strong> Role comes from the <strong>email username</strong> (before @). For cashier (POS) use: <code className="px-1 py-0.5 bg-white rounded text-xs">cashier@…</code>, <code className="px-1 py-0.5 bg-white rounded text-xs">cashier_maintown@…</code>, or <code className="px-1 py-0.5 bg-white rounded text-xs">maintown_cashier@…</code>. All get the same Cashier role; assign each email to its store below. <code className="px-1 py-0.5 bg-white rounded text-xs">maintown@…</code> alone gives View Only — add <code className="px-1 py-0.5 bg-white rounded text-xs">_cashier</code> (e.g. <code className="px-1 py-0.5 bg-white rounded text-xs">maintown_cashier@…</code>).
         </div>
         <div className="space-y-5">
           {/* User email: full-width editable field so any email can be entered */}

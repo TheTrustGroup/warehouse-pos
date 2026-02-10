@@ -34,8 +34,11 @@ const KNOWN_ROLES: BackendRole[] = [
 
 /**
  * Role is derived from email: admin list (env) or email local part.
- * Local part can be exactly the role (cashier@...) or role_suffix (cashier_maintown@...) so
- * multiple POS logins (e.g. Main store vs Main town) can share the same role but different emails.
+ * Local part can be:
+ * - Exactly the role (cashier@...)
+ * - role_place (cashier_maintown → cashier)
+ * - place_role (maintown_cashier → cashier)
+ * so both POS users can have the same cashier role with different emails (e.g. cashier@, cashier_maintown@, maintown_cashier@).
  */
 export function getRoleFromEmail(email: string): BackendRole {
   const normalized = email.trim().toLowerCase();
@@ -46,9 +49,13 @@ export function getRoleFromEmail(email: string): BackendRole {
 
   const local = normalized.split('@')[0]?.toLowerCase() ?? '';
   if (KNOWN_ROLES.includes(local as BackendRole)) return local as BackendRole;
-  // Allow role_suffix (e.g. cashier_maintown → cashier) so multiple POS users can have different emails
-  const prefix = local.split('_')[0];
-  if (prefix && KNOWN_ROLES.includes(prefix as BackendRole)) return prefix as BackendRole;
+  const parts = local.split('_').filter(Boolean);
+  if (parts.length >= 2) {
+    const prefix = parts[0];
+    const suffix = parts[parts.length - 1];
+    if (KNOWN_ROLES.includes(prefix as BackendRole)) return prefix as BackendRole;
+    if (KNOWN_ROLES.includes(suffix as BackendRole)) return suffix as BackendRole;
+  }
 
   return 'viewer';
 }
