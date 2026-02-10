@@ -16,8 +16,11 @@ const getAllowedOrigins = (): { origins: string[]; strict: boolean } => {
 function corsHeaders(request: NextRequest): HeadersInit {
   const { origins, strict } = getAllowedOrigins();
   const origin = request.headers.get('origin') || '';
+  // Always reflect request origin when present so cross-origin frontend (e.g. after refresh) is never blocked.
   let allowOrigin: string;
-  if (origins.includes('*') || origins.length === 0 || !strict) {
+  if (origin && /^https?:\/\//.test(origin)) {
+    allowOrigin = origin;
+  } else if (origins.includes('*') || origins.length === 0 || !strict) {
     allowOrigin = origin || '*';
   } else {
     allowOrigin = origins.includes(origin) ? origin : origins[0];
