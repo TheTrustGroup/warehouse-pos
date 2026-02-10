@@ -22,6 +22,8 @@ export function POS() {
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(null);
 
+  /** User has one assigned POS (one store + one warehouse): show fixed location only, no dropdowns. */
+  const hasSinglePOSLocation = isSingleStore && warehouses.length === 1;
   /** POS requires warehouse selection when multiple warehouses exist. No silent default. */
   const warehouseRequired = warehouses.length > 1 && !currentWarehouseId;
   const canCompleteSale = !warehouseRequired && !!currentWarehouseId;
@@ -141,7 +143,22 @@ export function POS() {
         </div>
       )}
 
-      {stores.length > 0 && (
+      {/* When user has a single assigned POS, show fixed location only — no dropdowns. */}
+      {hasSinglePOSLocation && currentStore && currentWarehouse && (
+        <div className="flex flex-wrap items-center gap-2 text-slate-600 text-sm">
+          <Store className="w-4 h-4" aria-hidden />
+          <span>Store: <strong>{currentStore.name}</strong></span>
+          <span className="text-slate-400">•</span>
+          <MapPin className="w-4 h-4" aria-hidden />
+          <span>Selling from: <strong>{currentWarehouse.name}</strong></span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600" title="Assigned to this location only">
+            <Lock className="w-3.5 h-3.5" aria-hidden />
+            <span>Assigned POS</span>
+          </span>
+        </div>
+      )}
+
+      {!hasSinglePOSLocation && stores.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-slate-600 text-sm">
           <Store className="w-4 h-4" aria-hidden />
           {isSingleStore && currentStore ? (
@@ -165,7 +182,7 @@ export function POS() {
         </div>
       )}
 
-      {currentWarehouse && !warehouseRequired && (
+      {!hasSinglePOSLocation && currentWarehouse && !warehouseRequired && (
         <div className="flex flex-wrap items-center gap-2 text-slate-600 text-sm">
           <MapPin className="w-4 h-4" aria-hidden />
           <span>Selling from: <strong>{currentWarehouse.name}</strong></span>

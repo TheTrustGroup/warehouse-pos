@@ -10,8 +10,10 @@ import { useStore } from '../../contexts/StoreContext';
 export function Header() {
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const { currentStore } = useStore();
-  const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse, refreshWarehouses, isLoading } = useWarehouse();
+  const { currentStore, isSingleStore } = useStore();
+  const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse, refreshWarehouses, isLoading, isWarehouseBoundToSession } = useWarehouse();
+  /** Single assigned POS: show location as static text, not a dropdown. */
+  const showLocationAsStatic = isSingleStore && (warehouses.length <= 1 || isWarehouseBoundToSession);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -61,7 +63,11 @@ export function Header() {
         )}
         <div className="flex items-center gap-2">
           <MapPin className="w-4 h-4 text-slate-600" aria-hidden />
-          {warehouses.length > 0 ? (
+          {showLocationAsStatic || warehouses.length === 0 ? (
+          <span className="text-sm font-medium text-slate-800">
+            {currentWarehouse?.name ?? (currentWarehouseId ? 'Warehouse' : 'Main Store')}
+          </span>
+        ) : (
           <select
             value={currentWarehouseId || ''}
             onChange={(e) => setCurrentWarehouseId(e.target.value)}
@@ -75,10 +81,6 @@ export function Header() {
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
           </select>
-        ) : (
-          <span className="text-sm font-medium text-slate-800">
-            {currentWarehouse?.name ?? (currentWarehouseId ? 'Warehouse' : 'Main Store')}
-          </span>
         )}
         {warehouses.length === 0 && !isLoading && (
           <button
