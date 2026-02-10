@@ -114,3 +114,21 @@ This creates:
 - **process_sale** RPC: insert transaction + items + deduct inventory + write stock_movements in one atomic transaction (idempotent on transaction id for sync retries).
 
 Run this migration’s SQL in the Supabase SQL Editor after the atomic deduct migration. The POS then uses **POST /api/transactions** only (no separate deduct call).
+
+---
+
+## Past inventory not showing after deploy?
+
+Past inventory is **stored in the database**: the first migration backfilled existing `warehouse_products.quantity` into **warehouse_inventory** for the default warehouse (Main Store, id `00000000-0000-0000-0000-000000000001`). Nothing is deleted.
+
+**Verify data in Supabase (SQL Editor):**
+
+```sql
+-- Count rows and total quantity per warehouse
+SELECT w.code, w.name, COUNT(wi.product_id) AS product_count, COALESCE(SUM(wi.quantity), 0) AS total_quantity
+FROM warehouses w
+LEFT JOIN warehouse_inventory wi ON wi.warehouse_id = w.id
+GROUP BY w.id, w.code, w.name;
+```
+
+If Main Store has `product_count` > 0 and `total_quantity` > 0, the data is there. The app was updated so that when no warehouse is selected it still requests products for the **default warehouse (Main Store)**. Redeploy the front-end so the inventory list shows again. If you use the inventory-server from this repo, ensure that backend is deployed too (it reads quantity from `warehouse_inventory`, not `warehouse_products.quantity`).

@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
+import { WarehouseProvider } from './WarehouseContext';
 import { InventoryProvider, useInventory } from './InventoryContext';
 
 // Mock API client so we control success vs disaster (read-back missing).
@@ -52,7 +53,9 @@ vi.mock('../hooks/useRealtimeSync', () => ({
 import { apiGet, apiPost } from '../lib/apiClient';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <InventoryProvider>{children}</InventoryProvider>
+  <WarehouseProvider>
+    <InventoryProvider>{children}</InventoryProvider>
+  </WarehouseProvider>
 );
 
 const minimalProduct = {
@@ -110,7 +113,14 @@ describe('InventoryContext reliability', () => {
       updatedAt: new Date().toISOString(),
     };
     vi.mocked(apiPost).mockResolvedValue(saved);
-    vi.mocked(apiGet).mockResolvedValueOnce([]).mockResolvedValueOnce([saved]);
+    // Return [saved] only for the read-back GET (after addProduct's POST). All other GETs (warehouses, initial products) return [].
+    vi.mocked(apiGet).mockImplementation(async (_base: string, path: string) => {
+      const isProductList = typeof path === 'string' && path.includes('products');
+      if (!isProductList) return [];
+      // Read-back happens after apiPost; initial load happens before. So only return [saved] when POST has been called.
+      if (vi.mocked(apiPost).mock.calls.length > 0) return [saved];
+      return [];
+    });
 
     const { result } = renderHook(() => useInventory(), { wrapper });
 

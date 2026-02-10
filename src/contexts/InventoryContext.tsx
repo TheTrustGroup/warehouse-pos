@@ -18,7 +18,7 @@ import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from '../lib/apiClient';
-import { useWarehouse } from './WarehouseContext';
+import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
 import { loadProductsFromDb, saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
 import { reportError } from '../lib/observability';
@@ -74,9 +74,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [localOnlyIds, setLocalOnlyIds] = useState<Set<string>>(() => new Set());
   const syncRef = useRef<(() => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>) | null>(null);
 
-  /** Products API path with current warehouse for quantity scope. Omit when no selection so backend uses default for list. */
-  const effectiveWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : undefined;
-  const productsPath = (base: string) => effectiveWarehouseId ? `${base}${base.includes('?') ? '&' : '?'}warehouse_id=${encodeURIComponent(effectiveWarehouseId)}` : base;
+  /** Products API path with current warehouse for quantity scope. When no warehouse selected, use default (Main Store) so backfilled past inventory still shows. */
+  const effectiveWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : DEFAULT_WAREHOUSE_ID;
+  const productsPath = (base: string) => `${base}${base.includes('?') ? '&' : '?'}warehouse_id=${encodeURIComponent(effectiveWarehouseId)}`;
 
   /**
    * Clear old mock data from localStorage (transactions/orders only).
