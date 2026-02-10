@@ -55,11 +55,14 @@ export function Header() {
         <MapPin className="w-4 h-4 text-slate-600" aria-hidden />
         {warehouses.length > 0 ? (
           <select
-            value={currentWarehouseId}
+            value={currentWarehouseId || ''}
             onChange={(e) => setCurrentWarehouseId(e.target.value)}
             className="text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-primary-500 focus:outline-none"
             aria-label="Current warehouse"
           >
+            {!currentWarehouseId && (
+              <option value="">Select warehouse</option>
+            )}
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}

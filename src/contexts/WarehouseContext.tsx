@@ -1,12 +1,16 @@
 /**
  * Current warehouse (location) for inventory and POS. All product quantities and
  * POS deductions are scoped to the selected warehouse.
+ *
+ * IMPORTANT: /api/warehouses requires auth. We only fetch after auth is ready and
+ * user is authenticated so the dropdown list loads reliably (no 401 race).
  */
 
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { Warehouse } from '../types';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet } from '../lib/apiClient';
+import { useOptionalAuth } from './AuthContext';
 
 /** Default warehouse id created by migration (Main Store). Fallback when API has no warehouses yet. */
 export const DEFAULT_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000001';
@@ -27,6 +31,9 @@ interface WarehouseContextType {
 const WarehouseContext = createContext<WarehouseContextType | undefined>(undefined);
 
 export function WarehouseProvider({ children }: { children: ReactNode }) {
+  const auth = useOptionalAuth();
+  const authLoading = auth?.isLoading ?? false;
+  const isAuthenticated = auth?.isAuthenticated ?? false;
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [currentWarehouseId, setCurrentWarehouseIdState] = useState<string>(() => {
     if (typeof localStorage !== 'undefined') {
@@ -53,15 +60,22 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
       // On empty list from API, keep current selection (don't clear) so products still load for default warehouse.
     } catch {
       setWarehouses([]);
-      // On error (e.g. 401), keep currentWarehouseId so dropdown area and products still work after auth is restored.
+      // On error (e.g. 401/network), keep currentWarehouseId so dropdown and products still work after Reload.
     } finally {
       setIsLoading(false);
     }
   }, []);
 
+  // Fetch warehouses only after auth is ready and user is authenticated (API requires auth).
+  // This prevents the dropdown from staying empty due to 401 when fetch ran before token was set.
   useEffect(() => {
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      setIsLoading(false);
+      return;
+    }
     refreshWarehouses();
-  }, [refreshWarehouses]);
+  }, [authLoading, isAuthenticated, refreshWarehouses]);
 
   useEffect(() => {
     if (typeof localStorage !== 'undefined' && currentWarehouseId) {

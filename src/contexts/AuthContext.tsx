@@ -486,3 +486,8 @@ export function useAuth() {
   }
   return context;
 }
+
+/** Use auth when inside AuthProvider; returns undefined when outside (e.g. tests). Lets WarehouseProvider work in both cases. */
+export function useOptionalAuth() {
+  return useContext(AuthContext) ?? undefined;
+}
