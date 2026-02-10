@@ -4,12 +4,14 @@ import { getWarehouseProductById, updateWarehouseProduct, deleteWarehouseProduct
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const warehouseId = searchParams.get('warehouse_id') ?? undefined;
   try {
-    const product = await getWarehouseProductById(id);
+    const product = await getWarehouseProductById(id, warehouseId);
     if (!product) return NextResponse.json({ message: 'Product not found' }, { status: 404 });
     return NextResponse.json(product);
   } catch (e) {

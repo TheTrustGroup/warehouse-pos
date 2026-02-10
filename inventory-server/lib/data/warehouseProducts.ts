@@ -1,10 +1,13 @@
 /**
  * Warehouse products API — single source of truth in this repo.
- * Table: warehouse_products (Supabase). Used by GET/POST/PUT/DELETE /api/products and /admin/api/products.
- * Run the migration in supabase/migrations or create the table manually (see INVENTORY_TABLE_SCHEMA.sql).
+ * Table: warehouse_products (no quantity column after migration); quantity lives in warehouse_inventory.
+ * Used by GET/POST/PUT/DELETE /api/products and /admin/api/products.
+ * All quantity read/write is scoped by warehouse_id.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getDefaultWarehouseId } from './warehouses';
+import { getQuantitiesForWarehouse, getQuantity, ensureQuantity, setQuantity } from './warehouseInventory';
 
 const TABLE = 'warehouse_products';
 
@@ -19,7 +22,7 @@ const getSupabase = (): SupabaseClient => {
 
 const now = () => new Date().toISOString();
 
-/** Shape stored in DB (snake_case). Matches warehouse UI Product type when normalized. */
+/** Shape stored in DB (snake_case). Quantity is in warehouse_inventory, not here. */
 export interface WarehouseProductRow {
   id: string;
   sku: string;
@@ -28,7 +31,6 @@ export interface WarehouseProductRow {
   description: string;
   category: string;
   tags: string[];
-  quantity: number;
   cost_price: number;
   selling_price: number;
   reorder_level: number;
@@ -42,7 +44,7 @@ export interface WarehouseProductRow {
   version?: number;
 }
 
-function rowToApi(row: WarehouseProductRow): Record<string, unknown> {
+function rowToApi(row: WarehouseProductRow, quantity: number = 0): Record<string, unknown> {
   return {
     id: row.id,
     sku: row.sku,
@@ -51,7 +53,7 @@ function rowToApi(row: WarehouseProductRow): Record<string, unknown> {
     description: row.description ?? '',
     category: row.category ?? '',
     tags: Array.isArray(row.tags) ? row.tags : [],
-    quantity: Number(row.quantity) ?? 0,
+    quantity,
     costPrice: row.cost_price,
     sellingPrice: row.selling_price,
     reorderLevel: row.reorder_level ?? 0,
@@ -66,6 +68,7 @@ function rowToApi(row: WarehouseProductRow): Record<string, unknown> {
   };
 }
 
+/** Build product row for insert/update (no quantity; quantity is in warehouse_inventory). */
 function bodyToRow(body: Record<string, unknown>, id: string, ts: string): Record<string, unknown> {
   const loc = body.location && typeof body.location === 'object' && !Array.isArray(body.location) ? body.location as Record<string, string> : {};
   const sup = body.supplier && typeof body.supplier === 'object' && !Array.isArray(body.supplier) ? body.supplier as Record<string, string> : {};
@@ -77,7 +80,6 @@ function bodyToRow(body: Record<string, unknown>, id: string, ts: string): Recor
     description: body.description != null ? String(body.description) : '',
     category: String(body.category ?? ''),
     tags: Array.isArray(body.tags) ? body.tags : [],
-    quantity: Number(body.quantity) || 0,
     cost_price: Number(body.costPrice ?? body.cost_price) || 0,
     selling_price: Number(body.sellingPrice ?? body.selling_price) || 0,
     reorder_level: Number(body.reorderLevel ?? body.reorder_level) || 0,
@@ -92,23 +94,30 @@ function bodyToRow(body: Record<string, unknown>, id: string, ts: string): Recor
   };
 }
 
-/** GET all warehouse products (no cache). */
-export async function getWarehouseProducts(): Promise<Record<string, unknown>[]> {
+/** GET all warehouse products. Quantity is for the given warehouseId (default warehouse if omitted or empty). */
+export async function getWarehouseProducts(warehouseId?: string): Promise<Record<string, unknown>[]> {
   const supabase = getSupabase();
+  const wid = (warehouseId?.trim?.() && warehouseId) ? warehouseId : getDefaultWarehouseId();
   const { data, error } = await supabase.from(TABLE).select('*').order('updated_at', { ascending: false });
   if (error) throw error;
-  return ((data ?? []) as WarehouseProductRow[]).map(rowToApi);
+  const quantities = await getQuantitiesForWarehouse(wid);
+  return ((data ?? []) as WarehouseProductRow[]).map((row) =>
+    rowToApi(row, quantities.get(row.id) ?? 0)
+  );
 }
 
-/** GET one by id. */
-export async function getWarehouseProductById(id: string): Promise<Record<string, unknown> | null> {
+/** GET one by id. Quantity is for the given warehouseId (default if omitted). */
+export async function getWarehouseProductById(id: string, warehouseId?: string): Promise<Record<string, unknown> | null> {
   const supabase = getSupabase();
   const { data, error } = await supabase.from(TABLE).select('*').eq('id', id).maybeSingle();
   if (error) throw error;
-  return data ? rowToApi(data as WarehouseProductRow) : null;
+  if (!data) return null;
+  const wid = (warehouseId?.trim?.() && warehouseId) ? warehouseId : getDefaultWarehouseId();
+  const qty = await getQuantity(wid, id);
+  return rowToApi(data as WarehouseProductRow, qty);
 }
 
-/** POST: create one. Returns canonical row. Uses id from body or generates UUID. */
+/** POST: create one. Uses warehouseId from body (or default) to set initial quantity in warehouse_inventory. */
 export async function createWarehouseProduct(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const supabase = getSupabase();
   const id: string = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : crypto.randomUUID();
@@ -116,10 +125,13 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
   const row = bodyToRow(body, id, ts);
   const { data, error } = await supabase.from(TABLE).insert(row).select().single();
   if (error) throw error;
-  return rowToApi(data as WarehouseProductRow);
+  const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
+  const quantity = Number(body.quantity) ?? 0;
+  await ensureQuantity(wid, id, quantity);
+  return rowToApi(data as WarehouseProductRow, quantity);
 }
 
-/** PUT: update one. Version check optional (backend can enforce optimistic lock). */
+/** PUT: update one. If body has quantity (and optional warehouseId), updates warehouse_inventory for that warehouse. */
 export async function updateWarehouseProduct(id: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const supabase = getSupabase();
   const ts = now();
@@ -133,7 +145,14 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
   const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version }, id, ts);
   const { data, error } = await supabase.from(TABLE).update(row).eq('id', id).select().single();
   if (error) throw error;
-  return rowToApi(data as WarehouseProductRow);
+  const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
+  if (typeof (body as { quantity?: number }).quantity === 'number') {
+    await setQuantity(wid, id, (body as { quantity: number }).quantity);
+  }
+  const qty = typeof (body as { quantity?: number }).quantity === 'number'
+    ? (body as { quantity: number }).quantity
+    : await getQuantity(wid, id);
+  return rowToApi(data as WarehouseProductRow, qty);
 }
 
 /** DELETE one. */

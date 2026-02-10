@@ -1,3 +1,11 @@
+export interface Warehouse {
+  id: string;
+  name: string;
+  code: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Product {
   id: string;
   sku: string;
@@ -52,6 +60,8 @@ export interface Transaction {
   syncStatus: 'synced' | 'pending' | 'offline';
   createdAt: Date;
   completedAt: Date | null;
+  /** Warehouse (location) where the sale occurred; used for inventory deduction and reporting. */
+  warehouseId?: string;
 }
 
 export interface TransactionItem {

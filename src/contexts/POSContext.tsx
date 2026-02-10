@@ -2,13 +2,14 @@ import { createContext, useContext, useState, ReactNode, useEffect, useCallback 
 import { Transaction, TransactionItem, Payment } from '../types';
 import { useInventory } from './InventoryContext';
 import { useAuth } from './AuthContext';
+import { useWarehouse } from './WarehouseContext';
+import { useToast } from './ToastContext';
 import { generateTransactionNumber, calculateTotal } from '../lib/utils';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL } from '../lib/api';
 import { apiPost } from '../lib/apiClient';
 import {
   getOfflineTransactionQueue,
-  enqueueOfflineTransaction,
   clearOfflineTransactionQueue,
   isIndexedDBAvailable,
 } from '../lib/offlineDb';
@@ -26,6 +27,9 @@ interface POSContextType {
   setDiscount: (amount: number) => void;
   processTransaction: (payments: Payment[], customer?: any) => Promise<Transaction>;
   isOnline: boolean;
+  /** Number of transactions queued for sync (offline or failed). User-visible so sync failure is not silent. */
+  pendingSyncCount: number;
+  refreshPendingSyncCount: () => Promise<void>;
 }
 
 const POSContext = createContext<POSContextType | undefined>(undefined);
@@ -34,15 +38,34 @@ const POSContext = createContext<POSContextType | undefined>(undefined);
 const TAX_RATE = 0.15;
 
 export function POSProvider({ children }: { children: ReactNode }) {
-  const { products, updateProduct } = useInventory();
+  const { products, refreshProducts } = useInventory();
   const { user } = useAuth();
+  const { currentWarehouseId, isWarehouseSelectedForPOS } = useWarehouse();
+  const { showToast } = useToast();
   const [cart, setCart] = useState<TransactionItem[]>([]);
   const [discount, setDiscount] = useState(0);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+
+  const refreshPendingSyncCount = useCallback(async () => {
+    try {
+      if (isIndexedDBAvailable()) {
+        const q = await getOfflineTransactionQueue<Transaction>();
+        setPendingSyncCount(q.length);
+      } else if (isStorageAvailable()) {
+        const q = getStoredData<Transaction[]>('offline_transactions', []);
+        setPendingSyncCount(Array.isArray(q) ? q.length : 0);
+      } else {
+        setPendingSyncCount(0);
+      }
+    } catch {
+      setPendingSyncCount(0);
+    }
+  }, []);
 
   /**
    * Sync offline transactions to API when connection is restored.
-   * Uses IndexedDB queue when available, else localStorage.
+   * On failure: toast user (no silent failure) and leave queue intact.
    */
   const syncOfflineTransactions = useCallback(async () => {
     let offlineQueue: Transaction[] = [];
@@ -51,12 +74,16 @@ export function POSProvider({ children }: { children: ReactNode }) {
     } else if (isStorageAvailable()) {
       offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
     }
-    if (offlineQueue.length === 0) return;
+    if (offlineQueue.length === 0) {
+      setPendingSyncCount(0);
+      return;
+    }
 
     try {
       for (const transaction of offlineQueue) {
         const payload = {
           ...transaction,
+          warehouseId: transaction.warehouseId,
           createdAt: transaction.createdAt instanceof Date ? transaction.createdAt.toISOString() : transaction.createdAt,
           completedAt: transaction.completedAt instanceof Date ? transaction.completedAt?.toISOString() : transaction.completedAt,
         };
@@ -69,32 +96,40 @@ export function POSProvider({ children }: { children: ReactNode }) {
       } else if (isStorageAvailable()) {
         localStorage.removeItem('offline_transactions');
       }
+      setPendingSyncCount(0);
     } catch (error) {
       console.error('Error syncing offline transactions:', error);
+      showToast('error', `${offlineQueue.length} transaction(s) could not be synced. They will retry when the server is available.`);
+      setPendingSyncCount(offlineQueue.length);
     }
-  }, []);
+  }, [showToast]);
 
-  // Monitor online/offline status
+  // Monitor online/offline status; refresh pending count when coming online
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      // Sync offline transactions when connection is restored
       syncOfflineTransactions();
+      refreshPendingSyncCount();
     };
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    if (navigator.onLine) refreshPendingSyncCount();
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [syncOfflineTransactions]);
+  }, [syncOfflineTransactions, refreshPendingSyncCount]);
 
   const addToCart = (productId: string, quantity: number = 1): boolean => {
     if (!productId || quantity <= 0) {
       console.error('Invalid productId or quantity');
+      return false;
+    }
+    if (!isWarehouseSelectedForPOS) {
+      showToast('error', 'Select a warehouse before adding items to the cart');
       return false;
     }
 
@@ -210,9 +245,17 @@ export function POSProvider({ children }: { children: ReactNode }) {
       throw new Error('Cart is empty');
     }
 
+    if (!currentWarehouseId || !isWarehouseSelectedForPOS) {
+      throw new Error('Select a warehouse to complete the sale');
+    }
+
     const subtotal = calculateSubtotal();
     const tax = calculateTax();
     const total = calculateTotalAmount();
+
+    if (!isOnline) {
+      throw new Error('Sales cannot be completed offline. Please connect to the internet and try again.');
+    }
 
     const transaction: Transaction = {
       id: crypto.randomUUID(),
@@ -228,76 +271,38 @@ export function POSProvider({ children }: { children: ReactNode }) {
       cashier: user?.fullName || user?.email || user?.id || 'system',
       customer,
       status: 'completed',
-      syncStatus: isOnline ? 'synced' : 'offline',
+      syncStatus: 'synced',
       createdAt: new Date(),
       completedAt: new Date(),
+      warehouseId: currentWarehouseId,
     };
 
-    // Update inventory (await all updates)
-    await Promise.all(
-      cart.map(async (item) => {
-        const product = products.find(p => p.id === item.productId);
-        if (product && item.quantity > 0) {
-          const newQuantity = Math.max(0, product.quantity - item.quantity);
-          await updateProduct(product.id, {
-            quantity: newQuantity,
-          });
-        }
-      })
-    );
+    // Single atomic call: persist transaction + deduct inventory + stock_movements. No silent success on failure.
+    const transactionPayload = {
+      ...transaction,
+      createdAt: transaction.createdAt.toISOString(),
+      completedAt: transaction.completedAt?.toISOString() ?? null,
+    };
+    const savedRaw = await apiPost<Transaction>(API_BASE_URL, '/api/transactions', transactionPayload, {
+      idempotencyKey: transaction.id,
+    });
 
-    // POST to API when online (resilient client with idempotency)
-    if (isOnline) {
-      try {
-        const transactionPayload = {
-          ...transaction,
-          createdAt: transaction.createdAt.toISOString(),
-          completedAt: transaction.completedAt?.toISOString() ?? null,
-        };
-        const savedRaw = await apiPost<Transaction>(API_BASE_URL, '/api/transactions', transactionPayload, {
-          idempotencyKey: transaction.id,
-        });
-        if (savedRaw) {
-          const savedTransaction: Transaction = {
-            ...savedRaw,
-            createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : transaction.createdAt,
-            completedAt: savedRaw.completedAt ? new Date(savedRaw.completedAt) : transaction.completedAt,
-          };
-          if (isStorageAvailable()) {
-            const transactions = getStoredData<Transaction[]>('transactions', []);
-            setStoredData('transactions', [...transactions, savedTransaction]);
-          }
-          clearCart();
-          return savedTransaction;
-        }
-      } catch (error) {
-        if (isStorageAvailable()) {
-          const transactions = getStoredData<Transaction[]>('transactions', []);
-          setStoredData('transactions', [...transactions, transaction]);
-        }
-        if (isIndexedDBAvailable()) {
-          await enqueueOfflineTransaction(transaction as unknown as Record<string, unknown>);
-        } else if (isStorageAvailable()) {
-          const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
-          setStoredData('offline_transactions', [...offlineQueue, transaction]);
-        }
-      }
+    if (!savedRaw) {
+      throw new Error('Sale could not be saved. Please try again.');
     }
 
-    // Store locally and queue for sync when offline or API failed
+    const savedTransaction: Transaction = {
+      ...savedRaw,
+      createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : transaction.createdAt,
+      completedAt: savedRaw.completedAt ? new Date(savedRaw.completedAt) : transaction.completedAt,
+    };
     if (isStorageAvailable()) {
       const transactions = getStoredData<Transaction[]>('transactions', []);
-      setStoredData('transactions', [...transactions, transaction]);
+      setStoredData('transactions', [...transactions, savedTransaction]);
     }
-    if (!isOnline && isIndexedDBAvailable()) {
-      await enqueueOfflineTransaction(transaction as unknown as Record<string, unknown>);
-    } else if (!isOnline && isStorageAvailable()) {
-      const offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
-      setStoredData('offline_transactions', [...offlineQueue, transaction]);
-    }
-
     clearCart();
-    return transaction;
+    refreshProducts().catch(() => {});
+    return savedTransaction;
   };
 
   return (
@@ -314,6 +319,8 @@ export function POSProvider({ children }: { children: ReactNode }) {
       setDiscount,
       processTransaction,
       isOnline,
+      pendingSyncCount,
+      refreshPendingSyncCount,
     }}>
       {children}
     </POSContext.Provider>

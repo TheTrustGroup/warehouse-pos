@@ -3,6 +3,7 @@ import { lazyWithRetry } from './lib/lazyWithRetry';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
+import { WarehouseProvider } from './contexts/WarehouseContext';
 import { InventoryProvider } from './contexts/InventoryContext';
 import { POSProvider } from './contexts/POSContext';
 import { OrderProvider } from './contexts/OrderContext';
@@ -89,7 +90,8 @@ function App() {
     <ToastProvider>
       <SettingsProvider>
         <AuthProvider>
-          <InventoryProvider>
+          <WarehouseProvider>
+            <InventoryProvider>
             <POSProvider>
               <OrderProvider>
                 <BrowserRouter>
@@ -173,6 +175,7 @@ function App() {
               </OrderProvider>
             </POSProvider>
           </InventoryProvider>
+          </WarehouseProvider>
         </AuthProvider>
       </SettingsProvider>
     </ToastProvider>

@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Product } from '../../types';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
+import { useWarehouse } from '../../contexts/WarehouseContext';
 import { X, Upload } from 'lucide-react';
 
 interface ProductFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void | Promise<void>;
+  onSubmit: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => void | Promise<void>;
   product?: Product | null;
 }
 
 export function ProductFormModal({ isOpen, onClose, onSubmit, product }: ProductFormModalProps) {
+  const { warehouses, currentWarehouseId } = useWarehouse();
   const [formData, setFormData] = useState({
     sku: '',
     barcode: '',
@@ -22,6 +24,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
     costPrice: 0,
     sellingPrice: 0,
     reorderLevel: 0,
+    warehouseId: '' as string,
     location: {
       warehouse: 'Main Store',
       aisle: '',
@@ -56,6 +59,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
         costPrice: product.costPrice,
         sellingPrice: product.sellingPrice,
         reorderLevel: product.reorderLevel,
+        warehouseId: (product as any).warehouseId ?? currentWarehouseId,
         location: product.location && typeof product.location === 'object'
           ? { warehouse: (product.location as any).warehouse ?? 'Main Store', aisle: (product.location as any).aisle ?? '', rack: (product.location as any).rack ?? '', bin: (product.location as any).bin ?? '' }
           : { warehouse: 'Main Store', aisle: '', rack: '', bin: '' },
@@ -81,6 +85,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
         costPrice: 0,
         sellingPrice: 0,
         reorderLevel: 0,
+        warehouseId: currentWarehouseId,
         location: { warehouse: 'Main Store', aisle: '', rack: '', bin: '' },
         supplier: { name: '', contact: '', email: '' },
         images: [],
@@ -90,7 +95,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
       });
       setImagePreview([]);
     }
-  }, [product, isOpen]);
+  }, [product, isOpen, currentWarehouseId]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -283,21 +288,34 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
           </div>
 
-          {/* Location */}
+          {/* Location — Warehouse is first-class: required dropdown; quantity is scoped to selected warehouse. */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Warehouse
+                Warehouse *
               </label>
-              <input
-                type="text"
-                value={formData.location.warehouse}
-                onChange={(e) => setFormData(prev => ({ 
-                  ...prev, 
-                  location: { ...prev.location, warehouse: e.target.value }
-                }))}
+              <select
+                required
+                value={formData.warehouseId || currentWarehouseId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const wh = warehouses.find((w) => w.id === id);
+                  setFormData(prev => ({
+                    ...prev,
+                    warehouseId: id,
+                    location: { ...prev.location, warehouse: wh?.name ?? prev.location.warehouse },
+                  }));
+                }}
                 className="input-field"
-              />
+              >
+                {warehouses.length === 0 ? (
+                  <option value={currentWarehouseId}>Main Store</option>
+                ) : (
+                  warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))
+                )}
+              </select>
             </div>
 
             <div>

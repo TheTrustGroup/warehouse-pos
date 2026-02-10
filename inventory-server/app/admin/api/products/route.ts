@@ -3,9 +3,11 @@ import { getWarehouseProducts, createWarehouseProduct } from '@/lib/data/warehou
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const list = await getWarehouseProducts();
+    const { searchParams } = new URL(request.url);
+    const warehouseId = searchParams.get('warehouse_id') ?? undefined;
+    const list = await getWarehouseProducts(warehouseId);
     return NextResponse.json(list);
   } catch (e) {
     console.error('[admin/api/products GET]', e);

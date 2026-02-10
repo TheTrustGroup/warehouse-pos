@@ -18,6 +18,7 @@ import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from '../lib/apiClient';
+import { useWarehouse } from './WarehouseContext';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
 import { loadProductsFromDb, saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
 import { reportError } from '../lib/observability';
@@ -34,8 +35,8 @@ interface InventoryContextType {
   products: Product[];
   isLoading: boolean;
   error: string | null;
-  addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
-  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
+  addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => Promise<void>;
+  updateProduct: (id: string, updates: Partial<Product> & { warehouseId?: string }) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   deleteProducts: (ids: string[]) => Promise<void>;
   getProduct: (id: string) => Product | undefined;
@@ -64,6 +65,7 @@ export const ADD_PRODUCT_SAVED_LOCALLY =
   'Product saved locally. It will sync to the server when connection is available.';
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
+  const { currentWarehouseId } = useWarehouse();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +73,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /** Ids of products saved only locally (API failed). Cleared when sync succeeds. Used for unsyncedCount and background sync. */
   const [localOnlyIds, setLocalOnlyIds] = useState<Set<string>>(() => new Set());
   const syncRef = useRef<(() => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>) | null>(null);
+
+  /** Products API path with current warehouse for quantity scope. Omit when no selection so backend uses default for list. */
+  const effectiveWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : undefined;
+  const productsPath = (base: string) => effectiveWarehouseId ? `${base}${base.includes('?') ? '&' : '?'}warehouse_id=${encodeURIComponent(effectiveWarehouseId)}` : base;
 
   /**
    * Clear old mock data from localStorage (transactions/orders only).
@@ -140,9 +146,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       try {
         let data: Product[] | null = null;
         try {
-          data = await apiGet<Product[]>(API_BASE_URL, '/admin/api/products', { signal });
+          data = await apiGet<Product[]>(API_BASE_URL, productsPath('/admin/api/products'), { signal });
         } catch {
-          data = await apiGet<Product[]>(API_BASE_URL, '/api/products', { signal });
+          data = await apiGet<Product[]>(API_BASE_URL, productsPath('/api/products'), { signal });
         }
         const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
         const apiIds = new Set(apiProducts.map((p) => p.id));
@@ -268,7 +274,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       mountedRef.current = false;
       ac.abort();
     };
-  }, []);
+  }, [currentWarehouseId]);
 
   // Real-time: poll when tab visible so multiple tabs/devices get updates. Silent so the page doesn't flash "Loading products..." and wipe the Add Product section.
   useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true }), intervalMs: 60_000 });
@@ -288,10 +294,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const readAfterWriteVerify = async (productId: string): Promise<Product> => {
     let list: any[] = [];
     try {
-      const data = await apiGet<any[]>(API_BASE_URL, '/admin/api/products');
+      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/admin/api/products'));
       list = Array.isArray(data) ? data : [];
     } catch {
-      const data = await apiGet<any[]>(API_BASE_URL, '/api/products');
+      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/api/products'));
       list = Array.isArray(data) ? data : [];
     }
     const found = list.find((p: any) => p && p.id === productId);
@@ -313,10 +319,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     if (deletedIds.length === 0) return;
     let list: any[] = [];
     try {
-      const data = await apiGet<any[]>(API_BASE_URL, '/admin/api/products');
+      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/admin/api/products'));
       list = Array.isArray(data) ? data : [];
     } catch {
-      const data = await apiGet<any[]>(API_BASE_URL, '/api/products');
+      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/api/products'));
       list = Array.isArray(data) ? data : [];
     }
     const stillPresent = deletedIds.filter((id) => list.some((p: any) => p && p.id === id));
@@ -347,11 +353,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     let apiIds = new Set<string>();
     try {
       try {
-        const data = await apiGet<any[]>(API_BASE_URL, '/admin/api/products');
+        const data = await apiGet<any[]>(API_BASE_URL, productsPath('/admin/api/products'));
         const list = Array.isArray(data) ? data : [];
         apiIds = new Set(list.map((p: any) => p.id));
       } catch {
-        const data = await apiGet<any[]>(API_BASE_URL, '/api/products');
+        const data = await apiGet<any[]>(API_BASE_URL, productsPath('/api/products'));
         const list = Array.isArray(data) ? data : [];
         apiIds = new Set(list.map((p: any) => p.id));
       }
@@ -417,7 +423,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    * Only consider successful when DB confirms and record can be re-queried. Otherwise throw (no "Saved" without verification).
    * On API failure we save locally and throw ADD_PRODUCT_SAVED_LOCALLY so UI never shows server "Saved" for local-only.
    */
-  const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => {
     if (!productData?.name?.trim?.()) throw new Error('Product name is required');
     const stableId = crypto.randomUUID();
     const payload = productToPayload({
@@ -426,14 +432,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    const bodyWithWarehouse = { ...payload, warehouseId: productData.warehouseId ?? currentWarehouseId };
     let savedRaw: any = null;
     try {
-      savedRaw = await apiPost<any>(API_BASE_URL, '/admin/api/products', payload, {
+      savedRaw = await apiPost<any>(API_BASE_URL, '/admin/api/products', bodyWithWarehouse, {
         idempotencyKey: stableId,
       });
     } catch {
       try {
-        savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', payload, {
+        savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', bodyWithWarehouse, {
           idempotencyKey: stableId,
         });
       } catch {
@@ -463,16 +470,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    * Update product: WRITE PATH. Version check (409) prevents concurrent overwrite; read-after-write ensures persistence.
    * No success without DB commit and verified re-read.
    */
-  const updateProduct = async (id: string, updates: Partial<Product>) => {
+  const updateProduct = async (id: string, updates: Partial<Product> & { warehouseId?: string }) => {
     const product = products.find(p => p.id === id);
     if (!product) throw new Error('Product not found');
 
     const updatedProduct = { ...product, ...updates, updatedAt: new Date() };
     const payload = productToPayload(updatedProduct);
+    const bodyWithWarehouse = { ...payload, warehouseId: updates.warehouseId ?? currentWarehouseId };
 
     const doPut = async (): Promise<any> => {
       try {
-        return await apiPut<any>(API_BASE_URL, `/admin/api/products/${id}`, payload);
+        return await apiPut<any>(API_BASE_URL, `/admin/api/products/${id}`, bodyWithWarehouse);
       } catch (err: any) {
         if (err?.status === 409) {
           await loadProducts();
@@ -488,7 +496,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       await doPut();
     } catch (e) {
       try {
-        await apiPut<any>(API_BASE_URL, `/api/products/${id}`, payload);
+        await apiPut<any>(API_BASE_URL, `/api/products/${id}`, bodyWithWarehouse);
       } catch (err: any) {
         if (err?.status === 409) {
           await loadProducts();

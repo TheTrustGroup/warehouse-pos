@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useEffect, useCallback 
 import { Order, OrderStatus, OrderItem, PaymentStatus, DeliveryInfo } from '../types/order';
 import { useInventory } from './InventoryContext';
 import { useAuth } from './AuthContext';
+import { useWarehouse } from './WarehouseContext';
 import { useToast } from './ToastContext';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPost, apiPatch } from '../lib/apiClient';
@@ -30,6 +31,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const { products, updateProduct } = useInventory();
   const { user } = useAuth();
+  const { currentWarehouseId } = useWarehouse();
   const { showToast } = useToast();
 
   const normalizeOrder = (o: any): Order => ({
@@ -112,7 +114,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     });
   }, [products]);
 
-  // Deduct stock when order goes out for delivery
+  // Deduct stock when order goes out for delivery (scoped to current warehouse)
   const deductStock = useCallback(async (items: OrderItem[]) => {
     await Promise.all(
       items.map(async (item) => {
@@ -120,11 +122,12 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         if (product) {
           await updateProduct(product.id, {
             quantity: product.quantity - item.quantity,
+            warehouseId: currentWarehouseId,
           });
         }
       })
     );
-  }, [products, updateProduct]);
+  }, [products, updateProduct, currentWarehouseId]);
 
   // Return stock to inventory (delivery failed or cancelled)
   const returnStock = useCallback(async (items: OrderItem[]) => {
@@ -134,11 +137,12 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         if (product) {
           await updateProduct(product.id, {
             quantity: product.quantity + item.quantity,
+            warehouseId: currentWarehouseId,
           });
         }
       })
     );
-  }, [products, updateProduct]);
+  }, [products, updateProduct, currentWarehouseId]);
 
   // Create new order
   const createOrder = async (orderData: Partial<Order>): Promise<Order> => {
