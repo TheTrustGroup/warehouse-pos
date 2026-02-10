@@ -138,7 +138,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuthStatus = async () => {
     try {
       setIsLoading(true);
-      const headers = { 'Accept': 'application/json' };
+      const headers: HeadersInit = { 'Accept': 'application/json' };
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      if (token) headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
       const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
 
       // Try /admin/api/me first (same origin as admin panel), then /api/auth/user

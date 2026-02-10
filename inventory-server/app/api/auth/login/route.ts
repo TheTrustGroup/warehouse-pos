@@ -3,6 +3,7 @@ import {
   getRoleFromEmail,
   setSessionCookie,
   sessionUserToJson,
+  createSessionToken,
 } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,10 @@ export async function POST(request: NextRequest) {
     }
 
     const role = getRoleFromEmail(email);
+    const sessionToken = createSessionToken(email, role);
     const response = NextResponse.json({
       user: sessionUserToJson({ email, role, exp: 0 }),
+      token: sessionToken,
     });
     setSessionCookie(response, email, role);
     return response;

@@ -9,7 +9,7 @@ import { useWarehouse } from '../../contexts/WarehouseContext';
 export function Header() {
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse } = useWarehouse();
+  const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse, refreshWarehouses, isLoading } = useWarehouse();
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -50,27 +50,36 @@ export function Header() {
         </form>
       </div>
 
-      {/* Warehouse selector: inventory and POS are scoped to selected warehouse. */}
-      {warehouses.length > 0 && (
-        <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
-          <MapPin className="w-4 h-4 text-slate-500" aria-hidden />
+      {/* Warehouse selector: always visible; dropdown when list loaded, else label + retry so it never looks faded. */}
+      <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
+        <MapPin className="w-4 h-4 text-slate-600" aria-hidden />
+        {warehouses.length > 0 ? (
           <select
             value={currentWarehouseId}
             onChange={(e) => setCurrentWarehouseId(e.target.value)}
-            className="text-sm font-medium text-slate-700 bg-slate-50/80 border border-slate-200/60 rounded-lg px-3 py-2 focus:border-primary-500 focus:outline-none"
+            className="text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-primary-500 focus:outline-none"
             aria-label="Current warehouse"
           >
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
           </select>
-        </div>
-      )}
-      {warehouses.length === 0 && !currentWarehouse && (
-        <div className="hidden sm:flex items-center gap-2 text-slate-500 text-sm" aria-hidden>
-          <MapPin className="w-4 h-4" /> Main Store
-        </div>
-      )}
+        ) : (
+          <span className="text-sm font-medium text-slate-800">
+            {currentWarehouse?.name ?? (currentWarehouseId ? 'Warehouse' : 'Main Store')}
+          </span>
+        )}
+        {warehouses.length === 0 && !isLoading && (
+          <button
+            type="button"
+            onClick={() => refreshWarehouses()}
+            className="text-xs font-medium text-primary-600 hover:text-primary-700"
+            aria-label="Reload warehouses"
+          >
+            Reload
+          </button>
+        )}
+      </div>
 
       {/* Right Section: search, logout, alerts only. Role switch is in sidebar/mobile menu only. */}
       <div className="flex items-center gap-2 flex-shrink-0">

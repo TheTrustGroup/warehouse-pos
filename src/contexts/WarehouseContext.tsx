@@ -46,16 +46,14 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
         setCurrentWarehouseIdState((prev) => {
           const exists = arr.some((w) => w.id === prev);
           if (exists) return prev;
-          // Single warehouse: use it (explicit, not silent — UI shows "Selling from: X").
           if (arr.length === 1) return arr[0].id;
-          // Multiple warehouses: no silent default; require explicit selection.
           return '';
         });
-      } else {
-        setCurrentWarehouseIdState('');
       }
+      // On empty list from API, keep current selection (don't clear) so products still load for default warehouse.
     } catch {
       setWarehouses([]);
+      // On error (e.g. 401), keep currentWarehouseId so dropdown area and products still work after auth is restored.
     } finally {
       setIsLoading(false);
     }

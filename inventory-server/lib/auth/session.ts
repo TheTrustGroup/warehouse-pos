@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRoleFromEmail, isAdmin, canAccessPos, type BackendRole } from './roles';
 
 const COOKIE_NAME = 'warehouse_session';
-const MAX_AGE_SEC = 24 * 60 * 60; // 24h
+const MAX_AGE_SEC = 7 * 24 * 60 * 60; // 7 days so refresh doesn't log out
 
 function getSecret(): string {
   const s = process.env.SESSION_SECRET;
@@ -33,16 +33,34 @@ export interface Session {
 }
 
 export function getSession(request: NextRequest): Session | null {
+  const authHeader = request.headers.get('authorization');
+  const bearer = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  if (bearer) {
+    const session = parseTokenValue(bearer);
+    if (session) return session;
+  }
   const cookie = request.cookies.get(COOKIE_NAME)?.value;
   if (!cookie) return null;
+  return parseTokenValue(cookie);
+}
 
-  const i = cookie.lastIndexOf('.');
+function setCookiePayload(payload: Record<string, unknown>): string {
+  payload.exp = Math.floor(Date.now() / 1000) + MAX_AGE_SEC;
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  return `${encoded}.${sign(encoded)}`;
+}
+
+/** Same signed token string used for cookie; return in login response so frontend can send Authorization: Bearer and survive refresh when cookies are blocked (cross-origin). */
+export function createSessionToken(email: string, role: BackendRole): string {
+  return setCookiePayload({ email: email.trim().toLowerCase(), role });
+}
+
+function parseTokenValue(value: string): Session | null {
+  const i = value.lastIndexOf('.');
   if (i === -1) return null;
-
-  const payload = cookie.slice(0, i);
-  const sig = cookie.slice(i + 1);
+  const payload = value.slice(0, i);
+  const sig = value.slice(i + 1);
   if (sign(payload) !== sig) return null;
-
   try {
     const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     if (!decoded.email || !decoded.role || !decoded.exp) return null;
@@ -55,12 +73,6 @@ export function getSession(request: NextRequest): Session | null {
   } catch {
     return null;
   }
-}
-
-function setCookiePayload(payload: Record<string, unknown>): string {
-  payload.exp = Math.floor(Date.now() / 1000) + MAX_AGE_SEC;
-  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
-  return `${encoded}.${sign(encoded)}`;
 }
 
 export function setSessionCookie(
