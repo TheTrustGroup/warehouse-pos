@@ -3,14 +3,14 @@ import { Transaction, TransactionItem, Payment } from '../types';
 import { useInventory } from './InventoryContext';
 import { useAuth } from './AuthContext';
 import { useWarehouse } from './WarehouseContext';
+import { useStore } from './StoreContext';
 import { useToast } from './ToastContext';
 import { generateTransactionNumber, calculateTotal } from '../lib/utils';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
-import { API_BASE_URL } from '../lib/api';
-import { apiPost } from '../lib/apiClient';
+import { getPosEventCounts, enqueuePosEvent, isPosEventQueueAvailable } from '../lib/posEventQueue';
+import { syncPendingPosEvents } from '../lib/offlineSync';
 import {
   getOfflineTransactionQueue,
-  clearOfflineTransactionQueue,
   isIndexedDBAvailable,
 } from '../lib/offlineDb';
 
@@ -27,9 +27,11 @@ interface POSContextType {
   setDiscount: (amount: number) => void;
   processTransaction: (payments: Payment[], customer?: any) => Promise<Transaction>;
   isOnline: boolean;
-  /** Number of transactions queued for sync (offline or failed). User-visible so sync failure is not silent. */
+  /** Pending + failed events (Phase 4). User-visible so sync failure is not silent. */
   pendingSyncCount: number;
   refreshPendingSyncCount: () => Promise<void>;
+  /** Manual "Sync now" for pending events. */
+  syncNow: () => Promise<void>;
 }
 
 const POSContext = createContext<POSContextType | undefined>(undefined);
@@ -41,6 +43,7 @@ export function POSProvider({ children }: { children: ReactNode }) {
   const { products, refreshProducts } = useInventory();
   const { user } = useAuth();
   const { currentWarehouseId, isWarehouseSelectedForPOS } = useWarehouse();
+  const { currentStoreId } = useStore();
   const { showToast } = useToast();
   const [cart, setCart] = useState<TransactionItem[]>([]);
   const [discount, setDiscount] = useState(0);
@@ -49,9 +52,12 @@ export function POSProvider({ children }: { children: ReactNode }) {
 
   const refreshPendingSyncCount = useCallback(async () => {
     try {
-      if (isIndexedDBAvailable()) {
+      if (isPosEventQueueAvailable()) {
+        const { pending, failed } = await getPosEventCounts();
+        setPendingSyncCount(pending + failed);
+      } else if (isIndexedDBAvailable()) {
         const q = await getOfflineTransactionQueue<Transaction>();
-        setPendingSyncCount(q.length);
+        setPendingSyncCount(Array.isArray(q) ? q.length : 0);
       } else if (isStorageAvailable()) {
         const q = getStoredData<Transaction[]>('offline_transactions', []);
         setPendingSyncCount(Array.isArray(q) ? q.length : 0);
@@ -63,65 +69,42 @@ export function POSProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  /**
-   * Sync offline transactions to API when connection is restored.
-   * On failure: toast user (no silent failure) and leave queue intact.
-   */
-  const syncOfflineTransactions = useCallback(async () => {
-    let offlineQueue: Transaction[] = [];
-    if (isIndexedDBAvailable()) {
-      offlineQueue = await getOfflineTransactionQueue<Transaction>();
-    } else if (isStorageAvailable()) {
-      offlineQueue = getStoredData<Transaction[]>('offline_transactions', []);
+  /** Phase 4: Sync pending POS events (oldest first). Idempotent; no double deduction. */
+  const syncPending = useCallback(async () => {
+    const result = await syncPendingPosEvents();
+    await refreshPendingSyncCount();
+    if (result.failed > 0) {
+      showToast('error', `${result.failed} sale(s) could not be synced (e.g. insufficient stock). Check sync status.`);
     }
-    if (offlineQueue.length === 0) {
-      setPendingSyncCount(0);
-      return;
+    if (result.synced > 0 && result.pending === 0) {
+      showToast('success', 'All pending sales synced.');
     }
+  }, [showToast, refreshPendingSyncCount]);
 
-    try {
-      for (const transaction of offlineQueue) {
-        const payload = {
-          ...transaction,
-          warehouseId: transaction.warehouseId,
-          createdAt: transaction.createdAt instanceof Date ? transaction.createdAt.toISOString() : transaction.createdAt,
-          completedAt: transaction.completedAt instanceof Date ? transaction.completedAt?.toISOString() : transaction.completedAt,
-        };
-        await apiPost(API_BASE_URL, '/api/transactions', payload, {
-          idempotencyKey: transaction.id || transaction.transactionNumber,
-        });
-      }
-      if (isIndexedDBAvailable()) {
-        await clearOfflineTransactionQueue();
-      } else if (isStorageAvailable()) {
-        localStorage.removeItem('offline_transactions');
-      }
-      setPendingSyncCount(0);
-    } catch (error) {
-      console.error('Error syncing offline transactions:', error);
-      showToast('error', `${offlineQueue.length} transaction(s) could not be synced. They will retry when the server is available.`);
-      setPendingSyncCount(offlineQueue.length);
-    }
-  }, [showToast]);
+  const syncNow = useCallback(async () => {
+    await syncPending();
+  }, [syncPending]);
 
-  // Monitor online/offline status; refresh pending count when coming online
+  // On app load and when coming online: sync pending events
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      syncOfflineTransactions();
-      refreshPendingSyncCount();
+      syncPending();
     };
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    if (navigator.onLine) refreshPendingSyncCount();
+    if (navigator.onLine) {
+      refreshPendingSyncCount();
+      syncPending();
+    }
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [syncOfflineTransactions, refreshPendingSyncCount]);
+  }, [syncPending, refreshPendingSyncCount]);
 
   const addToCart = (productId: string, quantity: number = 1): boolean => {
     if (!productId || quantity <= 0) {
@@ -253,10 +236,6 @@ export function POSProvider({ children }: { children: ReactNode }) {
     const tax = calculateTax();
     const total = calculateTotalAmount();
 
-    if (!isOnline) {
-      throw new Error('Sales cannot be completed offline. Please connect to the internet and try again.');
-    }
-
     const transaction: Transaction = {
       id: crypto.randomUUID(),
       transactionNumber: generateTransactionNumber(),
@@ -271,38 +250,46 @@ export function POSProvider({ children }: { children: ReactNode }) {
       cashier: user?.fullName || user?.email || user?.id || 'system',
       customer,
       status: 'completed',
-      syncStatus: 'synced',
+      syncStatus: isOnline ? 'synced' : 'pending',
       createdAt: new Date(),
       completedAt: new Date(),
       warehouseId: currentWarehouseId,
     };
 
-    // Single atomic call: persist transaction + deduct inventory + stock_movements. No silent success on failure.
     const transactionPayload = {
       ...transaction,
       createdAt: transaction.createdAt.toISOString(),
       completedAt: transaction.completedAt?.toISOString() ?? null,
     };
-    const savedRaw = await apiPost<Transaction>(API_BASE_URL, '/api/transactions', transactionPayload, {
-      idempotencyKey: transaction.id,
-    });
 
-    if (!savedRaw) {
-      throw new Error('Sale could not be saved. Please try again.');
+    // Phase 4: always enqueue event (idempotency key = event_id). UI success immediate; sync in background.
+    const eventId = crypto.randomUUID();
+    if (isPosEventQueueAvailable()) {
+      await enqueuePosEvent({
+        event_id: eventId,
+        type: 'SALE',
+        payload: transactionPayload as Record<string, unknown>,
+        warehouse_id: currentWarehouseId,
+        store_id: currentStoreId ?? null,
+        pos_id: null,
+        operator_id: null,
+        created_at: new Date().toISOString(),
+        status: 'PENDING',
+      });
+    } else {
+      throw new Error('Offline queue not available. Please try again.');
     }
 
-    const savedTransaction: Transaction = {
-      ...savedRaw,
-      createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : transaction.createdAt,
-      completedAt: savedRaw.completedAt ? new Date(savedRaw.completedAt) : transaction.completedAt,
-    };
     if (isStorageAvailable()) {
       const transactions = getStoredData<Transaction[]>('transactions', []);
-      setStoredData('transactions', [...transactions, savedTransaction]);
+      setStoredData('transactions', [...transactions, transaction]);
     }
     clearCart();
+    refreshPendingSyncCount();
+    syncPending(); // background; no await so UI stays fast
     refreshProducts().catch(() => {});
-    return savedTransaction;
+
+    return transaction;
   };
 
   return (
@@ -321,6 +308,7 @@ export function POSProvider({ children }: { children: ReactNode }) {
       isOnline,
       pendingSyncCount,
       refreshPendingSyncCount,
+      syncNow,
     }}>
       {children}
     </POSContext.Provider>

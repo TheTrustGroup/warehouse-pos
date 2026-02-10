@@ -74,6 +74,9 @@ function normalizeUserData(userData: any): User {
     isActive: userData.isActive !== undefined ? userData.isActive : true,
     lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : new Date(),
     createdAt: userData.createdAt ? new Date(userData.createdAt) : new Date(),
+    warehouseId: userData.warehouse_id ?? userData.warehouseId ?? undefined,
+    storeId: userData.store_id !== undefined ? userData.store_id : userData.storeId,
+    deviceId: userData.device_id ?? userData.deviceId ?? undefined,
   };
 }
 

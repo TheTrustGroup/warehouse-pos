@@ -1,9 +1,19 @@
+export interface Store {
+  id: string;
+  name: string;
+  status: 'active' | 'inactive';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Warehouse {
   id: string;
   name: string;
   code: string;
   createdAt: string;
   updatedAt: string;
+  /** Optional (Phase 3). Warehouse belongs to this store when set. */
+  storeId?: string | null;
 }
 
 export interface Product {
@@ -62,6 +72,10 @@ export interface Transaction {
   completedAt: Date | null;
   /** Warehouse (location) where the sale occurred; used for inventory deduction and reporting. */
   warehouseId?: string;
+  /** Optional (Phase 3). Store where the sale occurred. */
+  storeId?: string | null;
+  /** Optional (Phase 3). POS device id. */
+  posId?: string | null;
 }
 
 export interface TransactionItem {
@@ -110,6 +124,12 @@ export interface User {
   isActive: boolean;
   lastLogin: Date;
   createdAt: Date;
+  /** When set, session is bound to this warehouse; POS/inventory must use it (selector hidden). */
+  warehouseId?: string;
+  /** Optional store context from session (future). */
+  storeId?: string | null;
+  /** Optional device/POS id from session (future). */
+  deviceId?: string;
 }
 
 export interface DashboardStats {

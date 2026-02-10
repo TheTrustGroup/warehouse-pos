@@ -4,13 +4,16 @@
  */
 
 const DB_NAME = 'warehouse-pos';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_PRODUCTS = 'products';
 const STORE_OFFLINE_TX = 'offline_transactions';
+/** Phase 4: append-only event queue for offline sync (event_id = idempotency key). */
+export const STORE_POS_EVENT_QUEUE = 'pos_event_queue';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-function openDb(): Promise<IDBDatabase> {
+/** Open shared IndexedDB (used by offlineDb and posEventQueue). */
+export function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
@@ -20,13 +23,18 @@ function openDb(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => resolve(req.result);
-    req.onupgradeneeded = () => {
-      const db = req.result;
+    req.onupgradeneeded = (ev) => {
+      const db = (ev.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_PRODUCTS)) {
         db.createObjectStore(STORE_PRODUCTS, { keyPath: 'id' });
       }
       if (!db.objectStoreNames.contains(STORE_OFFLINE_TX)) {
         db.createObjectStore(STORE_OFFLINE_TX, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORE_POS_EVENT_QUEUE)) {
+        const store = db.createObjectStore(STORE_POS_EVENT_QUEUE, { keyPath: 'event_id' });
+        store.createIndex('by_status', 'status', { unique: false });
+        store.createIndex('by_created_at', 'created_at', { unique: false });
       }
     };
   });

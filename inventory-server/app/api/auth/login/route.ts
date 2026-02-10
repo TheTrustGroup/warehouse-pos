@@ -8,7 +8,7 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-/** Login: derive role from email (server-side). Set session; return user with that role. */
+/** Login: derive role from email (server-side). Optional binding: warehouse_id, store_id, device_id (not required). */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -18,12 +18,21 @@ export async function POST(request: NextRequest) {
     }
 
     const role = getRoleFromEmail(email);
-    const sessionToken = createSessionToken(email, role);
+    const binding =
+      body.warehouse_id != null || body.store_id !== undefined || body.device_id != null
+        ? {
+            warehouse_id: body.warehouse_id != null ? String(body.warehouse_id).trim() : undefined,
+            store_id: body.store_id !== undefined ? body.store_id : undefined,
+            device_id: body.device_id != null ? String(body.device_id).trim() : undefined,
+          }
+        : undefined;
+    const sessionPayload = { email, role, exp: 0, ...binding };
+    const sessionToken = createSessionToken(email, role, binding);
     const response = NextResponse.json({
-      user: sessionUserToJson({ email, role, exp: 0 }),
+      user: sessionUserToJson(sessionPayload as import('@/lib/auth/session').Session),
       token: sessionToken,
     });
-    setSessionCookie(response, email, role);
+    setSessionCookie(response, email, role, binding);
     return response;
   } catch (err) {
     const msg = err instanceof Error ? err.message : '';

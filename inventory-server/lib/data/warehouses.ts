@@ -25,6 +25,7 @@ export interface WarehouseRow {
   code: string;
   created_at: string;
   updated_at: string;
+  store_id?: string | null;
 }
 
 export interface Warehouse {
@@ -33,6 +34,8 @@ export interface Warehouse {
   code: string;
   createdAt: string;
   updatedAt: string;
+  /** Optional (Phase 3). Warehouse belongs to this store when set. */
+  storeId?: string | null;
 }
 
 function rowToApi(row: WarehouseRow): Warehouse {
@@ -42,13 +45,21 @@ function rowToApi(row: WarehouseRow): Warehouse {
     code: row.code,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    storeId: row.store_id ?? undefined,
   };
 }
 
-/** GET all warehouses. */
-export async function getWarehouses(): Promise<Warehouse[]> {
+/** GET warehouses. Optional filter by store_id; optional allowedWarehouseIds (scope). */
+export async function getWarehouses(options?: { storeId?: string; allowedWarehouseIds?: string[] | null }): Promise<Warehouse[]> {
   const supabase = getSupabase();
-  const { data, error } = await supabase.from(TABLE).select('*').order('name');
+  let query = supabase.from(TABLE).select('*').order('name');
+  if (options?.storeId?.trim()) {
+    query = query.eq('store_id', options.storeId.trim());
+  }
+  if (options?.allowedWarehouseIds != null && options.allowedWarehouseIds.length > 0) {
+    query = query.in('id', options.allowedWarehouseIds);
+  }
+  const { data, error } = await query;
   if (error) throw error;
   return ((data ?? []) as WarehouseRow[]).map(rowToApi);
 }

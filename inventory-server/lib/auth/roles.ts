@@ -65,3 +65,8 @@ export function isAdmin(role: string): boolean {
 export function canAccessPos(role: string): boolean {
   return ['admin', 'super_admin', 'manager', 'cashier'].includes(role);
 }
+
+/** Can deduct or return stock (orders): POS roles + warehouse. Admins retain full access. */
+export function canWarehouseDeductOrReturn(role: string): boolean {
+  return ['admin', 'super_admin', 'manager', 'cashier', 'warehouse'].includes(role);
+}
