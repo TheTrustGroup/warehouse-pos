@@ -75,10 +75,10 @@ export function ProductTableView({
     return { label: 'In Stock', color: 'text-green-600 bg-green-50' };
   };
 
-  /* Table: consistent cell padding (px-4 py-3), horizontal scroll on small screens only when needed */
+  /* Table: consistent cell padding; horizontal scroll on small screens; no clipped content */
   return (
     <div className="table-container">
-      <div className="overflow-x-auto -mx-1">
+      <div className="overflow-x-auto -mx-1 overscroll-x-contain">
         <table className="w-full min-w-[800px]">
           <thead className="table-header sticky top-0 z-10">
             <tr>

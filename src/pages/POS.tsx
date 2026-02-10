@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { WifiOff, ShoppingCart, Trash2, MapPin } from 'lucide-react';
+import { WifiOff, ShoppingCart, Trash2, MapPin, Lock, Store, RefreshCw } from 'lucide-react';
 import { usePOS } from '../contexts/POSContext';
 import { useOrders } from '../contexts/OrderContext';
 import { useToast } from '../contexts/ToastContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
+import { useStore } from '../contexts/StoreContext';
 import { ProductSearch } from '../components/pos/ProductSearch';
 import { Cart } from '../components/pos/Cart';
 import { PaymentPanel } from '../components/pos/PaymentPanel';
@@ -13,10 +14,11 @@ import { Transaction, Payment } from '../types';
 const DELIVERY_FEE = 20;
 
 export function POS() {
-  const { cart, clearCart, isOnline, processTransaction, calculateSubtotal, calculateTax, calculateTotal, discount, pendingSyncCount } = usePOS();
+  const { cart, clearCart, isOnline, processTransaction, calculateSubtotal, calculateTax, calculateTotal, discount, pendingSyncCount, syncNow } = usePOS();
   const { createOrder } = useOrders();
   const { showToast } = useToast();
-  const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse } = useWarehouse();
+  const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse, isWarehouseBoundToSession } = useWarehouse();
+  const { stores, currentStoreId, setCurrentStoreId, currentStore, isSingleStore } = useStore();
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(null);
 
@@ -119,7 +121,7 @@ export function POS() {
               <select
                 value=""
                 onChange={(e) => setCurrentWarehouseId(e.target.value)}
-                className="mt-3 input-field w-full max-w-xs bg-white border-amber-300 min-h-touch"
+                className="mt-3 input-field w-full max-w-xs bg-white border-amber-300"
                 aria-label="Select warehouse"
               >
                 <option value="">— Select warehouse —</option>
@@ -132,15 +134,45 @@ export function POS() {
         </div>
       )}
 
+      {stores.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-slate-600 text-sm">
+          <Store className="w-4 h-4" aria-hidden />
+          {isSingleStore && currentStore ? (
+            <span>Store: <strong>{currentStore.name}</strong></span>
+          ) : stores.length > 1 ? (
+            <>
+              <span>Store:</span>
+              <select
+                value={currentStoreId ?? ''}
+                onChange={(e) => setCurrentStoreId(e.target.value || null)}
+                className="input-field text-sm bg-white max-w-[180px]"
+                aria-label="Select store"
+              >
+                <option value="">— Select store —</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </>
+          ) : null}
+        </div>
+      )}
+
       {currentWarehouse && !warehouseRequired && (
         <div className="flex flex-wrap items-center gap-2 text-slate-600 text-sm">
           <MapPin className="w-4 h-4" aria-hidden />
           <span>Selling from: <strong>{currentWarehouse.name}</strong></span>
-          {warehouses.length > 1 && (
+          {isWarehouseBoundToSession && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600" title="This session is bound to this warehouse">
+              <Lock className="w-3.5 h-3.5" aria-hidden />
+              <span>Bound to location</span>
+            </span>
+          )}
+          {!isWarehouseBoundToSession && warehouses.length > 1 && (
             <select
               value={currentWarehouseId}
               onChange={(e) => setCurrentWarehouseId(e.target.value)}
-              className="min-h-touch text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white"
+              className="input-field text-sm bg-white max-w-[180px]"
               aria-label="Change warehouse"
             >
               {warehouses.map((w) => (
@@ -159,16 +191,31 @@ export function POS() {
             </div>
             <div>
               <p className="font-medium text-amber-900">Offline</p>
-              <p className="text-sm text-amber-700">Connect to complete the sale.</p>
+              <p className="text-sm text-amber-700">Sales are saved locally and will sync when connection is restored.</p>
             </div>
           </div>
         </div>
       )}
 
-      {isOnline && pendingSyncCount > 0 && (
+      {pendingSyncCount > 0 && (
         <div className="glass-card bg-amber-50/80 border border-amber-200/50 p-4">
-          <p className="font-medium text-amber-900">{pendingSyncCount} transaction(s) pending sync</p>
-          <p className="text-sm text-amber-700 mt-0.5">They will retry when the server is available.</p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="font-medium text-amber-900">{pendingSyncCount} sale(s) pending or failed sync</p>
+              <p className="text-sm text-amber-700 mt-0.5">Sync when online or tap Sync now. Failed items may need admin review.</p>
+            </div>
+            {isOnline && (
+              <button
+                type="button"
+                onClick={() => syncNow()}
+                className="btn-secondary inline-flex items-center gap-2 self-start sm:self-center"
+                aria-label="Sync pending sales now"
+              >
+                <RefreshCw className="w-4 h-4" aria-hidden />
+                Sync now
+              </button>
+            )}
+          </div>
         </div>
       )}
 

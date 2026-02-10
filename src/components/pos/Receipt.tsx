@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Transaction } from '../../types';
 import { formatCurrency, formatDateTime } from '../../lib/utils';
 import { X, Printer, Mail } from 'lucide-react';
@@ -8,14 +9,37 @@ interface ReceiptProps {
 }
 
 export function Receipt({ transaction, onClose }: ReceiptProps) {
+  useEffect(() => {
+    const lock = () => document.body.classList.add('scroll-lock');
+    const unlock = () => document.body.classList.remove('scroll-lock');
+    lock();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      unlock();
+    };
+  }, [onClose]);
+
   const handlePrint = () => {
     window.print();
   };
 
-  /* Receipt modal: primary = Print; Close secondary. Same glass-card and spacing as ProductFormModal. */
+  /* Receipt modal: backdrop click + Escape close; scroll lock. Primary = Print; Close secondary. */
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="receipt-title">
-      <div className="glass-card rounded-2xl shadow-large max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm modal-overlay-padding"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="receipt-title"
+      onClick={() => onClose()}
+    >
+      <div
+        className="glass-card rounded-2xl shadow-large max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-4 border-b border-slate-200/50 flex items-center justify-between flex-shrink-0 print:hidden">
           <h2 id="receipt-title" className="text-xl font-bold text-slate-900 tracking-tight">Receipt</h2>
           <button type="button" onClick={onClose} className="btn-action" aria-label="Close">

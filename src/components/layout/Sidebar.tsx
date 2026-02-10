@@ -95,7 +95,7 @@ export function Sidebar() {
             <select
               value={user?.role ?? 'viewer'}
               onChange={(e) => switchRole(e.target.value)}
-              className="w-full min-h-touch rounded-xl border border-slate-200/60 bg-white/80 px-3 py-2.5 text-sm font-medium text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/10"
+              className="input-field w-full text-sm font-medium text-slate-900"
               aria-label="Switch role to see different features"
             >
               {Object.values(ROLES).map((role) => (

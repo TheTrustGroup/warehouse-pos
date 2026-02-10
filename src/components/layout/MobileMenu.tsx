@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import {
@@ -48,6 +48,12 @@ export function MobileMenu() {
       ('permission' in item && item.permission && hasPermission(item.permission)) ||
       ('anyPermissions' in item && item.anyPermissions && hasAnyPermission(item.anyPermissions))
   );
+
+  useEffect(() => {
+    if (isOpen) document.body.classList.add('scroll-lock');
+    else document.body.classList.remove('scroll-lock');
+    return () => document.body.classList.remove('scroll-lock');
+  }, [isOpen]);
 
   return (
     <>
@@ -106,7 +112,7 @@ export function MobileMenu() {
                 <select
                   value={user?.role ?? 'viewer'}
                   onChange={(e) => { switchRole(e.target.value); setIsOpen(false); }}
-                  className="w-full rounded-lg border border-slate-200/60 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+                  className="input-field w-full text-sm font-medium text-slate-900"
                   aria-label="Switch role"
                 >
                   {Object.values(ROLES).map((role) => (

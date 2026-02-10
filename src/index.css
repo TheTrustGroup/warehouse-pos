@@ -17,21 +17,34 @@
  * (min-w table preserved for readability).
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Font: Inter only, loaded in index.html (400,500,600,700). No additional font imports. */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ---- Design tokens: spacing rhythm (used for section/input/button consistency) ---- */
+/* ---- Design tokens: mobile-first spacing & typography ---- */
 :root {
+  /* Spacing rhythm (section > block > inline) */
   --space-section: 1.5rem;   /* 24px: between major sections */
   --space-block: 1rem;        /* 16px: between related blocks */
   --space-inline: 0.75rem;    /* 12px: between inline elements */
-  --touch-min: 44px;          /* Minimum hit area (accessibility, thumb reach) */
-  --input-height: 44px;       /* Input min-height for comfort, no cramped fields */
+  --touch-min: 44px;          /* Minimum hit area (WCAG, thumb reach) */
+  --input-height: 44px;       /* Input/select min-height; no cramped fields */
   --radius-base: 10px;
   --radius-lg: 12px;
+  /* Typography: one scale. Use text-xs/sm/base/lg/xl/2xl only; headings avoid overpowering on small screens */
+  --text-xs: 0.75rem;        /* 12px labels, captions */
+  --text-sm: 0.875rem;       /* 14px body secondary, helper */
+  --text-base: 1rem;         /* 16px body (no zoom required) */
+  --text-lg: 1.125rem;       /* 18px card titles */
+  --text-xl: 1.25rem;        /* 20px page section titles */
+  --text-2xl: 1.5rem;        /* 24px page title (mobile max for H1) */
+  /* Safe area: iOS notch/home indicator; fixed elements respect these */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 @layer base {
@@ -227,6 +240,20 @@
   /* Smooth Scale */
   .scale-98 {
     transform: scale(0.98);
+  }
+
+  /* Scroll lock: when modal or mobile menu is open; body gets this class */
+  .scroll-lock {
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  /* Modal overlay: padding respects safe-area so content is not under notch/home indicator */
+  .modal-overlay-padding {
+    padding-top: max(1rem, var(--safe-top));
+    padding-right: max(1rem, var(--safe-right));
+    padding-bottom: max(1rem, var(--safe-bottom));
+    padding-left: max(1rem, var(--safe-left));
   }
 
   /* Glass Background */

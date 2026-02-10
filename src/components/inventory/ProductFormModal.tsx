@@ -142,12 +142,36 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
     }
   };
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const lock = () => document.body.classList.add('scroll-lock');
+    const unlock = () => document.body.classList.remove('scroll-lock');
+    lock();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      unlock();
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
-  /* Modal: one primary action = Save/Update; Cancel secondary. Section spacing = space-y-6. */
+  /* Modal: one primary action = Save/Update; Cancel secondary. Backdrop click + Escape close. Scroll lock when open. */
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="product-form-title">
-      <div className="glass rounded-2xl shadow-large max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-overlay-padding"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="product-form-title"
+      onClick={() => onClose()}
+    >
+      <div
+        className="glass rounded-2xl shadow-large max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="sticky top-0 glass border-b border-slate-200/50 px-6 py-4 flex items-center justify-between z-10">
           <h2 id="product-form-title" className="text-xl font-bold text-slate-900 tracking-tight">
             {product ? 'Edit product' : 'Add product'}

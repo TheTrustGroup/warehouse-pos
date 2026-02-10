@@ -33,7 +33,7 @@ export function Header() {
   };
 
   return (
-    <header className="fixed top-0 left-0 lg:left-[280px] right-0 h-[72px] bg-glass border-b border-white/40 flex items-center justify-between px-4 lg:px-8 z-10 backdrop-blur-xl">
+    <header className="fixed top-0 left-0 lg:left-[280px] right-0 min-h-[72px] bg-glass border-b border-white/40 flex items-center justify-between pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] lg:px-8 pt-[var(--safe-top)] z-10 backdrop-blur-xl">
       {/* Search Bar */}
       {/* Search: adequate hit area; label-style placeholder, not loud */}
       <div className="flex-1 max-w-2xl">
@@ -57,7 +57,7 @@ export function Header() {
           <select
             value={currentWarehouseId || ''}
             onChange={(e) => setCurrentWarehouseId(e.target.value)}
-            className="text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-primary-500 focus:outline-none"
+            className="input-field min-h-touch text-sm font-medium text-slate-800 bg-white max-w-[200px]"
             aria-label="Current warehouse"
           >
             {!currentWarehouseId && (

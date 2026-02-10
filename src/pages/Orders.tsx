@@ -68,8 +68,8 @@ export function Orders() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Orders</h1>
-          <p className="text-slate-600 mt-1">{filteredOrders.length} orders found</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Orders</h1>
+          <p className="text-slate-600 text-sm mt-0.5">{filteredOrders.length} orders found</p>
         </div>
         <button className="btn-primary flex items-center gap-2">
           <Plus className="w-5 h-5" />
@@ -157,7 +157,8 @@ export function Orders() {
           <select
             value={selectedStatus}
             onChange={e => setSelectedStatus(e.target.value as OrderStatus | 'all')}
-            className="px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+            className="input-field"
+            aria-label="Filter by status"
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>

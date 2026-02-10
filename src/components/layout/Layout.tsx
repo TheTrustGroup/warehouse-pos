@@ -29,8 +29,8 @@ export function Layout() {
       </div>
       <MobileMenu />
       <Header />
-      {/* Main: consistent padding (block rhythm), no horizontal scroll on small viewports */}
-      <main className="lg:ml-[280px] mt-[72px] pt-20 lg:pt-8 px-4 lg:px-8 pb-8 min-h-[calc(100vh-72px)] max-w-[1600px]">
+      {/* Main: clear fixed header (72px + safe-area), safe-area padding, no horizontal scroll */}
+      <main className="lg:ml-[280px] mt-[calc(72px+var(--safe-top))] pt-20 lg:pt-8 pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] lg:px-8 pb-[max(2rem,var(--safe-bottom))] min-h-[calc(100vh-72px)] max-w-[1600px] overflow-x-hidden">
         <Outlet />
       </main>
     </div>
