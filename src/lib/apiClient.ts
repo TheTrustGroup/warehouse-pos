@@ -87,7 +87,7 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
   let lastError: Error | null = null;
   let attempt = 0;
 
-  while (true) {
+  for (;;) {
     try {
       const res = await fetch(url, fetchOpts);
 
@@ -101,7 +101,8 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
       }
 
       const body = await res.json().catch(() => ({ message: res.statusText }));
-      const err = new Error(body?.message || `HTTP ${res.status}: ${res.statusText}`) as Error & {
+      const msg = body?.error ?? body?.message ?? `HTTP ${res.status}: ${res.statusText}`;
+      const err = new Error(typeof msg === 'string' ? msg : 'Request failed') as Error & {
         status?: number;
         response?: Response;
       };

@@ -29,7 +29,7 @@ const OrderContext = createContext<OrderContextType | undefined>(undefined);
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { products, updateProduct } = useInventory();
+  const { products, refreshProducts } = useInventory();
   const { user } = useAuth();
   const { currentWarehouseId } = useWarehouse();
   const { showToast } = useToast();
@@ -114,35 +114,27 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     });
   }, [products]);
 
-  // Deduct stock when order goes out for delivery (scoped to current warehouse)
+  // Atomic deduct when order goes out for delivery (same as POS; no read-modify-write race).
   const deductStock = useCallback(async (items: OrderItem[]) => {
-    await Promise.all(
-      items.map(async (item) => {
-        const product = products.find(p => p.id === item.productId);
-        if (product) {
-          await updateProduct(product.id, {
-            quantity: product.quantity - item.quantity,
-            warehouseId: currentWarehouseId,
-          });
-        }
-      })
-    );
-  }, [products, updateProduct, currentWarehouseId]);
+    if (!currentWarehouseId || items.length === 0) return;
+    const payload = {
+      warehouseId: currentWarehouseId,
+      items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+    };
+    await apiPost(API_BASE_URL, '/api/orders/deduct', payload);
+    await refreshProducts();
+  }, [currentWarehouseId, refreshProducts]);
 
-  // Return stock to inventory (delivery failed or cancelled)
+  // Atomic add when delivery failed or order cancelled (return stock).
   const returnStock = useCallback(async (items: OrderItem[]) => {
-    await Promise.all(
-      items.map(async (item) => {
-        const product = products.find(p => p.id === item.productId);
-        if (product) {
-          await updateProduct(product.id, {
-            quantity: product.quantity + item.quantity,
-            warehouseId: currentWarehouseId,
-          });
-        }
-      })
-    );
-  }, [products, updateProduct, currentWarehouseId]);
+    if (!currentWarehouseId || items.length === 0) return;
+    const payload = {
+      warehouseId: currentWarehouseId,
+      items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+    };
+    await apiPost(API_BASE_URL, '/api/orders/return-stock', payload);
+    await refreshProducts();
+  }, [currentWarehouseId, refreshProducts]);
 
   // Create new order
   const createOrder = async (orderData: Partial<Order>): Promise<Order> => {

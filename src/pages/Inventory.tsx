@@ -11,13 +11,13 @@ import { InventoryFilters } from '../components/inventory/InventoryFilters';
 import { InventorySearchBar } from '../components/inventory/InventorySearchBar';
 import { Product } from '../types';
 import { PERMISSIONS } from '../types/permissions';
-import { getCategoryDisplay, getLocationDisplay } from '../lib/utils';
+import { getCategoryDisplay, getLocationDisplay, formatRelativeTime } from '../lib/utils';
 import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, RefreshCw, Upload } from 'lucide-react';
 
 type ViewMode = 'table' | 'grid';
 
 export function Inventory() {
-  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi, unsyncedCount } = useInventory();
+  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi, unsyncedCount, lastSyncAt } = useInventory();
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
   const [searchParams] = useSearchParams();
@@ -289,6 +289,11 @@ export function Inventory() {
             {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''} found
             {filteredProducts.length !== products.length && ` of ${products.length}`}
           </p>
+          {lastSyncAt && (
+            <p className="text-slate-400 text-xs mt-0.5" aria-live="polite">
+              Updated {formatRelativeTime(lastSyncAt)}
+            </p>
+          )}
         </div>
         {canCreate && (
           <button

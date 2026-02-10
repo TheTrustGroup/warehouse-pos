@@ -10,8 +10,21 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const warehouseId = searchParams.get('warehouse_id') ?? undefined;
-    const list = await getWarehouseProducts(warehouseId);
-    return NextResponse.json(list);
+    const limit = searchParams.get('limit');
+    const offset = searchParams.get('offset');
+    const q = searchParams.get('q') ?? undefined;
+    const category = searchParams.get('category') ?? undefined;
+    const lowStock = searchParams.get('low_stock') === '1' || searchParams.get('low_stock') === 'true';
+    const outOfStock = searchParams.get('out_of_stock') === '1' || searchParams.get('out_of_stock') === 'true';
+    const result = await getWarehouseProducts(warehouseId, {
+      limit: limit != null ? parseInt(limit, 10) : undefined,
+      offset: offset != null ? parseInt(offset, 10) : undefined,
+      q,
+      category,
+      lowStock,
+      outOfStock,
+    });
+    return NextResponse.json({ data: result.data, total: result.total });
   } catch (e) {
     console.error('[admin/api/products GET]', e);
     return NextResponse.json(

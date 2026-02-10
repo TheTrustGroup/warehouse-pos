@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useRef, ReactNode, useEffect, useCallback } from 'react';
 import { User } from '../types';
-import { ROLES, Permission } from '../types/permissions';
+import { ROLES, PERMISSIONS, Permission } from '../types/permissions';
 import { API_BASE_URL, handleApiResponse } from '../lib/api';
 
 const DEMO_ROLE_KEY = 'warehouse_demo_role';
@@ -44,13 +44,20 @@ function getSuperAdminEmails(): Set<string> {
   return new Set(raw.split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean));
 }
 
+/** Backend role values that should be treated as cashier (POS access, no admin). */
+const CASHIER_ROLE_ALIASES = ['cashier', 'sales_person', 'salesperson', 'sales'];
+
 /**
  * Normalize user data from API response.
  * If user email is in VITE_SUPER_ADMIN_EMAILS, role is forced to super_admin so your credentials stay full access.
+ * Cashier-like roles are always mapped to CASHIER so POS access is guaranteed.
  */
 function normalizeUserData(userData: any): User {
-  const roleKey = userData.role?.toUpperCase?.()?.replace(/\s+/g, '_');
-  const role = ROLES[roleKey] ?? (userData.role === 'super_admin' ? ROLES.SUPER_ADMIN : null) ?? ROLES.VIEWER;
+  const rawRole = (userData.role ?? '').toString().trim().toLowerCase();
+  const roleKey = rawRole.toUpperCase().replace(/\s+/g, '_');
+  let role = ROLES[roleKey] ?? (rawRole === 'super_admin' ? ROLES.SUPER_ADMIN : null);
+  if (!role && CASHIER_ROLE_ALIASES.includes(rawRole)) role = ROLES.CASHIER;
+  role = role ?? ROLES.VIEWER;
   const superAdminEmails = getSuperAdminEmails();
   const email = (userData.email ?? '').trim().toLowerCase();
   const isSuperAdmin = superAdminEmails.has(email);
@@ -143,9 +150,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
       const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
 
-      // Try /admin/api/me first (same origin as admin panel), then /api/auth/user
+      // Try /admin/api/me first, then /api/auth/user on 404 or 403 (so cashiers never get stuck when /admin returns Forbidden)
       let response = await fetch(`${API_BASE_URL}/admin/api/me`, opts);
-      if (response.status === 404) {
+      if (response.status === 404 || response.status === 403) {
         response = await fetch(`${API_BASE_URL}/api/auth/user`, opts);
       }
 
@@ -358,7 +365,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const logout = async () => {
     try {
-      let res = await fetch(`${API_BASE_URL}/admin/api/logout`, { method: 'POST', credentials: 'include' });
+      const res = await fetch(`${API_BASE_URL}/admin/api/logout`, { method: 'POST', credentials: 'include' });
       if (res.status === 404) {
         await fetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
       }
@@ -377,6 +384,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasPermission = (permission: Permission): boolean => {
     if (!user) return false;
+    if (permission === PERMISSIONS.POS.ACCESS && user.role === 'cashier') return true;
     return user.permissions.includes(permission);
   };
 

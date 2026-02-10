@@ -7,7 +7,18 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getDefaultWarehouseId } from './warehouses';
-import { getQuantitiesForWarehouse, getQuantity, ensureQuantity, setQuantity } from './warehouseInventory';
+import { getQuantitiesForProducts, getQuantity, ensureQuantity, setQuantity } from './warehouseInventory';
+
+export interface ListProductsOptions {
+  limit?: number;
+  offset?: number;
+  q?: string;
+  category?: string;
+  lowStock?: boolean;
+  outOfStock?: boolean;
+  /** When true, return minimal fields for POS (id, name, sku, barcode, sellingPrice, quantity). */
+  pos?: boolean;
+}
 
 const TABLE = 'warehouse_products';
 
@@ -94,16 +105,82 @@ function bodyToRow(body: Record<string, unknown>, id: string, ts: string): Recor
   };
 }
 
-/** GET all warehouse products. Quantity is for the given warehouseId (default warehouse if omitted or empty). */
-export async function getWarehouseProducts(warehouseId?: string): Promise<Record<string, unknown>[]> {
+const DEFAULT_LIMIT = 500;
+const MAX_LIMIT = 2000;
+
+/** GET warehouse products with optional pagination, search, and filters. Quantity is for the given warehouse. */
+export async function getWarehouseProducts(
+  warehouseId?: string,
+  options: ListProductsOptions = {}
+): Promise<{ data: Record<string, unknown>[]; total?: number }> {
   const supabase = getSupabase();
   const wid = (warehouseId?.trim?.() && warehouseId) ? warehouseId : getDefaultWarehouseId();
-  const { data, error } = await supabase.from(TABLE).select('*').order('updated_at', { ascending: false });
+  const limit = Math.min(Math.max(1, options.limit ?? DEFAULT_LIMIT), MAX_LIMIT);
+  const offset = Math.max(0, options.offset ?? 0);
+  const q = (options.q ?? '').trim();
+  const category = (options.category ?? '').trim();
+  const lowStock = options.lowStock === true;
+  const outOfStock = options.outOfStock === true;
+  const pos = options.pos === true;
+
+  const selectOpts = pos
+    ? { count: 'exact' as const }
+    : { count: 'exact' as const };
+  let query = supabase
+    .from(TABLE)
+    .select(pos ? 'id, name, sku, barcode, selling_price, reorder_level, updated_at' : '*', selectOpts)
+    .order('updated_at', { ascending: false });
+
+  if (q) {
+    const safe = q.replace(/'/g, "''").replace(/%/g, '\\%').replace(/\\/g, '\\\\');
+    const pattern = `%${safe}%`;
+    const quoted = `"${pattern.replace(/"/g, '""')}"`;
+    query = query.or(`name.ilike.${quoted},sku.ilike.${quoted},barcode.ilike.${quoted}`);
+  }
+  if (category) {
+    query = query.eq('category', category);
+  }
+
+  const { data: rows, error, count } = await query.range(offset, offset + limit - 1);
   if (error) throw error;
-  const quantities = await getQuantitiesForWarehouse(wid);
-  return ((data ?? []) as WarehouseProductRow[]).map((row) =>
-    rowToApi(row, quantities.get(row.id) ?? 0)
-  );
+
+  const productRows = (rows ?? []) as WarehouseProductRow[];
+  if (productRows.length === 0) {
+    return { data: [], total: count ?? 0 };
+  }
+  const ids = productRows.map((r) => r.id);
+  const quantities = await getQuantitiesForProducts(wid, ids);
+
+  let merged = productRows.map((row) => {
+    const qty = quantities.get(row.id) ?? 0;
+    return pos ? posRowToApi(row, qty) : rowToApi(row, qty);
+  });
+
+  if (lowStock || outOfStock) {
+    merged = merged.filter((p) => {
+      const qty = Number((p as { quantity?: number }).quantity ?? 0);
+      const reorder = Number((p as { reorderLevel?: number }).reorderLevel ?? 0);
+      if (outOfStock && qty === 0) return true;
+      if (lowStock && qty > 0 && qty <= reorder) return true;
+      return false;
+    });
+  }
+
+  const total = count ?? (q || category ? undefined : merged.length);
+  return { data: merged, total: total ?? undefined };
+}
+
+function posRowToApi(row: WarehouseProductRow, quantity: number): Record<string, unknown> {
+  return {
+    id: row.id,
+    name: row.name,
+    sku: row.sku,
+    barcode: row.barcode ?? '',
+    sellingPrice: row.selling_price,
+    reorderLevel: row.reorder_level ?? 0,
+    quantity,
+    updatedAt: row.updated_at,
+  };
 }
 
 /** GET one by id. Quantity is for the given warehouseId (default if omitted). */
@@ -136,7 +213,7 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
   return rowToApi(data as WarehouseProductRow, quantity);
 }
 
-/** PUT: update one. If body has quantity (and optional warehouseId), updates warehouse_inventory for that warehouse. */
+/** PUT: update one. If body has quantity (and optional warehouseId), updates warehouse_inventory for that warehouse. Optimistic lock: WHERE version = ?; 409 if conflict. */
 export async function updateWarehouseProduct(id: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const supabase = getSupabase();
   const ts = now();
@@ -146,10 +223,22 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
     err.status = 404;
     throw err;
   }
-  const version = Number(body.version ?? existing.version ?? 0);
-  const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version }, id, ts);
-  const { data, error } = await supabase.from(TABLE).update(row).eq('id', id).select().single();
+  const currentVersion = Number(existing.version ?? 0);
+  const nextVersion = currentVersion + 1;
+  const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: nextVersion }, id, ts);
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ ...row, version: nextVersion })
+    .eq('id', id)
+    .eq('version', currentVersion)
+    .select()
+    .maybeSingle();
   if (error) throw error;
+  if (!data) {
+    const err = new Error('Product was updated by someone else. Please refresh and try again.') as Error & { status?: number };
+    err.status = 409;
+    throw err;
+  }
   const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
   if (typeof (body as { quantity?: number }).quantity === 'number') {
     await setQuantity(wid, id, (body as { quantity: number }).quantity);

@@ -47,6 +47,8 @@ interface InventoryContextType {
   syncLocalInventoryToApi: () => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>;
   /** Number of products that exist only on this device (not yet on server). Always 0 when API is source of truth. */
   unsyncedCount: number;
+  /** Last time product list was successfully loaded from server (for "Updated X ago"). */
+  lastSyncAt: Date | null;
 }
 
 export interface ProductFilters {
@@ -69,6 +71,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
   const mountedRef = useRef(true);
   /** Ids of products saved only locally (API failed). Cleared when sync succeeds. Used for unsyncedCount and background sync. */
   const [localOnlyIds, setLocalOnlyIds] = useState<Set<string>>(() => new Set());
@@ -76,7 +79,21 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   /** Products API path with current warehouse for quantity scope. When no warehouse selected, use default (Main Store) so backfilled past inventory still shows. */
   const effectiveWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : DEFAULT_WAREHOUSE_ID;
-  const productsPath = (base: string) => `${base}${base.includes('?') ? '&' : '?'}warehouse_id=${encodeURIComponent(effectiveWarehouseId)}`;
+  const PRODUCTS_CACHE_TTL_MS = 60_000; // 60s per-warehouse cache
+  const cacheRef = useRef<Record<string, { data: Product[]; ts: number }>>({});
+
+  const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
+    const params = new URLSearchParams();
+    params.set('warehouse_id', effectiveWarehouseId);
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.offset != null) params.set('offset', String(opts.offset));
+    if (opts?.q) params.set('q', opts.q);
+    if (opts?.category) params.set('category', opts.category);
+    if (opts?.low_stock) params.set('low_stock', 'true');
+    if (opts?.out_of_stock) params.set('out_of_stock', 'true');
+    const qs = params.toString();
+    return `${base}${base.includes('?') ? '&' : '?'}${qs}`;
+  };
 
   /**
    * Clear old mock data from localStorage (transactions/orders only).
@@ -131,30 +148,47 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   /**
    * Load products: SERVER IS SINGLE SOURCE OF TRUTH.
+   * Uses per-warehouse cache (TTL 60s): on warehouse switch show cached list immediately and refresh in background.
    * Uses resilient client (retries, circuit breaker). On failure → fallback to localStorage/IndexedDB.
    * @param signal - AbortSignal for cancellation (e.g. on unmount).
    * @param options.silent - If true, do not show full-page loading (for background refresh). Default false.
    */
   const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean }) => {
     const silent = options?.silent === true;
+    const wid = effectiveWarehouseId;
+    const cached = cacheRef.current[wid];
+    const now = Date.now();
+    const cacheValid = cached && (now - cached.ts) < PRODUCTS_CACHE_TTL_MS;
+    if (cacheValid && cached.data.length > 0) {
+      setProducts(cached.data);
+      setIsLoading(false);
+      setError(null);
+    }
     try {
-      if (!silent) {
+      if (!silent && !cacheValid) {
         setIsLoading(true);
         setError(null);
       }
 
       try {
-        // Try /api/products first so one round-trip for all roles (admin + cashier). Avoids 403-then-200 delay for non-admins.
-        let data: Product[] | null = null;
+        const path = productsPath('/api/products', { limit: 1000 });
+        let raw: { data?: Product[]; total?: number } | Product[] | null = null;
         try {
-          data = await apiGet<Product[]>(API_BASE_URL, productsPath('/api/products'), { signal });
-        } catch {
-          data = await apiGet<Product[]>(API_BASE_URL, productsPath('/admin/api/products'), { signal });
+          raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, { signal });
+        } catch (e) {
+          const status = (e as { status?: number })?.status;
+          // Only fall back to admin endpoint when /api/products is not found (404). Never on 403 — cashiers must use /api/products only.
+          if (status === 404) {
+            raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: 1000 }), { signal });
+          } else {
+            throw e;
+          }
         }
+        const data = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && Array.isArray((raw as { data?: Product[] }).data) ? (raw as { data: Product[] }).data : []);
         const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
         const apiIds = new Set(apiProducts.map((p) => p.id));
         // Keep products that exist only locally (e.g. added while offline or when API failed) so inventory never vanishes
-        let localOnly: Product[] = [];
+        const localOnly: Product[] = [];
         if (isStorageAvailable()) {
           try {
             const localRaw = getStoredData<any[]>('warehouse_products', []);
@@ -213,6 +247,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         setProducts(merged);
         if (!silent) setError(null);
+        setLastSyncAt(new Date());
+        cacheRef.current[wid] = { data: merged, ts: Date.now() };
         if (isIndexedDBAvailable()) {
           saveProductsToDb(merged).catch((e) => {
             reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: merged.length });
@@ -336,11 +372,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const readAfterWriteVerify = async (productId: string): Promise<Product> => {
     let list: any[] = [];
     try {
-      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/api/products'));
-      list = Array.isArray(data) ? data : [];
+      const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/api/products'));
+      list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
     } catch {
-      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/admin/api/products'));
-      list = Array.isArray(data) ? data : [];
+      const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/admin/api/products'));
+      list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
     }
     const found = list.find((p: any) => p && p.id === productId);
     if (!found) {
@@ -361,11 +397,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     if (deletedIds.length === 0) return;
     let list: any[] = [];
     try {
-      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/api/products'));
-      list = Array.isArray(data) ? data : [];
+      const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/api/products'));
+      list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
     } catch {
-      const data = await apiGet<any[]>(API_BASE_URL, productsPath('/admin/api/products'));
-      list = Array.isArray(data) ? data : [];
+      const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/admin/api/products'));
+      list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
     }
     const stillPresent = deletedIds.filter((id) => list.some((p: any) => p && p.id === id));
     if (stillPresent.length > 0) {
@@ -395,12 +431,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     let apiIds = new Set<string>();
     try {
       try {
-        const data = await apiGet<any[]>(API_BASE_URL, productsPath('/admin/api/products'));
-        const list = Array.isArray(data) ? data : [];
+        const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/admin/api/products'));
+        const list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
         apiIds = new Set(list.map((p: any) => p.id));
       } catch {
-        const data = await apiGet<any[]>(API_BASE_URL, productsPath('/api/products'));
-        const list = Array.isArray(data) ? data : [];
+        const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/api/products'));
+        const list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
         apiIds = new Set(list.map((p: any) => p.id));
       }
     } catch {
@@ -674,6 +710,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       refreshProducts: loadProducts,
       syncLocalInventoryToApi,
       unsyncedCount: localOnlyIds.size,
+      lastSyncAt,
     }}>
       {children}
     </InventoryContext.Provider>

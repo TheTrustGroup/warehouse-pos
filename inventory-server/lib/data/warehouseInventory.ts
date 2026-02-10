@@ -46,6 +46,26 @@ export async function getQuantitiesForWarehouse(warehouseId: string): Promise<Ma
   return map;
 }
 
+/** Get quantities for specific products in a warehouse. Returns Map<productId, quantity>. */
+export async function getQuantitiesForProducts(
+  warehouseId: string,
+  productIds: string[]
+): Promise<Map<string, number>> {
+  if (productIds.length === 0) return new Map();
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('product_id, quantity')
+    .eq('warehouse_id', warehouseId)
+    .in('product_id', productIds);
+  if (error) throw error;
+  const map = new Map<string, number>();
+  for (const row of (data ?? []) as { product_id: string; quantity: number }[]) {
+    map.set(row.product_id, Number(row.quantity));
+  }
+  return map;
+}
+
 /** Set quantity for (warehouse_id, product_id). Upserts. */
 export async function setQuantity(
   warehouseId: string,
@@ -102,6 +122,36 @@ export async function processSaleDeductions(
   if (error) {
     const err = new Error(error.message) as Error & { status?: number };
     err.status = error.message?.includes('INSUFFICIENT_STOCK') ? 409 : 400;
+    throw err;
+  }
+}
+
+/** Item for batch add (return stock). */
+export interface ReturnItem {
+  productId: string;
+  quantity: number;
+}
+
+/**
+ * Atomic batch add for order returns. Runs in one DB transaction.
+ */
+export async function processReturnStock(
+  warehouseId: string,
+  items: ReturnItem[]
+): Promise<void> {
+  if (items.length === 0) return;
+  const supabase = getSupabase();
+  const payload = items.map((i) => ({
+    productId: i.productId,
+    quantity: Math.max(0, Math.floor(i.quantity)),
+  }));
+  const { error } = await supabase.rpc('process_return_stock', {
+    p_warehouse_id: warehouseId,
+    p_items: payload,
+  });
+  if (error) {
+    const err = new Error(error.message) as Error & { status?: number };
+    err.status = 400;
     throw err;
   }
 }

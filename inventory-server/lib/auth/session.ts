@@ -21,7 +21,7 @@ function getSecret(): string {
 }
 
 function sign(value: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires -- Node crypto for HMAC
   const crypto = require('crypto') as typeof import('crypto');
   return crypto.createHmac('sha256', getSecret()).update(value).digest('hex');
 }

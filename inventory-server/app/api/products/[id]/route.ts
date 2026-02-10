@@ -38,11 +38,12 @@ export async function PUT(
     const updated = await updateWarehouseProduct(id, body);
     return NextResponse.json(updated);
   } catch (e: unknown) {
-    const err = e as { status?: number };
+    const err = e as Error & { status?: number };
     if (err?.status === 404) return NextResponse.json({ message: 'Product not found' }, { status: 404 });
+    if (err?.status === 409) return NextResponse.json({ message: err.message ?? 'Version conflict' }, { status: 409 });
     console.error('[api/products/[id] PUT]', e);
     return NextResponse.json(
-      { message: e instanceof Error ? e.message : 'Failed to update product' },
+      { message: e instanceof Error ? (e as Error).message : 'Failed to update product' },
       { status: 400 }
     );
   }
