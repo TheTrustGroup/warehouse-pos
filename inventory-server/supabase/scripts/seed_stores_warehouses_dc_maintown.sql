@@ -66,3 +66,19 @@ WHERE s.name = 'Main town'
     WHERE us.user_email = 'maintown@extremedeptkidz.com'
       AND us.warehouse_id = w.id
   );
+
+-- 7. Same Main town scope for maintown_cashier@ (common login for Main town POS)
+INSERT INTO user_scopes (user_email, store_id, warehouse_id, created_at)
+SELECT
+  'maintown_cashier@extremedeptkidz.com',
+  s.id,
+  w.id,
+  now()
+FROM stores s
+JOIN warehouses w ON w.code = 'MAINTOWN' AND w.store_id = s.id
+WHERE s.name = 'Main town'
+  AND NOT EXISTS (
+    SELECT 1 FROM user_scopes us
+    WHERE us.user_email = 'maintown_cashier@extremedeptkidz.com'
+      AND us.warehouse_id = w.id
+  );

@@ -9,11 +9,15 @@ import { useStore } from '../../contexts/StoreContext';
 
 export function Header() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const { currentStore, isSingleStore } = useStore();
   const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse, refreshWarehouses, isLoading, isWarehouseBoundToSession } = useWarehouse();
+  /** Main Town POS: show only "Main Town", no store/location dropdowns. Fallback: single store named "Main town" when API doesn't return assignedPos. */
+  const isMainTownPos =
+    user?.assignedPos === 'main_town' ||
+    (isSingleStore && currentStore?.name?.trim().toLowerCase() === 'main town');
   /** Single assigned POS: show location as static text, not a dropdown. */
-  const showLocationAsStatic = isSingleStore && (warehouses.length <= 1 || isWarehouseBoundToSession);
+  const showLocationAsStatic = isMainTownPos || (isSingleStore && (warehouses.length <= 1 || isWarehouseBoundToSession));
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -54,9 +58,9 @@ export function Header() {
         </form>
       </div>
 
-      {/* Store & warehouse: show current location so POS/staff know which store they're at. */}
+      {/* Store & warehouse: show current location so POS/staff know which store they're at. Main Town POS: only "Main Town", no store/dropdown. */}
       <div className="hidden sm:flex items-center gap-3 flex-shrink-0">
-        {currentStore && (
+        {!isMainTownPos && currentStore && (
           <span className="text-sm font-medium text-slate-700 whitespace-nowrap" title="Current store">
             Store: <strong className="text-slate-900">{currentStore.name}</strong>
           </span>
@@ -65,7 +69,7 @@ export function Header() {
           <MapPin className="w-4 h-4 text-slate-600" aria-hidden />
           {showLocationAsStatic || warehouses.length === 0 ? (
           <span className="text-sm font-medium text-slate-800">
-            {currentWarehouse?.name ?? (currentWarehouseId ? 'Warehouse' : 'Main Store')}
+            {isMainTownPos ? 'Main Town' : (currentWarehouse?.name ?? (currentWarehouseId ? 'Warehouse' : 'Main Store'))}
           </span>
         ) : (
           <select

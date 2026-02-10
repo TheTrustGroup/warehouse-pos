@@ -24,8 +24,10 @@ export function POS() {
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(null);
 
-  /** User is assigned to Main Town POS only: show fixed "Main Town" text, no store/warehouse dropdowns. */
-  const isMainTownPos = user?.assignedPos === 'main_town';
+  /** User is assigned to Main Town POS only: show fixed "Main Town" text, no store/warehouse dropdowns. Fallback: single store named "Main town" when API doesn't return assignedPos. */
+  const isMainTownPos =
+    user?.assignedPos === 'main_town' ||
+    (isSingleStore && currentStore?.name?.trim().toLowerCase() === 'main town');
   /** User has one assigned POS (one store + one warehouse): show fixed location only, no dropdowns. */
   const hasSinglePOSLocation = !isMainTownPos && isSingleStore && warehouses.length === 1;
   /** POS requires warehouse selection when multiple warehouses exist. No silent default. */
