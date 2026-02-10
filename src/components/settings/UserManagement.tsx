@@ -1,12 +1,22 @@
-import { useState } from 'react';
-import { Users as UsersIcon, Plus, Shield, KeyRound, Copy } from 'lucide-react';
-import { User } from '../../types';
+import { useState, useEffect, useCallback } from 'react';
+import { Users as UsersIcon, Plus, Shield, KeyRound, Copy, MapPin, Trash2 } from 'lucide-react';
+import { User, Warehouse } from '../../types';
 import { ROLES } from '../../types/permissions';
 import { emailForRole, getDefaultUserPassword, ROLES_WITH_SHARED_PASSWORD } from '../../constants/defaultCredentials';
 import { useToast } from '../../contexts/ToastContext';
+import { useStore } from '../../contexts/StoreContext';
+import { API_BASE_URL } from '../../lib/api';
+import { apiGet } from '../../lib/apiClient';
+import { getUserScopes, setUserScopes } from '../../services/userScopesApi';
+
+interface ScopeEntry {
+  storeId: string;
+  warehouseId: string;
+  storeName?: string;
+  warehouseName?: string;
+}
 
 export function UserManagement() {
-  // Users are managed in the backend - no local state needed
   const [users] = useState<User[]>([]);
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUser, setNewUser] = useState({
@@ -16,6 +26,83 @@ export function UserManagement() {
     password: getDefaultUserPassword(),
   });
   const { showToast } = useToast();
+  const { stores } = useStore();
+
+  // Store & warehouse assignment (admin)
+  const [scopeEmail, setScopeEmail] = useState('');
+  const [scopeList, setScopeList] = useState<ScopeEntry[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState('');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
+  const [warehousesForStore, setWarehousesForStore] = useState<Warehouse[]>([]);
+  const [loadingScopes, setLoadingScopes] = useState(false);
+  const [savingScopes, setSavingScopes] = useState(false);
+
+  const suggestedScopeEmail = newUser.role === 'admin' || newUser.role === 'super_admin' ? '' : (newUser.email || emailForRole(newUser.role));
+
+  const loadScopesForEmail = useCallback(async (email: string) => {
+    const e = email?.trim()?.toLowerCase();
+    if (!e) return;
+    setLoadingScopes(true);
+    try {
+      const scopes = await getUserScopes(e);
+      setScopeList(scopes.map((s) => ({ storeId: s.storeId, warehouseId: s.warehouseId, storeName: s.storeName, warehouseName: s.warehouseName })));
+    } catch {
+      showToast('error', 'Failed to load scope for this user.');
+      setScopeList([]);
+    } finally {
+      setLoadingScopes(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    if (!selectedStoreId?.trim()) {
+      setWarehousesForStore([]);
+      setSelectedWarehouseId('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await apiGet<Warehouse[]>(API_BASE_URL, `/api/warehouses?store_id=${encodeURIComponent(selectedStoreId)}`);
+        if (!cancelled && Array.isArray(list)) setWarehousesForStore(list);
+        else if (!cancelled) setWarehousesForStore([]);
+      } catch {
+        if (!cancelled) setWarehousesForStore([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedStoreId]);
+
+  const addScopeEntry = () => {
+    if (!selectedStoreId?.trim() || !selectedWarehouseId?.trim()) return;
+    const store = stores.find((s) => s.id === selectedStoreId);
+    const wh = warehousesForStore.find((w) => w.id === selectedWarehouseId);
+    const exists = scopeList.some((s) => s.storeId === selectedStoreId && s.warehouseId === selectedWarehouseId);
+    if (exists) return;
+    setScopeList((prev) => [...prev, { storeId: selectedStoreId, warehouseId: selectedWarehouseId, storeName: store?.name, warehouseName: wh?.name }]);
+    setSelectedWarehouseId('');
+  };
+
+  const removeScopeEntry = (index: number) => {
+    setScopeList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveScopes = async () => {
+    const e = scopeEmail?.trim()?.toLowerCase();
+    if (!e) {
+      showToast('error', 'Enter the user’s login email.');
+      return;
+    }
+    setSavingScopes(true);
+    try {
+      await setUserScopes(e, scopeList.map((s) => ({ storeId: s.storeId, warehouseId: s.warehouseId })));
+      showToast('success', 'Store & warehouse access saved. User will see only these locations in POS.');
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Failed to save.');
+    } finally {
+      setSavingScopes(false);
+    }
+  };
 
   const roleColors: Record<string, string> = {
     admin: 'bg-purple-100 text-purple-700',
@@ -317,6 +404,119 @@ Create this user in your backend admin panel with these exact credentials.`;
           </div>
         </div>
       )}
+
+      {/* Assign store & warehouse to user (admin). No assignment = access to all (legacy). */}
+      <div className="mt-8 pt-8 border-t border-slate-200">
+        <div className="flex items-center gap-2 mb-3">
+          <MapPin className="w-5 h-5 text-primary-600" aria-hidden />
+          <h3 className="text-lg font-semibold text-slate-900">Store & warehouse access</h3>
+        </div>
+        <p className="text-sm text-slate-600 mb-4">
+          Assign which store(s) and warehouse(s) a user can use in POS. No assignment = access to all (legacy). Use the login email of the user.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">User email (login)</label>
+            <div className="flex gap-2 flex-wrap">
+              <input
+                type="email"
+                value={scopeEmail}
+                onChange={(e) => setScopeEmail(e.target.value)}
+                onBlur={() => scopeEmail.trim() && loadScopesForEmail(scopeEmail)}
+                placeholder="e.g. cashier@extremedeptkidz.com"
+                className="input-field flex-1 min-w-[200px]"
+                aria-label="User email for scope"
+              />
+              <button
+                type="button"
+                onClick={() => loadScopesForEmail(scopeEmail)}
+                disabled={loadingScopes || !scopeEmail.trim()}
+                className="btn-secondary"
+              >
+                {loadingScopes ? 'Loading…' : 'Load'}
+              </button>
+              {showAddUser && suggestedScopeEmail && (
+                <button
+                  type="button"
+                  onClick={() => { setScopeEmail(suggestedScopeEmail); loadScopesForEmail(suggestedScopeEmail); }}
+                  className="btn-secondary text-sm"
+                >
+                  Use suggested ({suggestedScopeEmail})
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Store</label>
+              <select
+                value={selectedStoreId}
+                onChange={(e) => setSelectedStoreId(e.target.value)}
+                className="input-field w-full"
+                aria-label="Select store"
+              >
+                <option value="">— Select store —</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Warehouse</label>
+              <select
+                value={selectedWarehouseId}
+                onChange={(e) => setSelectedWarehouseId(e.target.value)}
+                disabled={!selectedStoreId}
+                className="input-field w-full"
+                aria-label="Select warehouse"
+              >
+                <option value="">— Select warehouse —</option>
+                {warehousesForStore.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={addScopeEntry}
+            disabled={!selectedStoreId || !selectedWarehouseId}
+            className="btn-secondary"
+          >
+            Add location
+          </button>
+          {scopeList.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-2">Assigned locations</p>
+              <ul className="space-y-2">
+                {scopeList.map((entry, i) => (
+                  <li key={`${entry.storeId}-${entry.warehouseId}-${i}`} className="flex items-center justify-between gap-2 py-2 px-3 bg-slate-50 rounded-xl border border-slate-200/60">
+                    <span className="text-sm text-slate-800">
+                      {entry.storeName ?? entry.storeId} → {entry.warehouseName ?? entry.warehouseId}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeScopeEntry(i)}
+                      className="btn-action btn-action-delete"
+                      aria-label="Remove location"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={handleSaveScopes}
+                disabled={savingScopes}
+                className="btn-primary mt-3"
+              >
+                {savingScopes ? 'Saving…' : 'Save store & warehouse access'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
       </div>
     </div>
   );
