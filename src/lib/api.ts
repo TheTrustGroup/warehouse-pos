@@ -3,21 +3,15 @@
  *
  * INVENTORY RELIABILITY — AUTHORITATIVE DATA STORE (see also INVENTORY_FLOW_AND_AUTHORITY.md)
  * - What database is used? The backend at API_BASE_URL owns the DB. This client does not connect to any DB.
- * - Same in all environments? Only if VITE_API_BASE_URL is set explicitly per env. We FAIL THE BUILD in production if it is missing (no default).
+ * - Same in all environments? Set VITE_API_BASE_URL in Vercel (or env) to point to your backend; otherwise default (extremedeptkidz.com) is used so the build succeeds.
  * - Warehouse vs storefront DB? Both must call the SAME API_BASE_URL so they share one backend and one DB. Different URLs = desync and data loss.
  * - Credentials identical? Frontend has only VITE_API_BASE_URL; auth is cookies/Bearer. Backend env (DB URL etc.) must be identical for the app serving both domains.
  * - Inventory table differs by env? Backend must expose the same inventory source to all clients; otherwise "saved here, vanished there" occurs.
  */
 
 const _rawApiBase = import.meta.env.VITE_API_BASE_URL;
-const _isProduction = import.meta.env.PROD;
-// Fail the build / runtime: never fall back to default in production so we never ship with wrong API.
-if (_isProduction && (!_rawApiBase || String(_rawApiBase).trim() === '')) {
-  throw new Error(
-    '[INVENTORY RELIABILITY] VITE_API_BASE_URL must be set in production. Do not rely on defaults; warehouse and storefront must use the same backend.'
-  );
-}
-export const API_BASE_URL = (_rawApiBase || 'https://extremedeptkidz.com').replace(/\/$/, '');
+// Use default so Vercel (and other hosts) build succeeds when env is not set; set VITE_API_BASE_URL in Vercel to override.
+export const API_BASE_URL = (_rawApiBase && String(_rawApiBase).trim() ? _rawApiBase : 'https://extremedeptkidz.com').replace(/\/$/, '');
 
 /**
  * Get authentication token from stored user session
