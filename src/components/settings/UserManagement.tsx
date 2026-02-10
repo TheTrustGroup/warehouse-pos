@@ -37,6 +37,12 @@ export function UserManagement() {
   const [loadingScopes, setLoadingScopes] = useState(false);
   const [savingScopes, setSavingScopes] = useState(false);
 
+  // Add User: assign POS (store/warehouse) when creating user — single flow
+  const [addUserStoreId, setAddUserStoreId] = useState('');
+  const [addUserWarehouseId, setAddUserWarehouseId] = useState('');
+  const [addUserWarehouses, setAddUserWarehouses] = useState<Warehouse[]>([]);
+  const [addUserPosList, setAddUserPosList] = useState<ScopeEntry[]>([]);
+
   const suggestedScopeEmail = newUser.role === 'admin' || newUser.role === 'super_admin' ? '' : (newUser.email || emailForRole(newUser.role));
 
   const loadScopesForEmail = useCallback(async (email: string) => {
@@ -73,6 +79,26 @@ export function UserManagement() {
     return () => { cancelled = true; };
   }, [selectedStoreId]);
 
+  // Add User form: load warehouses when store changes
+  useEffect(() => {
+    if (!addUserStoreId?.trim()) {
+      setAddUserWarehouses([]);
+      setAddUserWarehouseId('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await apiGet<Warehouse[]>(API_BASE_URL, `/api/warehouses?store_id=${encodeURIComponent(addUserStoreId)}`);
+        if (!cancelled && Array.isArray(list)) setAddUserWarehouses(list);
+        else if (!cancelled) setAddUserWarehouses([]);
+      } catch {
+        if (!cancelled) setAddUserWarehouses([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [addUserStoreId]);
+
   const addScopeEntry = () => {
     if (!selectedStoreId?.trim() || !selectedWarehouseId?.trim()) return;
     const store = stores.find((s) => s.id === selectedStoreId);
@@ -85,6 +111,20 @@ export function UserManagement() {
 
   const removeScopeEntry = (index: number) => {
     setScopeList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addAddUserPosEntry = () => {
+    if (!addUserStoreId?.trim() || !addUserWarehouseId?.trim()) return;
+    const store = stores.find((s) => s.id === addUserStoreId);
+    const wh = addUserWarehouses.find((w) => w.id === addUserWarehouseId);
+    const exists = addUserPosList.some((s) => s.storeId === addUserStoreId && s.warehouseId === addUserWarehouseId);
+    if (exists) return;
+    setAddUserPosList((prev) => [...prev, { storeId: addUserStoreId, warehouseId: addUserWarehouseId, storeName: store?.name, warehouseName: wh?.name }]);
+    setAddUserWarehouseId('');
+  };
+
+  const removeAddUserPosEntry = (index: number) => {
+    setAddUserPosList((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSaveScopes = async () => {
@@ -117,17 +157,15 @@ export function UserManagement() {
     navigator.clipboard?.writeText(text);
   };
 
-  const handleCreateUser = () => {
-    // Validate form
+  const handleCreateUser = async () => {
     if (!newUser.fullName.trim()) {
       showToast('error', 'Please enter a full name');
       return;
     }
 
-    const email = newUser.role === 'admin' ? '' : emailForRole(newUser.role);
-    const password = newUser.role === 'admin' ? '' : getDefaultUserPassword();
-    
-    // Create user details string
+    const email = (newUser.role === 'admin' || newUser.role === 'super_admin') ? '' : (newUser.email?.trim() || emailForRole(newUser.role));
+    const password = (newUser.role === 'admin' || newUser.role === 'super_admin') ? '' : getDefaultUserPassword();
+
     const userDetails = `User Details:
 Full Name: ${newUser.fullName}
 Email: ${email || '(Set in backend)'}
@@ -135,27 +173,46 @@ Role: ${newUser.role}
 Password: ${password || '(Set in backend)'}
 
 Create this user in your backend admin panel with these exact credentials.`;
-    
-    // Copy to clipboard
-    const textToCopy = newUser.role === 'admin' 
+
+    const textToCopy = (newUser.role === 'admin' || newUser.role === 'super_admin')
       ? `Full Name: ${newUser.fullName}\nRole: ${newUser.role}\nEmail and Password: Set in backend`
       : `Email: ${email}\nPassword: ${password}\nRole: ${newUser.role}\nFull Name: ${newUser.fullName}`;
-    
-    navigator.clipboard?.writeText(textToCopy).then(() => {
-      showToast('success', `User details copied to clipboard! Create this user in your backend admin panel:\nEmail: ${email || '(set in backend)'}\nPassword: ${password || '(set in backend)'}\nRole: ${newUser.role}`);
-      
-      // Reset form
-      setNewUser({
-        fullName: '',
-        email: emailForRole('viewer'),
-        role: 'viewer' as User['role'],
-        password: getDefaultUserPassword(),
-      });
-      setShowAddUser(false);
-    }).catch(() => {
-      // Fallback if clipboard API fails
+
+    try {
+      await navigator.clipboard?.writeText(textToCopy);
+    } catch {
       showToast('warning', userDetails);
+      return;
+    }
+
+    // Persist POS access for this user so they only see assigned store(s)
+    if (email && addUserPosList.length > 0) {
+      setSavingScopes(true);
+      try {
+        await setUserScopes(email, addUserPosList.map((s) => ({ storeId: s.storeId, warehouseId: s.warehouseId })));
+        showToast('success', `User details copied. POS access saved: ${addUserPosList.map((s) => s.storeName ?? s.storeId).join(', ')}. Create this user in your backend with the copied credentials.`);
+      } catch (err) {
+        showToast('error', err instanceof Error ? err.message : 'Failed to save POS access.');
+        setSavingScopes(false);
+        return;
+      } finally {
+        setSavingScopes(false);
+      }
+    } else {
+      showToast('success', `User details copied to clipboard! Create this user in your backend admin panel:\nEmail: ${email || '(set in backend)'}\nPassword: ${password || '(set in backend)'}\nRole: ${newUser.role}`);
+    }
+
+    setNewUser({
+      fullName: '',
+      email: emailForRole('viewer'),
+      role: 'viewer' as User['role'],
+      password: getDefaultUserPassword(),
     });
+    setAddUserPosList([]);
+    setAddUserStoreId('');
+    setAddUserWarehouseId('');
+    setAddUserWarehouses([]);
+    setShowAddUser(false);
   };
 
   return (
@@ -362,8 +419,13 @@ Create this user in your backend admin panel with these exact credentials.`;
                 type="email"
                 value={newUser.role === 'admin' || newUser.role === 'super_admin' ? '' : (newUser.email || emailForRole(newUser.role))}
                 readOnly={newUser.role === 'admin' || newUser.role === 'super_admin'}
-                placeholder={newUser.role === 'admin' || newUser.role === 'super_admin' ? 'Set in backend / VITE_SUPER_ADMIN_EMAILS' : undefined}
-                className="input-field w-full bg-slate-100 font-mono text-slate-700"
+                onChange={(e) => {
+                  if (newUser.role !== 'admin' && newUser.role !== 'super_admin') {
+                    setNewUser((u) => ({ ...u, email: e.target.value.trim() || emailForRole(u.role) }));
+                  }
+                }}
+                placeholder={newUser.role === 'admin' || newUser.role === 'super_admin' ? 'Set in backend / VITE_SUPER_ADMIN_EMAILS' : 'e.g. maintown_cashier@extremedeptkidz.com'}
+                className={`input-field w-full font-mono ${newUser.role === 'admin' || newUser.role === 'super_admin' ? 'bg-slate-100 text-slate-700' : 'text-slate-800'}`}
               />
             </div>
             {!import.meta.env.PROD && (
@@ -392,13 +454,84 @@ Create this user in your backend admin panel with these exact credentials.`;
               </>
             )}
           </div>
+
+          {/* POS access: assign which store(s) this user can use (Main Town, Store, etc.) */}
+          {newUser.role !== 'admin' && newUser.role !== 'super_admin' && (
+            <div className="mt-6 pt-4 border-t border-slate-200">
+              <h4 className="text-sm font-semibold text-slate-800 mb-1">POS access</h4>
+              <p className="text-sm text-slate-600 mb-3">
+                Assign which location(s) this user can use — e.g. Main Town or Store. They will only see these in POS.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Store</label>
+                  <select
+                    value={addUserStoreId}
+                    onChange={(e) => setAddUserStoreId(e.target.value)}
+                    className="input-field w-full text-sm"
+                    aria-label="Store for new user"
+                  >
+                    <option value="">— Select store —</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Warehouse</label>
+                  <select
+                    value={addUserWarehouseId}
+                    onChange={(e) => setAddUserWarehouseId(e.target.value)}
+                    disabled={!addUserStoreId}
+                    className="input-field w-full text-sm"
+                    aria-label="Warehouse for new user"
+                  >
+                    <option value="">— Select warehouse —</option>
+                    {addUserWarehouses.map((w) => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={addAddUserPosEntry}
+                disabled={!addUserStoreId || !addUserWarehouseId}
+                className="btn-secondary mt-2 text-sm"
+              >
+                Add location
+              </button>
+              {addUserPosList.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {addUserPosList.map((entry, i) => (
+                    <span
+                      key={`${entry.storeId}-${entry.warehouseId}-${i}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm text-slate-800"
+                    >
+                      {entry.storeName ?? entry.storeId} → {entry.warehouseName ?? entry.warehouseId}
+                      <button
+                        type="button"
+                        onClick={() => removeAddUserPosEntry(i)}
+                        className="p-0.5 rounded hover:bg-slate-100 text-slate-500"
+                        aria-label="Remove"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-3 mt-4">
-            <button 
-              type="button" 
-              onClick={handleCreateUser}
+            <button
+              type="button"
+              onClick={() => handleCreateUser()}
+              disabled={savingScopes}
               className="btn-primary"
             >
-              Create User (set in backend)
+              {savingScopes ? 'Saving…' : 'Create User (set in backend)'}
             </button>
             <button type="button" onClick={() => setShowAddUser(false)} className="btn-secondary">Cancel</button>
           </div>
