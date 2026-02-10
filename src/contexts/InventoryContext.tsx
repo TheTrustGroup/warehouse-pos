@@ -20,6 +20,46 @@ import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from '../lib/apiClient';
 import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
+
+/** Per-warehouse cache key so we can show the right list immediately on login/refresh. */
+function productsCacheKey(warehouseId: string): string {
+  return `warehouse_products_${warehouseId}`;
+}
+
+/** Normalize raw cache entry to Product (dates + location). Used for initial state and cache read. */
+function normalizeProductFromRaw(p: any): Product {
+  return normalizeProductLocation({
+    ...p,
+    createdAt: p?.createdAt ? new Date(p.createdAt) : new Date(),
+    updatedAt: p?.updatedAt ? new Date(p.updatedAt) : new Date(),
+    expiryDate: p?.expiryDate ? new Date(p.expiryDate) : null,
+  });
+}
+
+/** Read cached product list for a warehouse (per-warehouse key + legacy fallback). Enables instant list on login/refresh. */
+function getCachedProductsForWarehouse(warehouseId: string): Product[] {
+  if (typeof window === 'undefined' || !isStorageAvailable()) return [];
+  try {
+    let list: any[] = getStoredData<any[]>(productsCacheKey(warehouseId), []);
+    if (!Array.isArray(list)) list = [];
+    if (list.length === 0) {
+      const legacy = getStoredData<any[]>('warehouse_products', []);
+      list = Array.isArray(legacy) ? legacy : [];
+    }
+    const out: Product[] = [];
+    for (const p of list) {
+      if (p == null || typeof p !== 'object') continue;
+      try {
+        out.push(normalizeProductFromRaw(p));
+      } catch {
+        /* skip malformed */
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
 import { loadProductsFromDb, saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
 import { reportError } from '../lib/observability';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -68,8 +108,10 @@ export const ADD_PRODUCT_SAVED_LOCALLY =
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const { currentWarehouseId } = useWarehouse();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const effectiveWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : DEFAULT_WAREHOUSE_ID;
+  const initialCache = getCachedProductsForWarehouse(effectiveWarehouseId);
+  const [products, setProducts] = useState<Product[]>(() => initialCache);
+  const [isLoading, setIsLoading] = useState(() => initialCache.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
   const mountedRef = useRef(true);
@@ -77,8 +119,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [localOnlyIds, setLocalOnlyIds] = useState<Set<string>>(() => new Set());
   const syncRef = useRef<(() => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>) | null>(null);
 
-  /** Products API path with current warehouse for quantity scope. When no warehouse selected, use default (Main Store) so backfilled past inventory still shows. */
-  const effectiveWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : DEFAULT_WAREHOUSE_ID;
   const PRODUCTS_CACHE_TTL_MS = 60_000; // 60s per-warehouse cache
   const cacheRef = useRef<Record<string, { data: Product[]; ts: number }>>({});
 
@@ -191,8 +231,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const localOnly: Product[] = [];
         if (isStorageAvailable()) {
           try {
-            const localRaw = getStoredData<any[]>('warehouse_products', []);
-            const localList = Array.isArray(localRaw) ? localRaw : [];
+            let localList = getStoredData<any[]>(productsCacheKey(wid), []);
+            if (!Array.isArray(localList) || localList.length === 0) localList = getStoredData<any[]>('warehouse_products', []);
+            if (!Array.isArray(localList)) localList = [];
             for (const p of localList) {
               if (!p || typeof p !== 'object' || !p.id || apiIds.has(p.id)) continue;
               try {
@@ -224,7 +265,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           let fallback: Product[] = [];
           if (isStorageAvailable()) {
             try {
-              const raw = getStoredData<any[]>('warehouse_products', []);
+              let raw = getStoredData<any[]>(productsCacheKey(wid), []);
+              if (!Array.isArray(raw) || raw.length === 0) raw = getStoredData<any[]>('warehouse_products', []);
               fallback = toProducts(Array.isArray(raw) ? raw : []);
             } catch {
               /* ignore */
@@ -256,7 +298,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         logInventoryRead({ listLength: merged.length, environment: import.meta.env.PROD ? 'production' : 'development' });
         if (isStorageAvailable() && merged.length > 0) {
-          setStoredData('warehouse_products', merged);
+          setStoredData(productsCacheKey(wid), merged);
         }
       } catch (apiErr) {
         if (apiErr instanceof Error && apiErr.name === 'AbortError') return;
@@ -281,7 +323,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           return;
         }
       }
-      const localRaw = getStoredData<any[]>('warehouse_products', []);
+      let localRaw = getStoredData<any[]>(productsCacheKey(effectiveWarehouseId), []);
+      if (!Array.isArray(localRaw) || localRaw.length === 0) localRaw = getStoredData<any[]>('warehouse_products', []);
       const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
       setProducts(localProducts);
     } finally {
@@ -309,21 +352,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       return out;
     };
 
-    // Synchronous read: if we have localStorage cache, show it immediately (avoids "Loading products..." flash when re-entering Inventory).
-    if (isStorageAvailable()) {
-      try {
-        const localRaw = getStoredData<any[]>('warehouse_products', []);
-        const list = Array.isArray(localRaw) ? localRaw : [];
-        const productsFromCache = toProducts(list);
-        if (productsFromCache.length > 0) {
-          setProducts(productsFromCache);
-          setIsLoading(false);
-          setError(null);
-          hadCache = true;
-        }
-      } catch {
-        // ignore
-      }
+    // Synchronous read: per-warehouse cache so the right list shows immediately on login/refresh.
+    const productsFromCache = getCachedProductsForWarehouse(effectiveWarehouseId);
+    if (productsFromCache.length > 0) {
+      setProducts(productsFromCache);
+      setIsLoading(false);
+      setError(null);
+      hadCache = true;
     }
 
     (async () => {
@@ -357,12 +392,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   // Real-time: poll when tab visible so multiple tabs/devices get updates. Silent so the page doesn't flash "Loading products..." and wipe the Add Product section.
   useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true }), intervalMs: 60_000 });
 
-  // Persist inventory whenever we have a non-empty list. Never clear warehouse_products; only overwrite with updated list (e.g. after delete).
+  // Persist inventory per warehouse so list shows immediately on next login/refresh.
   useEffect(() => {
     if (!isLoading && products.length > 0 && isStorageAvailable()) {
-      setStoredData('warehouse_products', products);
+      setStoredData(productsCacheKey(effectiveWarehouseId), products);
     }
-  }, [products, isLoading]);
+  }, [products, isLoading, effectiveWarehouseId]);
 
   /**
    * Read-after-write verification: re-fetch from server and ensure the saved record exists.
@@ -443,7 +478,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       return { synced: 0, failed: 0, total: 0, syncedIds: [] };
     }
 
-    const localRaw = getStoredData<any[]>('warehouse_products', []);
+    let localRaw = getStoredData<any[]>(productsCacheKey(effectiveWarehouseId), []);
+    if (!Array.isArray(localRaw) || localRaw.length === 0) localRaw = getStoredData<any[]>('warehouse_products', []);
     const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
     const localOnly = localProducts.filter((p) => !apiIds.has(p.id));
     const total = localOnly.length;
@@ -484,10 +520,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [localOnlyIds.size]);
 
-  /** Persist current list to localStorage and IndexedDB (best-effort cache only; server is source of truth). */
+  /** Persist current list to localStorage (per-warehouse) and IndexedDB (best-effort cache only; server is source of truth). */
   const persistProducts = (next: Product[]) => {
     if (isStorageAvailable() && next.length >= 0) {
-      setStoredData('warehouse_products', next);
+      setStoredData(productsCacheKey(effectiveWarehouseId), next);
     }
     if (isIndexedDBAvailable()) {
       saveProductsToDb(next).catch((e) => {

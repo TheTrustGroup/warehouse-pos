@@ -35,7 +35,7 @@ export function setStoredData<T>(key: string, value: T): boolean {
   } catch (error) {
     if (error instanceof DOMException && error.name === 'QuotaExceededError') {
       // Only try to free space for critical keys (e.g. warehouse_products)
-      if (key === 'warehouse_products') {
+      if (key === 'warehouse_products' || key.startsWith('warehouse_products_')) {
         for (const k of CLEARABLE_KEYS) {
           try {
             localStorage.removeItem(k);
@@ -47,7 +47,7 @@ export function setStoredData<T>(key: string, value: T): boolean {
           localStorage.setItem(key, JSON.stringify(value));
           return true;
         } catch {
-          console.error('localStorage quota exceeded. Could not free enough space for warehouse_products.');
+          console.error('localStorage quota exceeded. Could not free enough space for inventory cache.');
         }
       } else {
         console.error('localStorage quota exceeded. Consider clearing old data.');
