@@ -95,6 +95,7 @@ function normalizeUserData(userData: any): User {
     warehouseId: userData.warehouse_id ?? userData.warehouseId ?? undefined,
     storeId: userData.store_id !== undefined ? userData.store_id : userData.storeId,
     deviceId: userData.device_id ?? userData.deviceId ?? undefined,
+    assignedPos: userData.assignedPos === 'main_town' || userData.assignedPos === 'store' ? userData.assignedPos : undefined,
   };
 }
 

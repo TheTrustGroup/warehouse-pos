@@ -4,7 +4,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { getStores } from '@/lib/data/stores';
+import { getStores, getStoreById } from '@/lib/data/stores';
 import { getWarehouses, getWarehouseById } from '@/lib/data/warehouses';
 
 const TABLE = 'user_scopes';
@@ -71,6 +71,28 @@ export async function getScopeForUser(userEmail: string): Promise<ResolvedScope>
     allowedWarehouseIds: Array.from(warehouseIds),
     allowedPosIds: Array.from(posIds),
   };
+}
+
+/** Display name for Main town POS (single-location, no store dropdown). */
+const MAIN_TOWN_STORE_NAME = 'Main town';
+
+/**
+ * Resolve assigned POS for /me response. When user has exactly one store+warehouse and that store is "Main town",
+ * return 'main_town' (POS UI shows fixed "Main Town" only). Otherwise 'store' or null (show store/warehouse dropdowns).
+ */
+export async function getAssignedPosForUser(userEmail: string): Promise<'main_town' | 'store' | null> {
+  const scope = await getScopeForUser(userEmail);
+  const singleStore =
+    scope.allowedStoreIds.length === 1 &&
+    scope.allowedWarehouseIds.length === 1;
+  if (!singleStore) return null;
+  const storeId = scope.allowedStoreIds[0];
+  const store = await getStoreById(storeId);
+  if (!store) return null;
+  if (store.name.trim().toLowerCase() === MAIN_TOWN_STORE_NAME.toLowerCase()) {
+    return 'main_town';
+  }
+  return 'store';
 }
 
 /**
