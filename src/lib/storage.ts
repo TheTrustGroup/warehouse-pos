@@ -19,7 +19,7 @@ export function getStoredData<T>(key: string, defaultValue: T): T {
   }
 }
 
-/** Keys we can clear to free quota when warehouse_products must be saved. */
+/** Keys we can clear to free quota when warehouse_products must be saved. warehouse_products is never cleared; only overwritten with updated list (e.g. after user-initiated delete). */
 const CLEARABLE_KEYS = ['transactions', 'offline_transactions', 'orders'];
 
 /**

@@ -2,22 +2,22 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /** Allowed origins for CORS (comma-separated in env, or * for any). Frontend must be allowed to call this API. */
-const getAllowedOrigins = (): string[] => {
+const getAllowedOrigins = (): { origins: string[]; strict: boolean } => {
   const raw = process.env.CORS_ORIGINS;
-  if (raw === '*') return ['*'];
-  if (raw) return raw.split(',').map((o) => o.trim()).filter(Boolean);
-  // Vercel: allow same-deployment preview/production URL when CORS_ORIGINS not set
-  const v = process.env.VERCEL_URL;
-  if (v) return [`https://${v}`, `https://www.${v}`];
-  return [];
+  if (raw === '*') return { origins: ['*'], strict: false };
+  if (raw) return { origins: raw.split(',').map((o) => o.trim()).filter(Boolean), strict: true };
+  // When CORS_ORIGINS not set: allow request origin so frontend (e.g. warehouse.extremedeptidz.com) can call this API.
+  const frontend = process.env.FRONTEND_ORIGIN;
+  const vercel = process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`, `https://www.${process.env.VERCEL_URL}`] : [];
+  const origins = [...vercel, ...(frontend ? [frontend.trim()] : [])];
+  return { origins, strict: false };
 };
 
 function corsHeaders(request: NextRequest): HeadersInit {
-  const origins = getAllowedOrigins();
+  const { origins, strict } = getAllowedOrigins();
   const origin = request.headers.get('origin') || '';
-  // With credentials, browser requires a specific origin (not *). Prefer reflecting request origin.
   let allowOrigin: string;
-  if (origins.includes('*') || origins.length === 0) {
+  if (origins.includes('*') || origins.length === 0 || !strict) {
     allowOrigin = origin || '*';
   } else {
     allowOrigin = origins.includes(origin) ? origin : origins[0];

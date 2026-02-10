@@ -172,14 +172,53 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           }
         }
         const merged = [...apiProducts, ...localOnly];
+        // Persistence: never show empty if we have cached data (avoid data loss from wrong warehouse or transient API empty)
+        if (merged.length === 0 && (isStorageAvailable() || isIndexedDBAvailable())) {
+          const toProducts = (list: any[]): Product[] => {
+            const out: Product[] = [];
+            for (const p of list) {
+              if (p == null || typeof p !== 'object') continue;
+              try {
+                out.push(normalizeProduct(p));
+              } catch {
+                /* skip malformed */
+              }
+            }
+            return out;
+          };
+          let fallback: Product[] = [];
+          if (isStorageAvailable()) {
+            try {
+              const raw = getStoredData<any[]>('warehouse_products', []);
+              fallback = toProducts(Array.isArray(raw) ? raw : []);
+            } catch {
+              /* ignore */
+            }
+          }
+          if (fallback.length === 0 && isIndexedDBAvailable()) {
+            try {
+              const fromDb = await loadProductsFromDb<any>();
+              fallback = toProducts(Array.isArray(fromDb) ? fromDb : []);
+            } catch {
+              /* ignore */
+            }
+          }
+          if (fallback.length > 0) {
+            setProducts(fallback);
+            if (!silent) setError('Server returned no products for this warehouse. Showing last saved list.');
+            logInventoryRead({ listLength: fallback.length, environment: 'cache-fallback' });
+            return;
+          }
+        }
         setProducts(merged);
+        if (!silent) setError(null);
         if (isIndexedDBAvailable()) {
           saveProductsToDb(merged).catch((e) => {
             reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: merged.length });
           });
         }
         logInventoryRead({ listLength: merged.length, environment: import.meta.env.PROD ? 'production' : 'development' });
-        if (isStorageAvailable() && localOnly.length > 0) {
+        if (isStorageAvailable() && merged.length > 0) {
           setStoredData('warehouse_products', merged);
         }
       } catch (apiErr) {
@@ -279,7 +318,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   // Real-time: poll when tab visible so multiple tabs/devices get updates. Silent so the page doesn't flash "Loading products..." and wipe the Add Product section.
   useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true }), intervalMs: 60_000 });
 
-  // Save to localStorage whenever products change (for offline support)
+  // Persist inventory whenever we have a non-empty list. Never clear warehouse_products; only overwrite with updated list (e.g. after delete).
   useEffect(() => {
     if (!isLoading && products.length > 0 && isStorageAvailable()) {
       setStoredData('warehouse_products', products);
