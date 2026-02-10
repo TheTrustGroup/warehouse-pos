@@ -47,20 +47,38 @@ function getSuperAdminEmails(): Set<string> {
 /** Backend role values that should be treated as cashier (POS access, no admin). */
 const CASHIER_ROLE_ALIASES = ['cashier', 'sales_person', 'salesperson', 'sales'];
 
+const KNOWN_ROLE_IDS = ['super_admin', 'admin', 'manager', 'cashier', 'warehouse', 'driver', 'viewer'] as const;
+
+/** Derive role from email local part (same logic as backend): role, role_place, or place_role. */
+function roleFromEmailLocalPart(email: string): typeof KNOWN_ROLE_IDS[number] | null {
+  const local = (email || '').trim().toLowerCase().split('@')[0] ?? '';
+  if (KNOWN_ROLE_IDS.includes(local as any)) return local as typeof KNOWN_ROLE_IDS[number];
+  const parts = local.split('_').filter(Boolean);
+  if (parts.length >= 2) {
+    if (KNOWN_ROLE_IDS.includes(parts[0] as any)) return parts[0] as typeof KNOWN_ROLE_IDS[number];
+    if (KNOWN_ROLE_IDS.includes(parts[parts.length - 1] as any)) return parts[parts.length - 1] as typeof KNOWN_ROLE_IDS[number];
+  }
+  return null;
+}
+
 /**
  * Normalize user data from API response.
- * If user email is in VITE_SUPER_ADMIN_EMAILS, role is forced to super_admin so your credentials stay full access.
- * Cashier-like roles are always mapped to CASHIER so POS access is guaranteed.
+ * If user email is in VITE_SUPER_ADMIN_EMAILS, role is forced to super_admin.
+ * If backend returns viewer but email suggests another role (e.g. maintown_cashier@), use that so POS logins work regardless of auth backend.
  */
 function normalizeUserData(userData: any): User {
   const rawRole = (userData.role ?? '').toString().trim().toLowerCase();
   const roleKey = rawRole.toUpperCase().replace(/\s+/g, '_');
   let role = ROLES[roleKey] ?? (rawRole === 'super_admin' ? ROLES.SUPER_ADMIN : null);
   if (!role && CASHIER_ROLE_ALIASES.includes(rawRole)) role = ROLES.CASHIER;
-  role = role ?? ROLES.VIEWER;
-  const superAdminEmails = getSuperAdminEmails();
   const email = (userData.email ?? '').trim().toLowerCase();
+  const superAdminEmails = getSuperAdminEmails();
   const isSuperAdmin = superAdminEmails.has(email);
+  if (!isSuperAdmin && (!role || role.id === 'viewer')) {
+    const fromEmail = roleFromEmailLocalPart(email);
+    if (fromEmail && fromEmail !== 'viewer') role = ROLES[fromEmail.toUpperCase() as keyof typeof ROLES] ?? ROLES.CASHIER;
+  }
+  role = role ?? ROLES.VIEWER;
   const effectiveRole = isSuperAdmin ? ROLES.SUPER_ADMIN : role;
   
   return {
