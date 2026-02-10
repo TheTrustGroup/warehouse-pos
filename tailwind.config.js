@@ -41,6 +41,15 @@ export default {
       spacing: {
         '18': '4.5rem',
         '88': '22rem',
+        'section': '1.5rem',
+        'block': '1rem',
+        'touch': '44px',
+      },
+      minHeight: {
+        'touch': '44px',
+      },
+      minWidth: {
+        'touch': '44px',
       },
       borderRadius: {
         'lg': '10px',
@@ -54,7 +63,9 @@ export default {
         'primary': '0 4px 12px rgba(239, 68, 68, 0.3)',
         'primary-hover': '0 8px 20px rgba(239, 68, 68, 0.4)',
         'card': '0 1px 3px rgba(0, 0, 0, 0.02), 0 8px 24px rgba(0, 0, 0, 0.04)',
-        'card-hover': '0 4px 6px rgba(0, 0, 0, 0.03), 0 12px 32px rgba(0, 0, 0, 0.06)',
+        'card-hover': '0 4px 12px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(0, 0, 0, 0.06)',
+        'medium': '0 4px 12px rgba(0, 0, 0, 0.06)',
+        'large': '0 8px 24px rgba(0, 0, 0, 0.08)',
       },
       backdropBlur: {
         xs: '2px',

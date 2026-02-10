@@ -52,89 +52,82 @@ export function ProductSearch() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      {/* Search Bar */}
-      <div className="relative group">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" strokeWidth={2} />
+    <div className="space-y-5">
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" aria-hidden />
         <input
           ref={searchInputRef}
           type="text"
           value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          placeholder="Search by name, SKU, or scan barcode... (Press /)"
-          className="input-field w-full pl-12 pr-14 text-base"
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search by name, SKU, or barcode (/)"
+          className="input-field w-full pl-12 pr-12 min-h-touch"
+          aria-label="Search products"
         />
-        <button className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-primary-50/80 text-primary-600 rounded-lg hover:bg-primary-100/80 transition-all duration-200 backdrop-blur-sm">
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
           <Scan className="w-5 h-5" strokeWidth={2} />
-        </button>
+        </span>
       </div>
 
-      {/* Category Filter */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin" style={{ scrollbarWidth: 'thin' }}>
         <button
+          type="button"
           onClick={() => setSelectedCategory('')}
-          className={`px-4 py-2 rounded-xl whitespace-nowrap font-semibold transition-all duration-200 ${
-            selectedCategory === ''
-              ? 'btn-primary'
-              : 'btn-secondary'
+          className={`min-h-touch px-4 py-2 rounded-xl whitespace-nowrap font-medium transition-colors flex-shrink-0 ${
+            selectedCategory === '' ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
           }`}
+          aria-pressed={selectedCategory === ''}
         >
           All
         </button>
-        {categories.map(cat => (
+        {categories.map((cat) => (
           <button
             key={cat}
+            type="button"
             onClick={() => setSelectedCategory(cat)}
-            className={`px-4 py-2 rounded-xl whitespace-nowrap font-semibold transition-all duration-200 ${
-              selectedCategory === cat
-                ? 'btn-primary'
-                : 'btn-secondary'
+            className={`min-h-touch px-4 py-2 rounded-xl whitespace-nowrap font-medium transition-colors flex-shrink-0 ${
+              selectedCategory === cat ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
+            aria-pressed={selectedCategory === cat}
           >
             {cat}
           </button>
         ))}
       </div>
 
-      {/* Product Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[calc(100vh-350px)] overflow-y-auto">
-        {filteredProducts.map(product => (
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[calc(100vh-320px)] overflow-y-auto min-h-0">
+        {filteredProducts.map((product) => (
           <button
             key={product.id}
+            type="button"
             onClick={() => handleProductClick(product.id)}
-            className="glass-card p-4 hover:-translate-y-0.5 transition-all duration-200 text-left group"
+            className="glass-card p-3 text-left transition-shadow hover:shadow-card-hover"
           >
             {product.images[0] ? (
               <img
                 src={product.images[0]}
-                alt={product.name}
+                alt=""
                 loading="lazy"
-                className="w-full h-28 object-cover rounded-xl mb-3 group-hover:scale-105 transition-transform duration-300 shadow-md"
+                className="w-full h-24 object-cover rounded-lg mb-2"
               />
             ) : (
-              <div className="w-full h-28 bg-slate-100/80 rounded-xl mb-3 flex items-center justify-center border border-slate-200/50">
-                <Package className="w-10 h-10 text-slate-400" strokeWidth={2} />
+              <div className="w-full h-24 bg-slate-100 rounded-lg mb-2 flex items-center justify-center">
+                <Package className="w-8 h-8 text-slate-400" strokeWidth={2} aria-hidden />
               </div>
             )}
-            <h3 className="font-semibold text-sm text-slate-900 line-clamp-2 mb-2">
-              {product.name}
-            </h3>
+            <h3 className="font-medium text-sm text-slate-900 line-clamp-2 mb-1">{product.name}</h3>
             <div className="flex items-center justify-between">
-              <span className="text-lg font-bold gradient-text">
-                {formatCurrency(product.sellingPrice)}
-              </span>
-              <span className="badge badge-info text-xs">
-                {product.quantity} left
-              </span>
+              <span className="font-semibold text-primary-600">{formatCurrency(product.sellingPrice)}</span>
+              <span className="badge badge-info text-xs">{product.quantity} left</span>
             </div>
           </button>
         ))}
       </div>
 
       {filteredProducts.length === 0 && (
-        <div className="text-center py-12">
-          <Package className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-          <p className="text-slate-600">No products found</p>
+        <div className="text-center py-10">
+          <Package className="w-10 h-10 text-slate-400 mx-auto mb-2" aria-hidden />
+          <p className="text-slate-600 text-sm font-medium">No products found</p>
         </div>
       )}
     </div>

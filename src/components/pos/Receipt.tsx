@@ -12,18 +12,18 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
     window.print();
   };
 
+  /* Receipt modal: primary = Print; Close secondary. Same glass-card and spacing as ProductFormModal. */
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in-up">
-      <div className="glass-card rounded-2xl shadow-large max-w-md w-full max-h-[90vh] overflow-y-auto animate-fade-in-up">
-        <div className="p-6 border-b border-white/30 flex items-center justify-between print:hidden">
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Receipt</h2>
-          <button onClick={onClose} className="btn-action hover:bg-slate-100/80">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="receipt-title">
+      <div className="glass-card rounded-2xl shadow-large max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-4 border-b border-slate-200/50 flex items-center justify-between flex-shrink-0 print:hidden">
+          <h2 id="receipt-title" className="text-xl font-bold text-slate-900 tracking-tight">Receipt</h2>
+          <button type="button" onClick={onClose} className="btn-action" aria-label="Close">
             <X className="w-5 h-5" strokeWidth={2} />
           </button>
         </div>
 
-        {/* Receipt Content */}
-        <div className="p-6" id="receipt-content">
+        <div className="p-6 overflow-y-auto flex-1" id="receipt-content">
           {/* Store Header */}
           <div className="text-center mb-6">
             <h1 className="text-2xl font-extrabold gradient-text">Extreme Dept Kidz</h1>
@@ -105,16 +105,17 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="p-6 border-t border-slate-200 flex gap-3 print:hidden">
+        <div className="p-4 border-t border-slate-200 flex gap-3 flex-shrink-0 print:hidden">
           <button
+            type="button"
             onClick={handlePrint}
-            className="flex-1 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2"
+            className="btn-primary flex-1 inline-flex items-center justify-center gap-2 min-h-touch"
+            aria-label="Print receipt"
           >
             <Printer className="w-5 h-5" />
-            Print Receipt
+            Print receipt
           </button>
-          <button className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center justify-center gap-2">
+          <button type="button" className="btn-secondary flex-1 inline-flex items-center justify-center gap-2 min-h-touch" aria-label="Email receipt">
             <Mail className="w-5 h-5" />
             Email
           </button>

@@ -101,26 +101,25 @@ export function POS() {
     setCompletedTransaction(null);
   };
 
+  /* POS: one primary action = Complete Payment; cart + totals always visible; destructive (clear cart) separated */
   return (
-    <div className="space-y-6 animate-fade-in-up">
-      {/* Header */}
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">Point of Sale</h1>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Point of Sale</h1>
         <p className="text-slate-500 text-sm">Process sales and transactions</p>
       </div>
 
-      {/* Warehouse required (no silent default): when multiple warehouses, must select before sale. */}
       {warehouseRequired && (
-        <div className="glass-card bg-amber-50/80 border-amber-200/50 animate-fade-in-up">
-          <div className="flex items-center gap-3">
-            <MapPin className="w-5 h-5 text-amber-600 flex-shrink-0" strokeWidth={2} />
-            <div className="flex-1">
-              <p className="font-semibold text-amber-900">Select warehouse to sell</p>
-              <p className="text-sm text-amber-700">Choose the warehouse/location for this sale before adding items or completing payment.</p>
+        <div className="glass-card bg-amber-50/80 border border-amber-200/50 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <MapPin className="w-5 h-5 text-amber-600 flex-shrink-0" strokeWidth={2} aria-hidden />
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-amber-900">Select warehouse</p>
+              <p className="text-sm text-amber-700 mt-0.5">Choose location before adding items or payment.</p>
               <select
                 value=""
                 onChange={(e) => setCurrentWarehouseId(e.target.value)}
-                className="mt-3 input-field w-full max-w-xs bg-white border-amber-300"
+                className="mt-3 input-field w-full max-w-xs bg-white border-amber-300 min-h-touch"
                 aria-label="Select warehouse"
               >
                 <option value="">— Select warehouse —</option>
@@ -133,16 +132,15 @@ export function POS() {
         </div>
       )}
 
-      {/* Current warehouse (explicit, not silent) */}
       {currentWarehouse && !warehouseRequired && (
-        <div className="flex items-center gap-2 text-slate-600 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-slate-600 text-sm">
           <MapPin className="w-4 h-4" aria-hidden />
           <span>Selling from: <strong>{currentWarehouse.name}</strong></span>
           {warehouses.length > 1 && (
             <select
               value={currentWarehouseId}
               onChange={(e) => setCurrentWarehouseId(e.target.value)}
-              className="ml-2 text-sm border border-slate-200 rounded-lg px-2 py-1"
+              className="min-h-touch text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white"
               aria-label="Change warehouse"
             >
               {warehouses.map((w) => (
@@ -153,52 +151,49 @@ export function POS() {
         </div>
       )}
 
-      {/* Offline Banner */}
       {!isOnline && (
-        <div className="glass-card bg-amber-50/80 border-amber-200/50 animate-fade-in-up">
+        <div className="glass-card bg-amber-50/80 border border-amber-200/50 p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100/80 rounded-lg">
-              <WifiOff className="w-5 h-5 text-amber-600" strokeWidth={2} />
+            <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
+              <WifiOff className="w-5 h-5 text-amber-600" strokeWidth={2} aria-hidden />
             </div>
             <div>
-              <p className="font-semibold text-amber-900">Offline Mode</p>
-              <p className="text-sm text-amber-700">Sales cannot be completed offline. Connect to complete the sale.</p>
+              <p className="font-medium text-amber-900">Offline</p>
+              <p className="text-sm text-amber-700">Connect to complete the sale.</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Pending sync (no silent failure) */}
       {isOnline && pendingSyncCount > 0 && (
-        <div className="glass-card bg-amber-50/80 border-amber-200/50 animate-fade-in-up">
-          <p className="font-semibold text-amber-900">{pendingSyncCount} transaction(s) pending sync</p>
-          <p className="text-sm text-amber-700">Previous sync failed. They will retry automatically when the server is available.</p>
+        <div className="glass-card bg-amber-50/80 border border-amber-200/50 p-4">
+          <p className="font-medium text-amber-900">{pendingSyncCount} transaction(s) pending sync</p>
+          <p className="text-sm text-amber-700 mt-0.5">They will retry when the server is available.</p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Product Search */}
-        <div className="lg:col-span-2">
-          <div className="glass-card h-full">
-            <h2 className="text-xl font-semibold text-slate-900 mb-6">Products</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-x-hidden">
+        <div className="lg:col-span-2 min-w-0">
+          <div className="glass-card h-full p-5">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Products</h2>
             <ProductSearch />
           </div>
         </div>
 
-        {/* Right: Cart & Payment */}
-        <div className="space-y-6">
-          {/* Cart */}
-          <div className="glass-card">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-                <ShoppingCart className="w-6 h-6" strokeWidth={2} />
+        <div className="space-y-5">
+          <div className="glass-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5 text-slate-600" strokeWidth={2} aria-hidden />
                 Cart ({cart.length})
               </h2>
               {cart.length > 0 && (
                 <button
+                  type="button"
                   onClick={clearCart}
                   className="btn-action btn-action-delete"
                   title="Clear cart"
+                  aria-label="Clear cart"
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
@@ -207,21 +202,19 @@ export function POS() {
             <Cart />
           </div>
 
-          {/* Create Delivery Order */}
           {cart.length > 0 && (
             <button
+              type="button"
               onClick={handleCreateOrder}
-              className="btn-secondary w-full mb-3"
-              disabled={cart.length === 0}
+              className="btn-secondary w-full"
             >
-              Create Delivery Order
+              Create delivery order
             </button>
           )}
 
-          {/* Payment Panel — disabled until warehouse selected when multiple warehouses */}
           {cart.length > 0 && (
-            <div className="glass-card">
-              <h2 className="text-xl font-semibold text-slate-900 mb-6">Payment</h2>
+            <div className="glass-card p-5">
+              <h2 className="text-lg font-semibold text-slate-900 mb-4">Payment</h2>
               {canCompleteSale ? (
                 <PaymentPanel onComplete={handleCompletePayment} />
               ) : (

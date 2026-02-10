@@ -75,14 +75,15 @@ export function ProductTableView({
     return { label: 'In Stock', color: 'text-green-600 bg-green-50' };
   };
 
+  /* Table: consistent cell padding (px-4 py-3), horizontal scroll on small screens only when needed */
   return (
-    <div className="table-container animate-fade-in-up">
-      <div className="overflow-x-auto">
-        <table className="w-full">
+    <div className="table-container">
+      <div className="overflow-x-auto -mx-1">
+        <table className="w-full min-w-[800px]">
           <thead className="table-header sticky top-0 z-10">
             <tr>
               {canSelect && (
-                <th className="px-5 py-4 text-left">
+                <th className="px-4 py-3 text-left">
                   <input
                     type="checkbox"
                     checked={selectedIds.length === products.length && products.length > 0}
@@ -91,50 +92,26 @@ export function ProductTableView({
                   />
                 </th>
               )}
-              <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                Image
-              </th>
-              <th 
-                className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:text-slate-900 transition-colors"
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Image</th>
+              <th
+                className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider cursor-pointer hover:text-slate-800"
                 onClick={() => handleSort('name')}
               >
-                <div className="flex items-center gap-2">
-                  Product
-                  {sortField === 'name' && (
-                    <span className="text-primary-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                  )}
-                </div>
+                <span className="inline-flex items-center gap-1">Product {sortField === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
               </th>
-              <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                SKU
-              </th>
-              <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                Category
-              </th>
-              <th 
-                className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:text-slate-900 transition-colors"
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">SKU</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Category</th>
+              <th
+                className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider cursor-pointer hover:text-slate-800"
                 onClick={() => handleSort('quantity')}
               >
-                <div className="flex items-center gap-2">
-                  Stock
-                  {sortField === 'quantity' && (
-                    <span className="text-primary-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                  )}
-                </div>
+                <span className="inline-flex items-center gap-1">Stock {sortField === 'quantity' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
               </th>
-              <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                Price
-              </th>
-              <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                Location
-              </th>
-              <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                Supplier
-              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Price</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Location</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Supplier</th>
               {(canEdit || canDelete) && (
-                <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                  Actions
-                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider w-28">Actions</th>
               )}
             </tr>
           </thead>
@@ -147,16 +124,17 @@ export function ProductTableView({
                   className="table-row"
                 >
                   {canSelect && (
-                    <td className="px-5 py-4 align-middle">
+                    <td className="px-4 py-3 align-middle">
                       <input
                         type="checkbox"
                         checked={selectedIds.includes(product.id)}
                         onChange={(e) => handleSelectOne(product.id, e.target.checked)}
                         className="rounded border-slate-300 w-4 h-4 cursor-pointer"
+                        aria-label={`Select ${product.name}`}
                       />
                     </td>
                   )}
-                  <td className="px-5 py-4 align-middle">
+                  <td className="px-4 py-3 align-middle">
                     {product.images[0] ? (
                       <img 
                         src={product.images[0]} 
@@ -170,19 +148,19 @@ export function ProductTableView({
                       </div>
                     )}
                   </td>
-                  <td className="px-5 py-4 align-middle">
+                  <td className="px-4 py-3 align-middle">
                     <div>
                       <p className="font-semibold text-slate-900 mb-1">{product.name}</p>
                       <p className="text-xs text-slate-500">{product.tags.join(', ')}</p>
                     </div>
                   </td>
                   <td className="px-5 py-4 align-middle text-sm text-slate-700 font-medium">{product.sku}</td>
-                  <td className="px-5 py-4 align-middle">
+                  <td className="px-4 py-3 align-middle">
                     <span className="badge badge-info">
                       {getCategoryDisplay(product.category)}
                     </span>
                   </td>
-                  <td className="px-5 py-4 align-middle">
+                  <td className="px-4 py-3 align-middle">
                     <div className="flex items-center gap-3">
                       <span className="font-semibold text-slate-900">{product.quantity}</span>
                       <span className={`badge ${
@@ -197,7 +175,7 @@ export function ProductTableView({
                       </span>
                     </div>
                   </td>
-                  <td className="px-5 py-4 align-middle">
+                  <td className="px-4 py-3 align-middle">
                     <div>
                       <p className="font-semibold text-slate-900">{formatCurrency(product.sellingPrice)}</p>
                       {showCostPrice && (
@@ -212,7 +190,7 @@ export function ProductTableView({
                     {product.supplier?.name || '—'}
                   </td>
                   {(canEdit || canDelete) && (
-                    <td className="px-5 py-4 align-middle">
+                    <td className="px-4 py-3 align-middle">
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => onView(product)}
@@ -252,11 +230,11 @@ export function ProductTableView({
         </table>
       </div>
       {products.length === 0 && (
-        <div className="text-center py-16">
-          <div className="w-16 h-16 bg-slate-100/80 rounded-xl flex items-center justify-center mx-auto mb-4 border border-slate-200/50">
-            <Package className="w-8 h-8 text-slate-400" />
+        <div className="text-center py-12">
+          <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+            <Package className="w-6 h-6 text-slate-400" aria-hidden />
           </div>
-          <p className="text-slate-600 font-medium">No products found</p>
+          <p className="text-slate-600 text-sm font-medium">No products found</p>
         </div>
       )}
     </div>

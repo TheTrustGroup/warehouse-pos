@@ -48,13 +48,3 @@ export function validateDateRange(
   
   return { valid: true };
 }
-
-/**
- * Check if date input type is supported
- * @returns true if date input is supported
- */
-export function isDateInputSupported(): boolean {
-  const input = document.createElement('input');
-  input.setAttribute('type', 'date');
-  return input.type === 'date';
-}

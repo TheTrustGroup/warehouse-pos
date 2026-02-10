@@ -5,6 +5,7 @@ import { Header } from './Header';
 import { MobileMenu } from './MobileMenu';
 import { getApiCircuitBreaker } from '../../lib/observability';
 
+/** Layout: single vertical rhythm — section spacing (24px) and consistent main padding. Mobile-first. */
 export function Layout() {
   const [degraded, setDegraded] = useState(false);
 
@@ -19,23 +20,17 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       {degraded && (
-        <div className="bg-amber-500 text-amber-950 text-center py-2 px-4 text-sm font-medium">
+        <div className="bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium" role="status">
           Server temporarily unavailable. Showing last saved data. Changes will sync when the server is back.
         </div>
       )}
-      {/* Desktop Sidebar */}
       <div className="hidden lg:block">
         <Sidebar />
       </div>
-
-      {/* Mobile Menu */}
       <MobileMenu />
-
-      {/* Header */}
       <Header />
-
-      {/* Main Content */}
-      <main className="lg:ml-[280px] mt-[72px] pt-20 lg:pt-8 p-4 lg:p-8 min-h-[calc(100vh-72px)]">
+      {/* Main: consistent padding (block rhythm), no horizontal scroll on small viewports */}
+      <main className="lg:ml-[280px] mt-[72px] pt-20 lg:pt-8 px-4 lg:px-8 pb-8 min-h-[calc(100vh-72px)] max-w-[1600px]">
         <Outlet />
       </main>
     </div>

@@ -53,10 +53,12 @@ export function MobileMenu() {
 
   return (
     <>
+      {/* Toggle: 44px touch target, thumb-friendly on mobile */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="lg:hidden fixed top-[88px] left-4 z-40 p-2.5 glass rounded-lg shadow-medium hover:shadow-large transition-all duration-200"
+        className="lg:hidden fixed top-[88px] left-4 z-40 min-h-touch min-w-touch flex items-center justify-center glass rounded-xl shadow-medium"
         aria-label="Toggle menu"
+        aria-expanded={isOpen}
       >
         {isOpen ? <X className="w-6 h-6 text-slate-700" /> : <Menu className="w-6 h-6 text-slate-700" />}
       </button>
@@ -68,13 +70,13 @@ export function MobileMenu() {
         }`}
       >
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsOpen(false)}></div>
-        <aside className="relative w-[280px] h-full flex flex-col glass shadow-large border-r border-slate-200/50">
-          <div className="px-6 py-6 border-b border-slate-200/30">
-            <div className="flex flex-col gap-1">
-              <h1 className="text-[28px] font-extrabold leading-none tracking-tight gradient-text">
+        <aside className="relative w-[280px] max-w-[85vw] h-full flex flex-col glass shadow-large border-r border-slate-200/50">
+          <div className="px-5 py-5 border-b border-slate-200/30">
+            <div className="flex flex-col gap-0.5">
+              <h1 className="text-xl font-bold leading-tight tracking-tight gradient-text">
                 Extreme Dept Kidz
               </h1>
-              <p className="text-[13px] font-medium text-slate-500 pl-0.5">Inventory & POS</p>
+              <p className="text-xs font-medium text-slate-500">Inventory & POS</p>
             </div>
           </div>
 

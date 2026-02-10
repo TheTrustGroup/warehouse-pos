@@ -32,20 +32,23 @@ export function InventorySearchBar({ value, onChange, placeholder = 'Search prod
 
   return (
     <div className="relative">
-      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" aria-hidden />
       <input
         type="text"
         value={localValue}
         onChange={handleChange}
         placeholder={placeholder}
-        className="input-field w-full pl-11 pr-11"
+        className="input-field w-full pl-11 pr-11 min-h-touch"
+        aria-label="Search products"
       />
       {localValue && (
         <button
+          type="button"
           onClick={clearSearch}
-          className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-100/80 rounded-lg transition-colors duration-200"
+          className="absolute right-2 top-1/2 -translate-y-1/2 min-w-touch min-h-touch flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700"
+          aria-label="Clear search"
         >
-          <X className="w-4 h-4 text-slate-400 hover:text-slate-600" />
+          <X className="w-4 h-4" />
         </button>
       )}
     </div>

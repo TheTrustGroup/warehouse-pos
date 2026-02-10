@@ -71,31 +71,33 @@ export function Inventory() {
     return result;
   }, [products, searchQuery, filters, searchProducts, filterProducts]);
 
-  // Loading state
+  /* Loading: immediate feedback, calm copy */
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex items-center justify-center min-h-[50vh]" role="status" aria-live="polite">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading products...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary-200 border-t-primary-600 mx-auto mb-4" />
+          <p className="text-slate-600 text-sm font-medium">Loading products…</p>
         </div>
       </div>
     );
   }
 
-  // Error state
+  /* Error: one primary action (Retry), no competing elements */
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="glass-card max-w-md mx-auto text-center p-8">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle className="w-8 h-8 text-red-600" />
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="glass-card max-w-md w-full mx-auto text-center p-8">
+          <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="w-7 h-7 text-red-600" aria-hidden />
           </div>
-          <h3 className="text-lg font-semibold text-slate-900 mb-2">Error Loading Products</h3>
-          <p className="text-slate-600 mb-6">{error}</p>
-          <button 
-            onClick={() => refreshProducts()} 
-            className="btn-primary flex items-center gap-2 mx-auto"
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Error loading products</h2>
+          <p className="text-slate-600 text-sm mb-6">{error}</p>
+          <button
+            type="button"
+            onClick={() => refreshProducts()}
+            className="btn-primary inline-flex items-center gap-2"
+            aria-label="Retry loading products"
           >
             <RefreshCw className="w-4 h-4" />
             Retry
@@ -105,28 +107,27 @@ export function Inventory() {
     );
   }
 
-  // Empty state (no products at all, not filtered)
+  /* Empty state: single primary CTA — Add First Product */
   if (products.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="glass-card max-w-md mx-auto text-center p-8">
-          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Package className="w-8 h-8 text-slate-400" />
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="glass-card max-w-md w-full mx-auto text-center p-8">
+          <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Package className="w-7 h-7 text-slate-400" aria-hidden />
           </div>
-          <h3 className="text-lg font-semibold text-slate-900 mb-2">No Products Yet</h3>
-          <p className="text-slate-600 mb-6">
-            Get started by adding your first product to the inventory.
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">No products yet</h2>
+          <p className="text-slate-600 text-sm mb-6">
+            Add your first product to get started.
           </p>
           {canCreate && (
-            <button 
-              onClick={() => {
-                setEditingProduct(null);
-                setIsModalOpen(true);
-              }} 
-              className="btn-primary flex items-center gap-2 mx-auto"
+            <button
+              type="button"
+              onClick={() => { setEditingProduct(null); setIsModalOpen(true); }}
+              className="btn-primary inline-flex items-center gap-2 min-h-touch"
+              aria-label="Add first product"
             >
-              <Plus className="w-4 h-4" />
-              Add First Product
+              <Plus className="w-5 h-5" />
+              Add first product
             </button>
           )}
         </div>
@@ -259,79 +260,73 @@ export function Inventory() {
     }
   };
 
+  /* Vertical rhythm: space-y-6 (section spacing); one primary CTA per screen = Add Product */
   return (
-    <div className="space-y-8">
-      {/* SINGLE SYNC ENTRY POINT: Sync is a system-level action. Only this banner CTA triggers sync — no duplicate in header (clarity, single-responsibility). */}
+    <div className="space-y-6">
       {unsyncedCount > 0 && (
-        <div className="animate-fade-in-up rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <p className="text-amber-900 font-medium flex-1">
-            <AlertTriangle className="inline-block w-5 h-5 mr-2 align-middle text-amber-600" />
-            {unsyncedCount} item{unsyncedCount !== 1 ? 's' : ''} only on this device. They will not appear on other devices until synced.
+        <div className="rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-amber-900 text-sm font-medium flex-1">
+            <AlertTriangle className="inline-block w-4 h-4 mr-2 align-middle text-amber-600" aria-hidden />
+            {unsyncedCount} item{unsyncedCount !== 1 ? 's' : ''} on this device only. Sync to see them everywhere.
           </p>
           <button
             type="button"
             onClick={handleSyncToServer}
             disabled={isSyncing}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50 min-h-[44px] min-w-[44px] touch-manipulation"
+            className="flex items-center justify-center gap-2 min-h-touch px-4 py-2.5 rounded-xl bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-50 touch-manipulation w-full sm:w-auto"
             aria-label="Sync to server now"
           >
-            {isSyncing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-            {isSyncing ? 'Syncing…' : 'Sync to server now'}
+            {isSyncing ? <RefreshCw className="w-5 h-5 animate-spin" aria-hidden /> : <Upload className="w-5 h-5" />}
+            {isSyncing ? 'Syncing…' : 'Sync to server'}
           </button>
         </div>
       )}
-      {/* Inventory header: primary CTA is Add Product only. Sync lives in banner above — no duplicate button here. */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between animate-fade-in-up">
+      {/* Header: title + count; single primary action = Add Product */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-[32px] font-bold text-slate-900 tracking-tight mb-1">Inventory</h1>
-          <p className="text-slate-500 text-sm mb-2">
-            Products, suppliers, locations and stock levels
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Inventory</h1>
           <p className="text-slate-500 text-sm">
             {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''} found
-            {filteredProducts.length !== products.length && ` (of ${products.length} total)`}
+            {filteredProducts.length !== products.length && ` of ${products.length}`}
           </p>
         </div>
         {canCreate && (
           <button
+            type="button"
             onClick={handleAddProduct}
-            className="btn-primary flex items-center justify-center gap-2 min-h-[44px] px-5 py-3 touch-manipulation w-full sm:w-auto"
+            className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto"
             aria-label="Add product"
           >
             <Plus className="w-5 h-5" />
-            Add Product
+            Add product
           </button>
         )}
       </div>
 
-      {/* Search and View Toggle */}
-      <div className="flex gap-4 animate-fade-in-up">
-        <div className="flex-1">
+      {/* Search + view toggle: aligned to grid, no horizontal scroll on mobile */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex-1 min-w-0">
           <InventorySearchBar value={searchQuery} onChange={setSearchQuery} />
         </div>
-        <div className="flex items-center gap-1 bg-glass rounded-xl border-glass p-1 backdrop-blur-xl">
+        <div className="flex items-center gap-1 bg-white/80 rounded-xl border border-slate-200/60 p-1 flex-shrink-0 self-start sm:self-center">
           <button
+            type="button"
             onClick={() => setViewMode('table')}
-            className={`p-2.5 rounded-md transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center ${
-              viewMode === 'table' 
-                ? 'bg-primary-500/10 text-primary-600 shadow-sm' 
-                : 'text-slate-600 hover:bg-slate-100/50'
+            className={`min-w-touch min-h-touch rounded-lg flex items-center justify-center transition-colors ${
+              viewMode === 'table' ? 'bg-primary-100 text-primary-600' : 'text-slate-600 hover:bg-slate-100'
             }`}
-            title="Table View"
-            aria-label="Switch to table view"
+            aria-label="Table view"
             aria-pressed={viewMode === 'table'}
           >
             <List className="w-5 h-5" />
           </button>
           <button
+            type="button"
             onClick={() => setViewMode('grid')}
-            className={`p-2.5 rounded-md transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center ${
-              viewMode === 'grid' 
-                ? 'bg-primary-500/10 text-primary-600 shadow-sm' 
-                : 'text-slate-600 hover:bg-slate-100/50'
+            className={`min-w-touch min-h-touch rounded-lg flex items-center justify-center transition-colors ${
+              viewMode === 'grid' ? 'bg-primary-100 text-primary-600' : 'text-slate-600 hover:bg-slate-100'
             }`}
-            title="Grid View"
-            aria-label="Switch to grid view"
+            aria-label="Grid view"
             aria-pressed={viewMode === 'grid'}
           >
             <LayoutGrid className="w-5 h-5" />
@@ -339,7 +334,7 @@ export function Inventory() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 overflow-x-hidden">
         {/* Filters Sidebar */}
         <div className="lg:col-span-1">
           <InventoryFilters
@@ -353,23 +348,26 @@ export function Inventory() {
         <div className="lg:col-span-3 space-y-4">
           {/* Bulk Actions */}
           {canBulk && selectedIds.length > 0 && (
-            <div className="glass-card bg-primary-50/80 border-primary-200/50 animate-fade-in-up">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-primary-900">
-                  {selectedIds.length} product{selectedIds.length !== 1 ? 's' : ''} selected
+            <div className="glass-card bg-primary-50/60 border border-primary-200/50 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm font-medium text-primary-900">
+                  {selectedIds.length} selected
                 </span>
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={handleExport}
-                    className="px-4 py-2 bg-white/90 text-slate-700 rounded-lg hover:bg-white transition-all duration-200 flex items-center gap-2 text-sm font-semibold shadow-sm hover:shadow-md border border-slate-200/50"
+                    className="btn-secondary min-h-touch px-4 py-2 text-sm inline-flex items-center gap-2"
                   >
                     <Download className="w-4 h-4" />
                     Export
                   </button>
                   {canDelete && (
                     <button
+                      type="button"
                       onClick={handleBulkDelete}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 flex items-center gap-2 text-sm font-semibold shadow-sm hover:shadow-md"
+                      className="min-h-touch px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 inline-flex items-center gap-2 transition-colors"
+                      aria-label="Delete selected products"
                     >
                       <Trash2 className="w-4 h-4" />
                       Delete
@@ -382,19 +380,17 @@ export function Inventory() {
 
           {/* Products Display */}
           {filteredProducts.length === 0 ? (
-            <div className="glass-card text-center p-12">
-              <Package className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">No Products Match Your Filters</h3>
-              <p className="text-slate-600 mb-4">
-                Try adjusting your search or filters to see more products.
+            <div className="glass-card text-center p-8">
+              <Package className="w-10 h-10 text-slate-400 mx-auto mb-3" aria-hidden />
+              <h2 className="text-base font-semibold text-slate-900 mb-1">No products match</h2>
+              <p className="text-slate-600 text-sm mb-4">
+                Try different search or filters.
               </p>
               {(searchQuery || Object.keys(filters).length > 0) && (
                 <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setFilters({});
-                  }}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  type="button"
+                  onClick={() => { setSearchQuery(''); setFilters({}); }}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium min-h-touch inline-flex items-center"
                 >
                   Clear filters
                 </button>

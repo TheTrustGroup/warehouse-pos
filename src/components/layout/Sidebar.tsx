@@ -51,20 +51,20 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-[280px] bg-glass border-r border-white/40 flex flex-col shadow-glass backdrop-blur-xl">
-      {/* Logo Section */}
-      <div className="p-6 border-b border-slate-200/30">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-[28px] font-extrabold leading-none tracking-tight gradient-text">
+      {/* Logo: hierarchy via size, not weight overload */}
+      <div className="p-5 border-b border-slate-200/30">
+        <div className="flex flex-col gap-0.5">
+          <h1 className="text-xl font-bold leading-tight tracking-tight gradient-text">
             Extreme Dept Kidz
           </h1>
-          <p className="text-[13px] font-medium text-slate-500 pl-0.5">
+          <p className="text-xs font-medium text-slate-500">
             Inventory & POS
           </p>
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
+      {/* Nav: vertical rhythm space-y-1, touch targets via .nav-item */}
+      <nav className="flex-1 py-5 px-2 space-y-1 overflow-y-auto">
         {navigation.map((item) => (
           <NavLink
             key={item.name}
@@ -79,9 +79,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* User Profile with Role */}
       <div className="p-4 border-t border-slate-200/30 space-y-3">
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 hover:bg-slate-50/80 transition-all group">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 hover:bg-slate-100/60 transition-colors">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm shadow-lg">
             {user?.fullName?.charAt(0) || 'U'}
           </div>
@@ -98,7 +97,7 @@ export function Sidebar() {
             <select
               value={user?.role ?? 'viewer'}
               onChange={(e) => switchRole(e.target.value)}
-              className="w-full rounded-lg border border-slate-200/60 bg-white/80 px-3 py-2 text-sm font-medium text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full min-h-touch rounded-xl border border-slate-200/60 bg-white/80 px-3 py-2.5 text-sm font-medium text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/10"
               aria-label="Switch role to see different features"
             >
               {Object.values(ROLES).map((role) => (

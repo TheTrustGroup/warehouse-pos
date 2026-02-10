@@ -39,19 +39,19 @@ export function ProductGridView({
     return { label: 'In Stock', color: 'border-green-200 bg-green-50' };
   };
 
+  /* Grid: consistent gap-5, no animation delay (calm, predictable) */
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      {products.map((product, index) => {
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+      {products.map((product) => {
         const status = getStockStatus(product);
         const isSelected = selectedIds.includes(product.id);
-        
+
         return (
-          <div 
-            key={product.id} 
-            className={`glass-card group cursor-pointer relative animate-fade-in-up ${
+          <div
+            key={product.id}
+            className={`glass-card group cursor-pointer relative ${
               canSelect && isSelected ? 'ring-2 ring-primary-500 ring-offset-2' : ''
             }`}
-            style={{ animationDelay: `${index * 50}ms` }}
           >
             {canSelect && (
               <div className="absolute top-4 left-4 z-10">
@@ -116,23 +116,24 @@ export function ProductGridView({
                 <div className="flex gap-2 pt-3 border-t border-slate-200/50">
                   {canEdit && (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEdit(product);
-                      }}
-                      className="flex-1 py-2.5 px-3 bg-blue-50/80 text-blue-600 rounded-lg hover:bg-blue-100/80 transition-all duration-200 flex items-center justify-center gap-2 font-semibold text-sm backdrop-blur-[10px] border border-blue-200/30 hover:border-blue-300/50"
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onEdit(product); }}
+                      className="flex-1 min-h-touch py-2.5 px-3 rounded-xl bg-primary-50 text-primary-600 hover:bg-primary-100 font-medium text-sm inline-flex items-center justify-center gap-2 transition-colors"
+                      aria-label={`Edit ${product.name}`}
                     >
                       <Edit className="w-4 h-4" />
-                      <span>Edit</span>
+                      Edit
                     </button>
                   )}
                   {canDelete && (
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         if (confirm('Delete this product?')) onDelete(product.id);
                       }}
-                      className="py-2.5 px-3 bg-red-50/80 text-red-600 rounded-lg hover:bg-red-100/80 transition-all duration-200 backdrop-blur-[10px] border border-red-200/30 hover:border-red-300/50"
+                      className="min-h-touch min-w-touch py-2.5 px-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 inline-flex items-center justify-center transition-colors"
+                      aria-label={`Delete ${product.name}`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -145,11 +146,11 @@ export function ProductGridView({
       })}
 
       {products.length === 0 && (
-        <div className="col-span-full text-center py-16">
-          <div className="w-16 h-16 bg-slate-100/80 rounded-xl flex items-center justify-center mx-auto mb-4 border border-slate-200/50">
-            <Package className="w-8 h-8 text-slate-400" />
+        <div className="col-span-full text-center py-12">
+          <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+            <Package className="w-6 h-6 text-slate-400" aria-hidden />
           </div>
-          <p className="text-slate-600 font-semibold">No products found</p>
+          <p className="text-slate-600 text-sm font-medium">No products found</p>
         </div>
       )}
     </div>

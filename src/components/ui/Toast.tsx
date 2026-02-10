@@ -29,10 +29,13 @@ export function Toast({ type, message, onClose, duration = 3000 }: ToastProps) {
   const Icon = icons[type];
 
   return (
-    <div className={`glass-card flex items-center gap-3 px-4 py-3 border-2 shadow-glass-hover ${colors[type]} animate-slide-in-right backdrop-blur-xl`}>
-      <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
-      <p className="font-semibold flex-1">{message}</p>
-      <button onClick={onClose} className="btn-action ml-2 hover:opacity-70">
+    <div
+      role="alert"
+      className={`glass-card flex items-center gap-3 px-4 py-3 min-h-touch border-2 ${colors[type]} shadow-large`}
+    >
+      <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} aria-hidden />
+      <p className="font-medium flex-1 text-sm">{message}</p>
+      <button type="button" onClick={onClose} className="btn-action flex-shrink-0" aria-label="Dismiss">
         <X className="w-4 h-4" strokeWidth={2} />
       </button>
     </div>

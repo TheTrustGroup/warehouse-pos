@@ -1,96 +1,144 @@
-/* src/index.css - Premium Glass Morphism Styles */
+/* src/index.css - UI Polish: calm, intentional, production-ready (Apple-grade)
+ * Design tokens: vertical rhythm, spacing over borders, one primary action per screen.
+ * No backend/API/schema changes — visual only.
+ *
+ * UI POLISH SUMMARY
+ * -----------------
+ * Improvements: (1) Layout & structure: vertical rhythm (space-y-6), consistent margins,
+ * main max-width and overflow-x-hidden to avoid horizontal scroll; (2) Spacing & typography:
+ * CSS vars for section/block/touch/input; labels text-slate-600 font-medium; inputs min-h 44px;
+ * (3) Action hierarchy: one primary CTA per screen (Add product, Complete sale, Print receipt),
+ * secondary de-emphasized, destructive (clear cart, delete) clearly separated; (4) POS: cart
+ * line-item spacing, quantity controls ≥44px, totals always visible; (5) Feedback: loading/empty/error
+ * states standardized, toasts role="alert" and dismiss with adequate hit area; (6) Consistency:
+ * same btn-primary/secondary/action, glass-card, modal behavior and headers across Inventory & POS.
+ * Remaining UX risks: (a) Create delivery order on POS uses window.prompt — consider a simple
+ * modal for customer details; (b) Table view on very small viewports still scrolls horizontally
+ * (min-w table preserved for readability).
+ */
 
-/* Import Inter Font */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ---- Design tokens: spacing rhythm (used for section/input/button consistency) ---- */
+:root {
+  --space-section: 1.5rem;   /* 24px: between major sections */
+  --space-block: 1rem;        /* 16px: between related blocks */
+  --space-inline: 0.75rem;    /* 12px: between inline elements */
+  --touch-min: 44px;          /* Minimum hit area (accessibility, thumb reach) */
+  --input-height: 44px;       /* Input min-height for comfort, no cramped fields */
+  --radius-base: 10px;
+  --radius-lg: 12px;
+}
 
 @layer base {
   body {
     @apply bg-gradient-to-br from-slate-50 via-white to-slate-50 text-slate-900 antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     font-feature-settings: 'cv11', 'ss01';
-    font-variation-settings: 'opsz' auto;
+    /* Reduced font-weight noise: hierarchy via size/spacing, not bold overload */
   }
 
-  /* Smooth scrolling */
   html {
     scroll-behavior: smooth;
   }
 }
 
 @layer components {
-  /* Glass Morphism Card */
-  .card {
-    @apply bg-white/70 backdrop-blur-xl rounded-2xl p-6 border border-white/40 shadow-glass transition-all duration-300 hover:shadow-glass-hover hover:-translate-y-0.5;
-  }
-
-  /* Premium Glass Card (Extra Blur) */
-  .glass-card {
-    @apply rounded-2xl;
-    background: rgba(255, 255, 255, 0.7);
+  /* Glass panel (modal/sheet): same surface as glass-card, no padding — unifies modals with layout */
+  .glass {
+    background: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 
-      0 1px 3px rgba(0, 0, 0, 0.02),
-      0 8px 24px rgba(0, 0, 0, 0.04);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(255, 255, 255, 0.4);
   }
-
-  /* Fallback for browsers without backdrop-filter support */
   @supports not (backdrop-filter: blur(20px)) {
-    .glass-card {
-      background: rgba(255, 255, 255, 0.95);
-    }
+    .glass { background: rgba(255, 255, 255, 0.98); }
   }
 
+  /* Card: spacing over decoration; removed hover lift to reduce visual noise */
+  .card {
+    @apply bg-white/70 backdrop-blur-xl rounded-2xl p-6 border border-white/40 shadow-glass transition-shadow duration-200;
+  }
+
+  /* Glass card: primary surface for content blocks; calm hover (shadow only, no movement) */
+  .glass-card {
+    @apply rounded-2xl;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(226, 232, 240, 0.5);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 8px 24px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.2s ease, background 0.2s ease;
+  }
+  @supports not (backdrop-filter: blur(20px)) {
+    .glass-card { background: rgba(255, 255, 255, 0.95); }
+  }
   .glass-card:hover {
     background: rgba(255, 255, 255, 0.85);
-    box-shadow: 
-      0 4px 6px rgba(0, 0, 0, 0.03),
-      0 12px 32px rgba(0, 0, 0, 0.06);
-    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(0, 0, 0, 0.06);
   }
 
-  /* Premium Buttons */
+  /* Primary action: one per screen; clear, no competing decoration */
   .btn-primary {
-    @apply px-6 py-3 rounded-xl font-semibold text-white shadow-primary transition-all duration-200 hover:shadow-primary-hover hover:-translate-y-0.5 active:scale-98;
+    min-height: var(--touch-min);
+    @apply px-6 py-3 rounded-xl font-semibold text-white shadow-primary transition-all duration-200 active:scale-[0.98];
     background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   }
-  
-  .btn-secondary {
-    @apply px-6 py-3 rounded-xl font-medium transition-all duration-200 hover:-translate-y-0.5 active:scale-98;
-    background: rgba(241, 245, 249, 0.8);
-    backdrop-filter: blur(10px);
-    color: #475569;
-    border: 1px solid rgba(226, 232, 240, 0.6);
+  .btn-primary:hover {
+    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
   }
 
+  /* Secondary: de-emphasized, grouped logically */
+  .btn-secondary {
+    min-height: var(--touch-min);
+    @apply px-6 py-3 rounded-xl font-medium transition-colors duration-200 active:scale-[0.98];
+    background: rgba(241, 245, 249, 0.9);
+    color: #475569;
+    border: 1px solid rgba(226, 232, 240, 0.7);
+  }
   .btn-secondary:hover {
-    background: rgba(248, 250, 252, 0.9);
+    background: rgba(248, 250, 252, 1);
     border-color: rgba(203, 213, 225, 0.8);
   }
 
-  /* Premium Input Fields */
-  .input-field {
-    @apply w-full px-4 py-3 rounded-xl transition-all duration-200 text-sm;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1.5px solid rgba(226, 232, 240, 0.8);
-    backdrop-filter: blur(10px);
+  /* Icon/ghost actions: consistent hit area, calm; destructive clearly separated */
+  .btn-action {
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+    @apply inline-flex items-center justify-center rounded-lg font-medium transition-colors duration-150;
+    color: #64748b;
+  }
+  .btn-action:hover {
+    @apply bg-slate-100;
+    color: #334155;
+  }
+  .btn-action-view:hover { @apply bg-slate-100 text-slate-700; }
+  .btn-action-edit:hover { @apply bg-primary-50 text-primary-600; }
+  .btn-action-delete:hover {
+    @apply bg-red-50 text-red-600;
+    /* Destructive: clearly separated from primary so mistakes are avoidable */
   }
 
+  /* Inputs: clear labels, adequate hit area, no cramped fields */
+  .input-field {
+    min-height: var(--input-height);
+    @apply w-full px-4 py-3 rounded-xl transition-all duration-200 text-base;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+  }
   .input-field:focus {
     @apply outline-none border-primary-500;
-    background: #ffffff;
-    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
   }
 
-  /* Status Badges */
+  /* Badges: calm labels, not loud; hierarchy via size/color only */
   .badge {
-    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide;
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium tracking-wide;
   }
 
   .badge-success {
@@ -133,23 +181,20 @@
   }
 
   .table-row:hover {
-    background: linear-gradient(90deg, rgba(239, 68, 68, 0.02) 0%, transparent 100%);
+    background: rgba(248, 250, 252, 0.8);
   }
 
-  /* Navigation Item */
+  /* Nav: consistent padding and touch targets; active state clear but not loud */
   .nav-item {
-    @apply flex items-center gap-3 px-4 py-3 mx-3 rounded-xl transition-all duration-200 font-medium text-sm;
+    min-height: var(--touch-min);
+    @apply flex items-center gap-3 px-4 py-3 mx-2 rounded-xl transition-colors duration-150 font-medium text-sm;
   }
-
   .nav-item:hover {
-    @apply bg-slate-50/80 translate-x-1;
+    @apply bg-slate-100/80;
   }
-
   .nav-item-active {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%);
-    color: #dc2626;
-    font-weight: 600;
-    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
+    @apply bg-primary-50/80 text-primary-700 font-semibold;
+    box-shadow: none;
   }
 
   /* Skeleton Loading */

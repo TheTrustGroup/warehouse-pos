@@ -144,27 +144,30 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
 
   if (!isOpen) return null;
 
+  /* Modal: one primary action = Save/Update; Cancel secondary. Section spacing = space-y-6. */
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in-up">
-      <div className="glass rounded-2xl shadow-large max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-fade-in-up">
-        <div className="sticky top-0 glass border-b border-white/30 px-8 py-6 flex items-center justify-between z-10">
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-            {product ? 'Edit Product' : 'Add New Product'}
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="product-form-title">
+      <div className="glass rounded-2xl shadow-large max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="sticky top-0 glass border-b border-slate-200/50 px-6 py-4 flex items-center justify-between z-10">
+          <h2 id="product-form-title" className="text-xl font-bold text-slate-900 tracking-tight">
+            {product ? 'Edit product' : 'Add product'}
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 hover:bg-slate-100/80 rounded-lg transition-all duration-200 hover:scale-105"
+            className="btn-action rounded-lg"
+            aria-label="Close"
           >
             <X className="w-5 h-5 text-slate-600" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-6 overflow-y-auto flex-1">
-          {/* Basic Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="p-6 lg:p-8 space-y-6 overflow-y-auto flex-1">
+          {/* Basic info: labels calm (font-medium), inputs min-h-touch */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Product Name *
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
+                Product name *
               </label>
               <input
                 type="text"
@@ -176,7 +179,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 SKU *
               </label>
               <input
@@ -189,7 +192,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Barcode
               </label>
               <input
@@ -201,7 +204,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Category *
               </label>
               <input
@@ -216,7 +219,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">
               Description
             </label>
             <textarea
@@ -227,10 +230,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             />
           </div>
 
-          {/* Pricing & Stock */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Quantity *
               </label>
               <input
@@ -244,8 +246,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Cost Price *
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
+                Cost price *
               </label>
               <input
                 type="number"
@@ -259,8 +261,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Selling Price *
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
+                Selling price *
               </label>
               <input
                 type="number"
@@ -274,8 +276,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Reorder Level *
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
+                Reorder level *
               </label>
               <input
                 type="number"
@@ -288,10 +290,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
           </div>
 
-          {/* Location — Warehouse is first-class: required dropdown; quantity is scoped to selected warehouse. */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Warehouse *
               </label>
               <select
@@ -319,7 +320,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Aisle
               </label>
               <input
@@ -334,7 +335,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Rack
               </label>
               <input
@@ -349,7 +350,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Bin
               </label>
               <input
@@ -364,11 +365,10 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
           </div>
 
-          {/* Supplier */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Supplier Name
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
+                Supplier name
               </label>
               <input
                 type="text"
@@ -382,7 +382,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Contact
               </label>
               <input
@@ -397,7 +397,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Email
               </label>
               <input
@@ -412,9 +412,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
           </div>
 
-          {/* Tags */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">
               Tags
             </label>
             <div className="flex gap-2 mb-2">
@@ -453,10 +452,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </div>
           </div>
 
-          {/* Images */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Product Images
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">
+              Product images
             </label>
             <div className="flex flex-wrap gap-4 mb-4">
               {imagePreview.map((img, index) => (
@@ -472,9 +470,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
                 </div>
               ))}
             </div>
-            <label className="flex items-center gap-2 px-4 py-2.5 border border-slate-200/80 rounded-lg cursor-pointer hover:bg-slate-50/80 w-fit transition-all duration-200 hover:border-primary-300/50 hover:shadow-sm">
+            <label className="flex items-center gap-2 min-h-touch px-4 py-2.5 border border-slate-200/80 rounded-xl cursor-pointer hover:bg-slate-50 w-fit transition-colors text-sm font-medium text-slate-700">
               <Upload className="w-5 h-5 text-slate-600" />
-              <span className="text-sm font-semibold text-slate-700">Upload Images</span>
+              <span>Upload images</span>
               <input
                 type="file"
                 accept="image/*"
@@ -485,21 +483,18 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             </label>
           </div>
 
-          {/* Form Actions */}
-          <div className="flex justify-end gap-3 pt-6 border-t border-slate-200/50 sticky bottom-0 bg-white/70 backdrop-blur-[10px] -mx-8 px-8 pb-6">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn-secondary"
-            >
+          {/* One primary action = Save; Cancel secondary, de-emphasized */}
+          <div className="flex justify-end gap-3 pt-6 border-t border-slate-200/50 sticky bottom-0 bg-white/90 backdrop-blur-md -mx-6 lg:-mx-8 px-6 lg:px-8 pb-6">
+            <button type="button" onClick={onClose} className="btn-secondary">
               Cancel
             </button>
             <button
               type="submit"
               className="btn-primary"
               disabled={isSubmitting}
+              aria-busy={isSubmitting}
             >
-              {isSubmitting ? 'Saving...' : product ? 'Update Product' : 'Add Product'}
+              {isSubmitting ? 'Saving…' : product ? 'Update product' : 'Add product'}
             </button>
           </div>
         </form>
