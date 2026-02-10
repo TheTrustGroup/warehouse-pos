@@ -319,7 +319,7 @@ Create this user in your backend admin panel with these exact credentials.`;
           {!import.meta.env.PROD && (
             <p className="text-sm text-slate-600 mb-4">
               {newUser.role !== 'admin' ? (
-                <>Email: <strong>{newUser.role}@extremedeptkidz.com</strong>. Password: <strong>{getDefaultUserPassword() || '(set in backend)'}</strong> (same for all other roles).</>
+                <>Email: <strong>{newUser.role}@extremedeptkidz.com</strong>. Password: <strong>{getDefaultUserPassword() || '(set in backend)'}</strong> (same for all other roles).{newUser.role === 'cashier' && (<> For another POS (e.g. Main town), use <strong>cashier_maintown@…</strong> then assign that email in &quot;Store & warehouse access&quot; below.</>)}</>
               ) : (
                 <>Admin: set email and password in your backend. Keep your existing admin credentials.</>
               )}
@@ -411,9 +411,12 @@ Create this user in your backend admin panel with these exact credentials.`;
           <MapPin className="w-5 h-5 text-primary-600" aria-hidden />
           <h3 className="text-lg font-semibold text-slate-900">Store & warehouse access</h3>
         </div>
-        <p className="text-sm text-slate-600 mb-5">
+        <p className="text-sm text-slate-600 mb-2">
           Assign which store(s) and warehouse(s) a user can use in POS. No assignment = access to all (legacy). Enter the user&apos;s login email below.
         </p>
+        <div className="text-sm text-slate-600 mb-5 p-3 rounded-lg bg-primary-50/50 border border-primary-100">
+          <strong className="text-slate-700">How POS logins work:</strong> The system grants role from the <strong>email username</strong> (part before @). Use <code className="px-1 py-0.5 bg-white rounded text-xs">cashier@…</code> or <code className="px-1 py-0.5 bg-white rounded text-xs">cashier_maintown@…</code> for POS; <code className="px-1 py-0.5 bg-white rounded text-xs">viewer@…</code> gives view-only. Create the user in your auth backend with that email, then assign their store/warehouse here.
+        </div>
         <div className="space-y-5">
           {/* User email: full-width editable field so any email can be entered */}
           <div className="space-y-2">
