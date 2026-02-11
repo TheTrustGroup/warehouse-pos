@@ -1,8 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Product } from '../../types';
+import { Product, type QuantityBySizeItem } from '../../types';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
 import { useWarehouse } from '../../contexts/WarehouseContext';
-import { X, Upload } from 'lucide-react';
+import { API_BASE_URL } from '../../lib/api';
+import { apiGet } from '../../lib/apiClient';
+import { X, Upload, Plus, Trash2 } from 'lucide-react';
+
+export type SizeKind = 'na' | 'one_size' | 'sized';
+
+interface SizeCodeOption {
+  size_code: string;
+  size_label: string;
+  size_order: number;
+}
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -40,14 +50,18 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
     expiryDate: null as Date | null,
     variants: {} as { size?: string; color?: string; unit?: string },
     createdBy: 'admin',
+    sizeKind: 'na' as SizeKind,
+    quantityBySize: [] as { sizeCode: string; quantity: number }[],
   });
 
   const [tagInput, setTagInput] = useState('');
   const [imagePreview, setImagePreview] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sizeCodes, setSizeCodes] = useState<SizeCodeOption[]>([]);
 
   useEffect(() => {
     if (product) {
+      const qtyBySize = (product.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
       setFormData({
         sku: product.sku,
         barcode: product.barcode,
@@ -70,10 +84,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
         expiryDate: product.expiryDate,
         variants: product.variants || {},
         createdBy: product.createdBy,
+        sizeKind: (product.sizeKind ?? 'na') as SizeKind,
+        quantityBySize: qtyBySize.length > 0 ? qtyBySize : [],
       });
       setImagePreview(product.images);
     } else {
-      // Reset form for new product
       setFormData({
         sku: generateSKU(),
         barcode: '',
@@ -92,10 +107,19 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
         expiryDate: null,
         variants: {},
         createdBy: 'admin',
+        sizeKind: 'na',
+        quantityBySize: [],
       });
       setImagePreview([]);
     }
   }, [product, isOpen, currentWarehouseId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    apiGet<{ data: SizeCodeOption[] }>(API_BASE_URL, '/api/size-codes')
+      .then((res) => setSizeCodes(Array.isArray(res?.data) ? res.data : []))
+      .catch(() => setSizeCodes([]));
+  }, [isOpen]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -131,9 +155,16 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+    if (formData.sizeKind === 'sized' && formData.quantityBySize.length === 0) {
+      return; // Parent could show "Add at least one size" — keep modal open
+    }
     setIsSubmitting(true);
     try {
-      await Promise.resolve(onSubmit(formData));
+      const payload = { ...formData };
+      if (formData.sizeKind === 'sized' && formData.quantityBySize.length > 0) {
+        (payload as any).quantity = formData.quantityBySize.reduce((s, r) => s + (r.quantity || 0), 0);
+      }
+      await Promise.resolve(onSubmit(payload));
       onClose();
     } catch {
       // Parent shows toast; keep modal open
@@ -255,19 +286,31 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                Quantity *
-              </label>
-              <input
-                type="number"
-                required
-                min="0"
-                value={formData.quantity}
-                onChange={(e) => setFormData(prev => ({ ...prev, quantity: Number(e.target.value) }))}
-                className="input-field"
-              />
-            </div>
+            {formData.sizeKind !== 'sized' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-1.5">
+                  Quantity *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                  className="input-field"
+                />
+              </div>
+            )}
+            {formData.sizeKind === 'sized' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-1.5">
+                  Total quantity
+                </label>
+                <div className="input-field bg-slate-50 min-h-[44px] flex items-center">
+                  {formData.quantityBySize.reduce((s, e) => s + (e.quantity || 0), 0)}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1.5">
@@ -313,6 +356,97 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
               />
             </div>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">
+              Size type
+            </label>
+            <div className="flex flex-wrap gap-2 min-h-touch">
+              {(['na', 'one_size', 'sized'] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => setFormData(prev => ({
+                    ...prev,
+                    sizeKind: kind,
+                    quantityBySize: kind !== 'sized' ? [] : prev.quantityBySize,
+                  }))}
+                  className={`min-h-[44px] min-w-[44px] px-4 rounded-xl border text-sm font-medium transition-colors ${
+                    formData.sizeKind === kind
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {kind === 'na' ? 'No sizes' : kind === 'one_size' ? 'One size' : 'Multiple sizes'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {formData.sizeKind === 'sized' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">
+                Quantity by size
+              </label>
+              {formData.quantityBySize.length === 0 && (
+                <p className="text-amber-600 text-sm mb-2">Add at least one size row to save.</p>
+              )}
+              <div className="space-y-2">
+                {formData.quantityBySize.map((row, idx) => (
+                  <div key={idx} className="flex flex-wrap items-center gap-2 min-h-touch">
+                    <select
+                      value={row.sizeCode}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        quantityBySize: prev.quantityBySize.map((r, i) =>
+                          i === idx ? { ...r, sizeCode: e.target.value } : r
+                        ),
+                      }))}
+                      className="input-field flex-1 min-w-[100px] min-h-[44px]"
+                    >
+                      {sizeCodes.map((s) => (
+                        <option key={s.size_code} value={s.size_code}>{s.size_label}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      value={row.quantity}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        quantityBySize: prev.quantityBySize.map((r, i) =>
+                          i === idx ? { ...r, quantity: Number(e.target.value) || 0 } : r
+                        ),
+                      }))}
+                      className="input-field w-24 min-h-[44px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({
+                        ...prev,
+                        quantityBySize: prev.quantityBySize.filter((_, i) => i !== idx),
+                      }))}
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                      aria-label="Remove size row"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({
+                    ...prev,
+                    quantityBySize: [...prev.quantityBySize, { sizeCode: sizeCodes[0]?.size_code ?? 'NA', quantity: 0 }],
+                  }))}
+                  className="min-h-[44px] px-4 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 inline-flex items-center gap-2 text-sm font-medium"
+                >
+                  <Plus className="w-5 h-5" />
+                  Add size
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             <div>

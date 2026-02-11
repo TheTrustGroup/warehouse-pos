@@ -399,26 +399,33 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   }, [products, isLoading, effectiveWarehouseId]);
 
+  /** Single-product path for fast verify (no full list fetch). */
+  const productByIdPath = (base: string, productId: string) => {
+    const params = new URLSearchParams();
+    params.set('warehouse_id', effectiveWarehouseId);
+    return `${base}/${productId}?${params.toString()}`;
+  };
+
   /**
-   * Read-after-write verification: re-fetch from server and ensure the saved record exists.
-   * No write is considered successful unless the record can be immediately re-queried.
-   * Throws on mismatch so UI never shows "Saved" for unverified persistence.
+   * Read-after-write verification: re-fetch single product from server. Fast path (<300ms) so save feels instant.
+   * Used in background after optimistic update; on failure we refresh list and log.
    */
   const readAfterWriteVerify = async (productId: string): Promise<Product> => {
-    let list: any[] = [];
+    let found: any = null;
     try {
-      const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/api/products'));
-      list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
+      found = await apiGet<any>(API_BASE_URL, productByIdPath('/api/products', productId));
     } catch {
-      const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/admin/api/products'));
-      list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
+      try {
+        found = await apiGet<any>(API_BASE_URL, productByIdPath('/admin/api/products', productId));
+      } catch {
+        /* fallback to full list for backwards compatibility if by-id not available */
+        const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/api/products'));
+        const list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
+        found = list.find((p: any) => p && p.id === productId);
+      }
     }
-    const found = list.find((p: any) => p && p.id === productId);
-    if (!found) {
-      logInventoryError('Read-after-write verification failed: saved product not found', {
-        productId,
-        listLength: list.length,
-      });
+    if (!found || !found.id) {
+      logInventoryError('Read-after-write verification failed: saved product not found', { productId });
       throw new Error('Save succeeded but verification failed. Please refresh the list.');
     }
     return normalizeProduct(found);
@@ -533,9 +540,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Add product: WRITE PATH. Atomic from client perspective: validate → POST with idempotency → read-after-write verify.
-   * Only consider successful when DB confirms and record can be re-queried. Otherwise throw (no "Saved" without verification).
-   * On API failure we save locally and throw ADD_PRODUCT_SAVED_LOCALLY so UI never shows server "Saved" for local-only.
+   * Add product: WRITE PATH. Optimistic: on API success update state immediately so save feels instant (<300ms).
+   * Background verify re-fetches single product; on failure we refresh list and log (no UI block).
    */
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => {
     if (!productData?.name?.trim?.()) throw new Error('Product name is required');
@@ -558,7 +564,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           idempotencyKey: stableId,
         });
       } catch {
-        // API failed: save locally so the product never vanishes; do NOT show server "Saved"
         const saved: Product = normalizeProduct(payload);
         setLocalOnlyIds((prev) => new Set(prev).add(saved.id));
         setProducts((prev) => {
@@ -569,20 +574,31 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         throw new Error(ADD_PRODUCT_SAVED_LOCALLY);
       }
     }
-    const idToVerify = (savedRaw && savedRaw.id) || stableId;
-    const verified = await readAfterWriteVerify(idToVerify);
-    const saved: Product = verified;
+    const saved: Product = normalizeProduct(savedRaw);
     logInventoryCreate({ productId: saved.id, sku: saved.sku, listLength: products.length + 1 });
     setProducts((prev) => {
       const next = [...prev, saved];
       persistProducts(next);
       return next;
     });
+    const idToVerify = saved.id;
+    readAfterWriteVerify(idToVerify).then((verified) => {
+      if (!mountedRef.current) return;
+      setProducts((prev) => {
+        const next = prev.map((p) => (p.id === verified.id ? verified : p));
+        persistProducts(next);
+        return next;
+      });
+    }).catch(() => {
+      if (!mountedRef.current) return;
+      loadProducts(undefined, { silent: true }).catch(() => {});
+      reportError(new Error('Read-after-write verify failed after add'), { productId: idToVerify });
+    });
   };
 
   /**
-   * Update product: WRITE PATH. Version check (409) prevents concurrent overwrite; read-after-write ensures persistence.
-   * No success without DB commit and verified re-read.
+   * Update product: WRITE PATH. Optimistic: on PUT success update state immediately; background verify.
+   * Version check (409) still blocks and refreshes.
    */
   const updateProduct = async (id: string, updates: Partial<Product> & { warehouseId?: string }) => {
     const product = products.find(p => p.id === id);
@@ -606,11 +622,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    let putResult: any;
     try {
-      await doPut();
+      putResult = await doPut();
     } catch (e) {
       try {
-        await apiPut<any>(API_BASE_URL, `/api/products/${id}`, bodyWithWarehouse);
+        putResult = await apiPut<any>(API_BASE_URL, `/api/products/${id}`, bodyWithWarehouse);
       } catch (err: any) {
         if (err?.status === 409) {
           await loadProducts();
@@ -622,11 +639,25 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const verified = await readAfterWriteVerify(id);
+    const saved: Product = normalizeProduct(putResult);
     logInventoryUpdate({ productId: id, sku: product.sku });
-    const next = products.map(p => (p.id === id ? verified : p));
-    setProducts(next);
-    persistProducts(next);
+    setProducts((prev) => {
+      const next = prev.map(p => (p.id === id ? saved : p));
+      persistProducts(next);
+      return next;
+    });
+    readAfterWriteVerify(id).then((verified) => {
+      if (!mountedRef.current) return;
+      setProducts((prev) => {
+        const next = prev.map(p => (p.id === id ? verified : p));
+        persistProducts(next);
+        return next;
+      });
+    }).catch(() => {
+      if (!mountedRef.current) return;
+      loadProducts(undefined, { silent: true }).catch(() => {});
+      reportError(new Error('Read-after-write verify failed after update'), { productId: id });
+    });
   };
 
   /**

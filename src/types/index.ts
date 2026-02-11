@@ -16,6 +16,13 @@ export interface Warehouse {
   storeId?: string | null;
 }
 
+/** One size line: system code (e.g. US9, M) and quantity. sizeLabel is human-readable (e.g. "US 9", "Medium"). */
+export interface QuantityBySizeItem {
+  sizeCode: string;
+  sizeLabel?: string;
+  quantity: number;
+}
+
 export interface Product {
   id: string;
   sku: string;
@@ -51,6 +58,10 @@ export interface Product {
   createdBy: string;
   /** Optional version for optimistic locking; backend may return and require on update. */
   version?: number;
+  /** Additive: na | one_size | sized. Non-sized products use NA or OS. */
+  sizeKind?: 'na' | 'one_size' | 'sized';
+  /** When sizeKind === 'sized', per-size quantities. Enables fast size lookup and POS size selector. */
+  quantityBySize?: QuantityBySizeItem[];
 }
 
 export interface Transaction {

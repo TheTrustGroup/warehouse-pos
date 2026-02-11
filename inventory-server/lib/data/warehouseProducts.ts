@@ -8,6 +8,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getDefaultWarehouseId } from './warehouses';
 import { getQuantitiesForProducts, getQuantity, ensureQuantity, setQuantity } from './warehouseInventory';
+import { getQuantitiesBySize, getQuantitiesBySizeForProducts, setQuantitiesBySize, type QuantityBySizeEntry } from './warehouseInventoryBySize';
+import { getSizeCodes } from './sizeCodes';
 
 export interface ListProductsOptions {
   limit?: number;
@@ -53,10 +55,17 @@ export interface WarehouseProductRow {
   created_at: string;
   updated_at: string;
   version?: number;
+  /** Additive: na | one_size | sized. Default na. */
+  size_kind?: string;
 }
 
-function rowToApi(row: WarehouseProductRow, quantity: number = 0): Record<string, unknown> {
-  return {
+function rowToApi(
+  row: WarehouseProductRow,
+  quantity: number = 0,
+  quantityBySize?: Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>
+): Record<string, unknown> {
+  const sizeKind = (row.size_kind ?? 'na') as string;
+  const out: Record<string, unknown> = {
     id: row.id,
     sku: row.sku,
     barcode: row.barcode ?? '',
@@ -76,13 +85,20 @@ function rowToApi(row: WarehouseProductRow, quantity: number = 0): Record<string
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     version: row.version ?? 0,
+    sizeKind,
   };
+  if (quantityBySize && quantityBySize.length > 0) {
+    out.quantityBySize = quantityBySize;
+  }
+  return out;
 }
 
 /** Build product row for insert/update (no quantity; quantity is in warehouse_inventory). */
 function bodyToRow(body: Record<string, unknown>, id: string, ts: string): Record<string, unknown> {
   const loc = body.location && typeof body.location === 'object' && !Array.isArray(body.location) ? body.location as Record<string, string> : {};
   const sup = body.supplier && typeof body.supplier === 'object' && !Array.isArray(body.supplier) ? body.supplier as Record<string, string> : {};
+  const sizeKind = String(body.sizeKind ?? body.size_kind ?? 'na').toLowerCase();
+  const validSizeKind = ['na', 'one_size', 'sized'].includes(sizeKind) ? sizeKind : 'na';
   return {
     id,
     sku: String(body.sku ?? '').trim() || id,
@@ -102,6 +118,7 @@ function bodyToRow(body: Record<string, unknown>, id: string, ts: string): Recor
     created_at: body.createdAt ?? body.created_at ?? ts,
     updated_at: ts,
     version: Number(body.version ?? body.version ?? 0) || 0,
+    size_kind: validSizeKind,
   };
 }
 
@@ -151,10 +168,33 @@ export async function getWarehouseProducts(
   const ids = productRows.map((r) => r.id);
   const quantities = await getQuantitiesForProducts(wid, ids);
 
-  let merged = productRows.map((row) => {
-    const qty = quantities.get(row.id) ?? 0;
-    return pos ? posRowToApi(row, qty) : rowToApi(row, qty);
-  });
+  const sizedIds = productRows.filter((r) => (r.size_kind ?? 'na') === 'sized').map((r) => r.id);
+  const bySizeMap = sizedIds.length > 0 ? await getQuantitiesBySizeForProducts(wid, sizedIds) : new Map<string, QuantityBySizeEntry[]>();
+
+  let merged: Record<string, unknown>[];
+  if (pos) {
+    merged = productRows.map((row) => {
+      const qty = quantities.get(row.id) ?? 0;
+      const bySize = bySizeMap.get(row.id);
+      const quantityBySize = bySize && bySize.length > 0 ? bySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity })) : undefined;
+      return posRowToApi(row, qty, quantityBySize);
+    });
+  } else {
+    const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
+    merged = productRows.map((row) => {
+      const qty = quantities.get(row.id) ?? 0;
+      const bySize = bySizeMap.get(row.id);
+      const quantityBySize =
+        bySize && bySize.length > 0
+          ? bySize.map((e) => ({
+              sizeCode: e.sizeCode,
+              sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
+              quantity: e.quantity,
+            }))
+          : undefined;
+      return rowToApi(row, qty, quantityBySize);
+    });
+  }
 
   if (lowStock || outOfStock) {
     merged = merged.filter((p) => {
@@ -170,8 +210,12 @@ export async function getWarehouseProducts(
   return { data: merged, total: total ?? undefined };
 }
 
-function posRowToApi(row: WarehouseProductRow, quantity: number): Record<string, unknown> {
-  return {
+function posRowToApi(
+  row: WarehouseProductRow,
+  quantity: number,
+  quantityBySize?: Array<{ sizeCode: string; quantity: number }>
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {
     id: row.id,
     name: row.name,
     sku: row.sku,
@@ -181,6 +225,10 @@ function posRowToApi(row: WarehouseProductRow, quantity: number): Record<string,
     quantity,
     updatedAt: row.updated_at,
   };
+  if (quantityBySize && quantityBySize.length > 0) {
+    out.quantityBySize = quantityBySize;
+  }
+  return out;
 }
 
 /** GET one by id. Quantity is for the given warehouseId (default if omitted). */
@@ -189,28 +237,67 @@ export async function getWarehouseProductById(id: string, warehouseId?: string):
   const { data, error } = await supabase.from(TABLE).select('*').eq('id', id).maybeSingle();
   if (error) throw error;
   if (!data) return null;
+  const row = data as WarehouseProductRow;
   const wid = (warehouseId?.trim?.() && warehouseId) ? warehouseId : getDefaultWarehouseId();
   const qty = await getQuantity(wid, id);
-  return rowToApi(data as WarehouseProductRow, qty);
+  if ((row.size_kind ?? 'na') === 'sized') {
+    const bySize = await getQuantitiesBySize(wid, id);
+    const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
+    const quantityBySize = bySize.map((e) => ({
+      sizeCode: e.sizeCode,
+      sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
+      quantity: e.quantity,
+    }));
+    return rowToApi(row, qty, quantityBySize);
+  }
+  return rowToApi(row, qty);
 }
 
-/** POST: create one. Uses warehouseId from body (or default) to set initial quantity in warehouse_inventory. All-or-nothing: if inventory step fails, product row is removed. */
+/** POST: create one. Uses warehouseId from body (or default). If quantityBySize provided, writes per-size and sets total in warehouse_inventory. All-or-nothing. */
 export async function createWarehouseProduct(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const supabase = getSupabase();
   const id: string = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : crypto.randomUUID();
   const ts = now();
-  const row = bodyToRow(body, id, ts);
+  const quantityBySizeRaw = body.quantityBySize as Array<{ sizeCode: string; quantity: number }> | undefined;
+  const hasSized = Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0;
+  const row = bodyToRow(
+    body,
+    id,
+    ts
+  ) as Record<string, unknown> & { size_kind: string };
+  if (hasSized) row.size_kind = 'sized';
   const { data, error } = await supabase.from(TABLE).insert(row).select().single();
   if (error) throw error;
   const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
-  const quantity = Number(body.quantity) ?? 0;
+  let quantity: number;
   try {
-    await ensureQuantity(wid, id, quantity);
+    if (hasSized) {
+      const entries: QuantityBySizeEntry[] = quantityBySizeRaw!.map((e) => ({
+        sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
+        quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
+      })).filter((e) => e.sizeCode);
+      await setQuantitiesBySize(wid, id, entries);
+      quantity = entries.reduce((sum, e) => sum + e.quantity, 0);
+      await ensureQuantity(wid, id, quantity);
+    } else {
+      quantity = Number(body.quantity) ?? 0;
+      await ensureQuantity(wid, id, quantity);
+    }
   } catch (e) {
     await supabase.from(TABLE).delete().eq('id', id);
     throw e;
   }
-  return rowToApi(data as WarehouseProductRow, quantity);
+  const outRow = data as WarehouseProductRow;
+  if (hasSized && quantityBySizeRaw) {
+    const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
+    const quantityBySize = quantityBySizeRaw.map((e) => ({
+      sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
+      sizeLabel: sizeLabels.get(String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase()) ?? e.sizeCode,
+      quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
+    }));
+    return rowToApi(outRow, quantity, quantityBySize);
+  }
+  return rowToApi(outRow, quantity);
 }
 
 /** PUT: update one. If body has quantity (and optional warehouseId), updates warehouse_inventory for that warehouse. Optimistic lock: WHERE version = ?; 409 if conflict. */
@@ -240,13 +327,35 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
     throw err;
   }
   const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
-  if (typeof (body as { quantity?: number }).quantity === 'number') {
+  const quantityBySizeRaw = (body as { quantityBySize?: Array<{ sizeCode: string; quantity: number }> }).quantityBySize;
+  const hasSized = Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0;
+  if (hasSized) {
+    const entries: QuantityBySizeEntry[] = quantityBySizeRaw.map((e) => ({
+      sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
+      quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
+    })).filter((e) => e.sizeCode);
+    await setQuantitiesBySize(wid, id, entries);
+    const total = entries.reduce((sum, e) => sum + e.quantity, 0);
+    await setQuantity(wid, id, total);
+  } else if (typeof (body as { quantity?: number }).quantity === 'number') {
     await setQuantity(wid, id, (body as { quantity: number }).quantity);
   }
-  const qty = typeof (body as { quantity?: number }).quantity === 'number'
-    ? (body as { quantity: number }).quantity
-    : await getQuantity(wid, id);
-  return rowToApi(data as WarehouseProductRow, qty);
+  const qty = hasSized
+    ? (quantityBySizeRaw as QuantityBySizeEntry[]).reduce((s, e) => s + e.quantity, 0)
+    : typeof (body as { quantity?: number }).quantity === 'number'
+      ? (body as { quantity: number }).quantity
+      : await getQuantity(wid, id);
+  const outRow = data as WarehouseProductRow;
+  if (hasSized && quantityBySizeRaw) {
+    const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
+    const quantityBySize = quantityBySizeRaw.map((e) => ({
+      sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
+      sizeLabel: sizeLabels.get(String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase()) ?? e.sizeCode,
+      quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
+    }));
+    return rowToApi(outRow, qty, quantityBySize);
+  }
+  return rowToApi(outRow, qty);
 }
 
 /** DELETE one. */

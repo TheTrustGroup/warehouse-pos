@@ -1,7 +1,7 @@
 /**
  * Inventory reliability tests (P0).
- * - Disaster test: when API returns success but read-back does NOT include the product, we throw (no "Saved" illusion).
- * - Success: when API returns success and read-back includes the product, addProduct resolves and we can treat as saved.
+ * - Optimistic save: when API returns 200, addProduct resolves immediately and state is updated (verify runs in background).
+ * - Success: when API returns 200 and read-back includes the product, addProduct resolves and product is in state.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -83,10 +83,15 @@ describe('InventoryContext reliability', () => {
     vi.mocked(apiGet).mockResolvedValue([]);
   });
 
-  it('disaster test: when API returns 200 but read-back does NOT include the product, addProduct throws', async () => {
+  it('optimistic save: when API returns 200, addProduct resolves immediately and product is in state (verify runs in background)', async () => {
     const newId = 'new-product-id-123';
-    vi.mocked(apiPost).mockResolvedValue({ id: newId, ...minimalProduct });
-    vi.mocked(apiGet).mockResolvedValue([]);
+    const saved = { id: newId, ...minimalProduct, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    vi.mocked(apiPost).mockResolvedValue(saved);
+    // Initial load returns []; by-id verify (path includes product id) returns single product so background verify does not overwrite state
+    vi.mocked(apiGet).mockImplementation(async (_base: string, path: string) => {
+      if (typeof path === 'string' && path.includes(newId)) return saved;
+      return [];
+    });
 
     const { result } = renderHook(() => useInventory(), { wrapper });
 
@@ -95,13 +100,14 @@ describe('InventoryContext reliability', () => {
     });
 
     await act(async () => {
-      await expect(result.current.addProduct(minimalProduct)).rejects.toThrow(
-        /Save succeeded but verification failed|Please refresh/
-      );
+      await result.current.addProduct(minimalProduct);
     });
 
+    await waitFor(() => {
+      expect(result.current.products.length).toBe(1);
+    });
+    expect(result.current.products[0].id).toBe(newId);
     expect(apiPost).toHaveBeenCalled();
-    expect(apiGet).toHaveBeenCalled();
   });
 
   it('success: when API returns 200 and read-back includes the product, addProduct resolves (device B sees inventory in 1 request)', async () => {
