@@ -6,8 +6,8 @@ This document explains how **size codes** work in the warehouse + POS system: wh
 
 ## What is `size_code`?
 
-- **`size_code`** is the **system identifier** for a size: normalized, no spaces, stable in the database and API (e.g. `US9`, `M`, `W32`, `OS`, `NA`).
-- **`size_label`** is the **human‑readable** label (e.g. “US 9”, “Medium”, “One Size”).
+- **`size_code`** is the **system identifier** for a size: normalized, no spaces, stable in the database and API (e.g. `US9`, `M`, `W32`, `OS`, `NA`). **Custom sizes** are supported: users can type any size (e.g. `EU 42`, `3XL`); the backend normalizes and stores it.
+- **`size_label`** is the **human‑readable** label (e.g. “US 9”, “Medium”, “One Size”). For predefined sizes from `size_codes`; for custom sizes the code is used as the label.
 - **`size_order`** is an optional numeric value used to **sort** sizes in UIs (e.g. shoe sizes in order).
 
 **Rules:**
@@ -22,7 +22,8 @@ This document explains how **size codes** work in the warehouse + POS system: wh
 
 ### 1. Reference table: `size_codes`
 
-- Holds the list of valid sizes: `size_code`, `size_label`, `size_order`.
+- Holds the **predefined** size list: `size_code`, `size_label`, `size_order`. Used as dropdown suggestions in the product form.
+- **Custom sizes**: Users can type any size in the form; it is normalized and stored in `warehouse_inventory_by_size` even if not in `size_codes`. So the dropdown shows predefined options plus free text.
 - Seeded for **both kids and adult**:
   - **Adult:** NA, OS, US 6–13 (footwear), XS–XXL (apparel), W28–W36 (waist).
   - **Kids/infant:** 0-3M, 3-6M, 6-9M, 9-12M, 12-18M, 18-24M (infant months); 2T–5T (toddler); US1K–US13K (kids footwear); 6Y–14Y (youth clothing).

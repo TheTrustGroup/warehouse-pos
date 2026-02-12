@@ -155,14 +155,15 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-    if (formData.sizeKind === 'sized' && formData.quantityBySize.length === 0) {
-      return; // Parent could show "Add at least one size" — keep modal open
+    const validSizeRows = (formData.quantityBySize ?? []).filter((r) => (r.sizeCode ?? '').trim() !== '');
+    if (formData.sizeKind === 'sized' && validSizeRows.length === 0) {
+      return; // Need at least one size with a non-empty size code
     }
     setIsSubmitting(true);
     try {
-      const payload = { ...formData };
-      if (formData.sizeKind === 'sized' && formData.quantityBySize.length > 0) {
-        (payload as any).quantity = formData.quantityBySize.reduce((s, r) => s + (r.quantity || 0), 0);
+      const payload = { ...formData, quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize };
+      if (formData.sizeKind === 'sized' && validSizeRows.length > 0) {
+        (payload as any).quantity = validSizeRows.reduce((s, r) => s + (r.quantity || 0), 0);
       }
       await Promise.resolve(onSubmit(payload));
       onClose();
@@ -392,9 +393,16 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
                 <p className="text-amber-600 text-sm mb-2">Add at least one size row to save.</p>
               )}
               <div className="space-y-2">
+                <datalist id="size-codes-datalist">
+                  {sizeCodes.map((s) => (
+                    <option key={s.size_code} value={s.size_code} label={s.size_label} />
+                  ))}
+                </datalist>
                 {formData.quantityBySize.map((row, idx) => (
                   <div key={idx} className="flex flex-wrap items-center gap-2 min-h-touch">
-                    <select
+                    <input
+                      type="text"
+                      list="size-codes-datalist"
                       value={row.sizeCode}
                       onChange={(e) => setFormData(prev => ({
                         ...prev,
@@ -402,12 +410,10 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
                           i === idx ? { ...r, sizeCode: e.target.value } : r
                         ),
                       }))}
-                      className="input-field flex-1 min-w-[100px] min-h-[44px]"
-                    >
-                      {sizeCodes.map((s) => (
-                        <option key={s.size_code} value={s.size_code}>{s.size_label}</option>
-                      ))}
-                    </select>
+                      placeholder="Pick or type size (e.g. US 9, EU 42)"
+                      className="input-field flex-1 min-w-[120px] min-h-[44px]"
+                      autoComplete="off"
+                    />
                     <input
                       type="number"
                       min="0"
@@ -437,7 +443,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
                   type="button"
                   onClick={() => setFormData(prev => ({
                     ...prev,
-                    quantityBySize: [...prev.quantityBySize, { sizeCode: sizeCodes[0]?.size_code ?? 'NA', quantity: 0 }],
+                    quantityBySize: [...prev.quantityBySize, { sizeCode: '', quantity: 0 }],
                   }))}
                   className="min-h-[44px] px-4 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 inline-flex items-center gap-2 text-sm font-medium"
                 >
