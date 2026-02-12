@@ -161,18 +161,27 @@ export function ProductTableView({
                     </span>
                   </td>
                   <td className="px-4 py-3 align-middle">
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-slate-900">{product.quantity}</span>
-                      <span className={`badge ${
-                        status.label === 'In Stock' 
-                          ? 'badge-success' 
-                          : status.label === 'Low Stock' 
-                          ? 'badge-warning' 
-                          : 'badge-error'
-                      }`}>
-                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                        {status.label}
-                      </span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-slate-900">{product.quantity}</span>
+                        <span className={`badge ${
+                          status.label === 'In Stock'
+                            ? 'badge-success'
+                            : status.label === 'Low Stock'
+                            ? 'badge-warning'
+                            : 'badge-error'
+                        }`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                          {status.label}
+                        </span>
+                      </div>
+                      {(product.sizeKind === 'sized' || (product.quantityBySize && product.quantityBySize.length > 0)) && product.quantityBySize && product.quantityBySize.length > 0 && (
+                        <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                          {product.quantityBySize.map((s) => (
+                            <span key={s.sizeCode}>{s.sizeLabel ?? s.sizeCode}: {s.quantity}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 align-middle">

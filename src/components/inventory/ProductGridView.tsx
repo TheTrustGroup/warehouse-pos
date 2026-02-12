@@ -94,17 +94,23 @@ export function ProductGridView({
                   {formatCurrency(product.sellingPrice)}
                 </span>
                 <span className={`badge ${
-                  status.label === 'In Stock' 
-                    ? 'badge-success' 
-                    : status.label === 'Low Stock' 
-                    ? 'badge-warning' 
+                  status.label === 'In Stock'
+                    ? 'badge-success'
+                    : status.label === 'Low Stock'
+                    ? 'badge-warning'
                     : 'badge-error'
                 }`}>
                   <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
                   {product.quantity} left
                 </span>
               </div>
-
+              {(product.sizeKind === 'sized' || (product.quantityBySize?.length)) && product.quantityBySize && product.quantityBySize.length > 0 && (
+                <div className="text-xs text-slate-500 flex flex-wrap gap-x-2 gap-y-0.5">
+                  {product.quantityBySize.map((s) => (
+                    <span key={s.sizeCode}>{s.sizeLabel ?? s.sizeCode}: {s.quantity}</span>
+                  ))}
+                </div>
+              )}
               {(product.quantity === 0 || product.quantity <= product.reorderLevel) && (
                 <div className="flex items-center gap-2 text-amber-700 bg-amber-50/80 backdrop-blur-[10px] px-3 py-2 rounded-lg border border-amber-200/30">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" />
