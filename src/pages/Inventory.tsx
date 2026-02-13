@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useInventory, ProductFilters, ADD_PRODUCT_SAVED_LOCALLY } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useWarehouse } from '../contexts/WarehouseContext';
 import { API_BASE_URL } from '../lib/api';
 import { useToast } from '../contexts/ToastContext';
 import { ProductTableView } from '../components/inventory/ProductTableView';
@@ -17,8 +18,9 @@ import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, Refre
 type ViewMode = 'table' | 'grid';
 
 export function Inventory() {
-  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi, unsyncedCount, lastSyncAt } = useInventory();
+  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi, unsyncedCount, lastSyncAt, isUnsynced, verifyProductSaved, storagePersistFailed } = useInventory();
   const { hasPermission } = useAuth();
+  const { currentWarehouse, currentWarehouseId } = useWarehouse();
   const { showToast } = useToast();
   const [searchParams] = useSearchParams();
   const [isSyncing, setIsSyncing] = useState(false);
@@ -47,6 +49,12 @@ export function Inventory() {
       setFilters({ outOfStock: true });
     }
   }, [searchParams]);
+
+  // When Inventory page is opened, fetch fresh data in background so recorded items always show and list stays swift
+  useEffect(() => {
+    refreshProducts({ silent: true, bypassCache: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to ensure fresh list
+  }, []);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -176,16 +184,17 @@ export function Inventory() {
   };
 
   /**
-   * RELIABILITY: "Saved" success is only shown when addProduct/updateProduct resolve.
-   * Those resolve only after: API 2xx + read-after-write verification. No silent failure; errors surface as blocking toasts.
+   * RELIABILITY: "Saved" is shown only after API 2xx and read-after-write verification.
+   * On failure: clear error toast, retry possible; modal stays open and form is not reset.
    */
   const handleSubmitProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const warehouseLabel = currentWarehouse?.name ?? currentWarehouseId ?? 'warehouse';
     if (editingProduct) {
       try {
         await updateProduct(editingProduct.id, productData);
         setIsModalOpen(false);
         setEditingProduct(null);
-        showToast('success', 'Product updated successfully');
+        showToast('success', `Saved to ${warehouseLabel}`);
       } catch (error) {
         showToast('error', error instanceof Error ? error.message : 'Failed to update product');
         throw error;
@@ -196,7 +205,7 @@ export function Inventory() {
       await addProduct(productData);
       setIsModalOpen(false);
       setEditingProduct(null);
-      showToast('success', 'Product added successfully');
+      showToast('success', `Saved to ${warehouseLabel}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to save product. Write failed.';
       if (msg === ADD_PRODUCT_SAVED_LOCALLY) {
@@ -263,6 +272,17 @@ export function Inventory() {
   /* Vertical rhythm: space-y-6 (section spacing); one primary CTA per screen = Add Product */
   return (
     <div className="space-y-6">
+      {storagePersistFailed && (
+        <div className="rounded-xl border border-red-200 bg-red-50/90 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" aria-hidden />
+          <div className="flex-1">
+            <p className="text-red-900 text-sm font-medium">Inventory could not be saved to this device&apos;s storage.</p>
+            <p className="text-red-800 text-xs mt-1">
+              This can happen in private browsing or when storage is full. Recorded items may not appear after refresh. Check <strong>Settings → Data &amp; cache</strong> to see what is stored, or use a normal browser window.
+            </p>
+          </div>
+        </div>
+      )}
       {unsyncedCount > 0 && (
         <div className="rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <p className="text-amber-900 text-sm font-medium flex-1">
@@ -281,13 +301,16 @@ export function Inventory() {
           </button>
         </div>
       )}
-      {/* Header: title + count; single primary action = Add Product */}
+      {/* Header: title + count; single primary action = Add Product; warehouse filter label */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Inventory</h1>
           <p className="text-slate-500 text-sm">
             {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''} found
             {filteredProducts.length !== products.length && ` of ${products.length}`}
+            {currentWarehouseId && (
+              <span className="text-slate-600 font-medium"> · Warehouse: {currentWarehouse?.name ?? currentWarehouseId}</span>
+            )}
           </p>
           {lastSyncAt && (
             <p className="text-slate-400 text-xs mt-0.5" aria-live="polite">
@@ -413,6 +436,8 @@ export function Inventory() {
               canDelete={canDelete}
               canSelect={canBulk}
               showCostPrice={canViewCostPrice}
+              isUnsynced={isUnsynced}
+              onVerifySaved={verifyProductSaved}
             />
           ) : (
             <ProductGridView
@@ -425,6 +450,8 @@ export function Inventory() {
               canDelete={canDelete}
               canSelect={canBulk}
               showCostPrice={canViewCostPrice}
+              isUnsynced={isUnsynced}
+              onVerifySaved={verifyProductSaved}
             />
           )}
         </div>

@@ -75,6 +75,9 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
   if (idempotencyKey) {
     headers.set('Idempotency-Key', idempotencyKey);
   }
+  if (!headers.has('x-request-id')) {
+    headers.set('x-request-id', crypto.randomUUID());
+  }
 
   const fetchOpts: RequestInit = {
     ...init,

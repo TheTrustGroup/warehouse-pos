@@ -1,23 +1,24 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Building2, Settings as SettingsIcon, Users, Tag, RotateCcw } from 'lucide-react';
+import { Building2, Settings as SettingsIcon, Users, Tag, RotateCcw, Database } from 'lucide-react';
 import { BusinessProfile } from '../components/settings/BusinessProfile';
 import { SystemPreferences } from '../components/settings/SystemPreferences';
 import { UserManagement } from '../components/settings/UserManagement';
 import { CategoryManagement } from '../components/settings/CategoryManagement';
+import { LocalStorageCacheView } from '../components/settings/LocalStorageCacheView';
 import { useSettings } from '../contexts/SettingsContext';
 
-type SettingsTab = 'business' | 'system' | 'users' | 'categories';
+type SettingsTab = 'business' | 'system' | 'users' | 'categories' | 'cache';
 
 export function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') as SettingsTab | null;
-  const [activeTab, setActiveTab] = useState<SettingsTab>(tabParam && ['business', 'system', 'users', 'categories'].includes(tabParam) ? tabParam : 'business');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(tabParam && ['business', 'system', 'users', 'categories', 'cache'].includes(tabParam) ? tabParam : 'business');
   const { resetToDefaults } = useSettings();
 
   // Update tab when URL param changes
   useEffect(() => {
-    if (tabParam && ['business', 'system', 'users', 'categories'].includes(tabParam)) {
+    if (tabParam && ['business', 'system', 'users', 'categories', 'cache'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -33,6 +34,7 @@ export function Settings() {
     { id: 'system' as SettingsTab, label: 'System', icon: SettingsIcon },
     { id: 'users' as SettingsTab, label: 'Users', icon: Users },
     { id: 'categories' as SettingsTab, label: 'Categories', icon: Tag },
+    { id: 'cache' as SettingsTab, label: 'Data & cache', icon: Database },
   ];
 
   const handleReset = () => {
@@ -84,6 +86,7 @@ export function Settings() {
           {activeTab === 'system' && <SystemPreferences />}
           {activeTab === 'users' && <UserManagement />}
           {activeTab === 'categories' && <CategoryManagement />}
+          {activeTab === 'cache' && <LocalStorageCacheView />}
         </div>
       </div>
     </div>

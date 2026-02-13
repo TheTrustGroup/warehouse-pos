@@ -253,41 +253,82 @@ export async function getWarehouseProductById(id: string, warehouseId?: string):
   return rowToApi(row, qty);
 }
 
-/** POST: create one. Uses warehouseId from body (or default). If quantityBySize provided, writes per-size and sets total in warehouse_inventory. All-or-nothing. */
+/** POST: create one. Uses atomic RPC when available (product + inventory + by_size in one transaction); fallback to legacy path. */
 export async function createWarehouseProduct(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const supabase = getSupabase();
   const id: string = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : crypto.randomUUID();
   const ts = now();
+  const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
   const quantityBySizeRaw = body.quantityBySize as Array<{ sizeCode: string; quantity: number }> | undefined;
   const hasSized = Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0;
-  const row = bodyToRow(
-    body,
-    id,
-    ts
-  ) as Record<string, unknown> & { size_kind: string };
+  const row = bodyToRow(body, id, ts) as Record<string, unknown> & { size_kind: string };
   if (hasSized) row.size_kind = 'sized';
+  const quantity = hasSized
+    ? (quantityBySizeRaw as QuantityBySizeEntry[]).reduce((s, e) => s + Math.max(0, Math.floor(Number(e.quantity) ?? 0)), 0)
+    : Number(body.quantity) ?? 0;
+  const pQuantityBySize =
+    hasSized && quantityBySizeRaw
+      ? quantityBySizeRaw
+          .map((e) => ({
+            sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
+            quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
+          }))
+          .filter((e) => e.sizeCode)
+      : [];
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc('create_warehouse_product_atomic', {
+    p_id: id,
+    p_warehouse_id: wid,
+    p_row: row,
+    p_quantity: quantity,
+    p_quantity_by_size: pQuantityBySize,
+  });
+
+  if (!rpcError) {
+    const outRow = rpcData as WarehouseProductRow;
+    const created = await getWarehouseProductById(outRow.id, wid);
+    return created ?? rowToApi(outRow, quantity, hasSized ? pQuantityBySize.map((e) => ({ ...e, sizeLabel: e.sizeCode })) : undefined);
+  }
+
+  if (rpcError.code === '42883' || rpcError.message?.includes('does not exist')) {
+    return createWarehouseProductLegacy(body, id, ts, row, wid, quantityBySizeRaw, hasSized);
+  }
+  throw rpcError;
+}
+
+/** Legacy create path (multiple round-trips, best-effort rollback). Used when atomic RPC is not yet deployed. */
+async function createWarehouseProductLegacy(
+  body: Record<string, unknown>,
+  id: string,
+  ts: string,
+  row: Record<string, unknown> & { size_kind: string },
+  wid: string,
+  quantityBySizeRaw: Array<{ sizeCode: string; quantity: number }> | undefined,
+  hasSized: boolean
+): Promise<Record<string, unknown>> {
+  const supabase = getSupabase();
   const { data, error } = await supabase.from(TABLE).insert(row).select().single();
   if (error) throw error;
-  const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
-  let quantity: number;
   try {
-    if (hasSized) {
-      const entries: QuantityBySizeEntry[] = quantityBySizeRaw!.map((e) => ({
+    if (hasSized && quantityBySizeRaw?.length) {
+      const entries: QuantityBySizeEntry[] = quantityBySizeRaw.map((e) => ({
         sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
         quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
       })).filter((e) => e.sizeCode);
       await setQuantitiesBySize(wid, id, entries);
-      quantity = entries.reduce((sum, e) => sum + e.quantity, 0);
+      const quantity = entries.reduce((sum, e) => sum + e.quantity, 0);
       await ensureQuantity(wid, id, quantity);
     } else {
-      quantity = Number(body.quantity) ?? 0;
-      await ensureQuantity(wid, id, quantity);
+      await ensureQuantity(wid, id, Number(body.quantity) ?? 0);
     }
   } catch (e) {
     await supabase.from(TABLE).delete().eq('id', id);
     throw e;
   }
   const outRow = data as WarehouseProductRow;
+  const qty = hasSized
+    ? (quantityBySizeRaw as QuantityBySizeEntry[]).reduce((s, e) => s + e.quantity, 0)
+    : Number(body.quantity) ?? 0;
   if (hasSized && quantityBySizeRaw) {
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
     const quantityBySize = quantityBySizeRaw.map((e) => ({
@@ -295,15 +336,13 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
       sizeLabel: sizeLabels.get(String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase()) ?? e.sizeCode,
       quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
     }));
-    return rowToApi(outRow, quantity, quantityBySize);
+    return rowToApi(outRow, qty, quantityBySize);
   }
-  return rowToApi(outRow, quantity);
+  return rowToApi(outRow, qty);
 }
 
-/** PUT: update one. If body has quantity (and optional warehouseId), updates warehouse_inventory for that warehouse. Optimistic lock: WHERE version = ?; 409 if conflict. */
+/** PUT: update one. Uses atomic RPC when available; fallback to legacy. Optimistic lock: version; 409 if conflict. */
 export async function updateWarehouseProduct(id: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const supabase = getSupabase();
-  const ts = now();
   const existing = await getWarehouseProductById(id);
   if (!existing) {
     const err = new Error('Product not found') as Error & { status?: number };
@@ -311,6 +350,59 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
     throw err;
   }
   const currentVersion = Number(existing.version ?? 0);
+  const ts = now();
+  const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
+  const quantityBySizeRaw = (body as { quantityBySize?: Array<{ sizeCode: string; quantity: number }> }).quantityBySize;
+  const hasSized = Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0;
+  const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: currentVersion + 1 }, id, ts);
+
+  const supabase = getSupabase();
+  const pQuantity = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
+  const pQuantityBySize =
+    hasSized && quantityBySizeRaw
+      ? quantityBySizeRaw.map((e) => ({
+          sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
+          quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
+        })).filter((e) => e.sizeCode)
+      : null;
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc('update_warehouse_product_atomic', {
+    p_id: id,
+    p_warehouse_id: wid,
+    p_row: row,
+    p_current_version: currentVersion,
+    p_quantity: pQuantity,
+    p_quantity_by_size: pQuantityBySize,
+  });
+
+  if (!rpcError) {
+    const updated = await getWarehouseProductById(id, wid);
+    return updated ?? rowToApi(rpcData as WarehouseProductRow, 0);
+  }
+
+  if (rpcError.code === '42883' || rpcError.message?.includes('does not exist')) {
+    return updateWarehouseProductLegacy(id, body, existing, currentVersion, ts, wid, quantityBySizeRaw, hasSized);
+  }
+  if (rpcError.message?.includes('updated by someone else')) {
+    const err = new Error(rpcError.message) as Error & { status?: number };
+    err.status = 409;
+    throw err;
+  }
+  throw rpcError;
+}
+
+/** Legacy update path (product update then inventory; not atomic). */
+async function updateWarehouseProductLegacy(
+  id: string,
+  body: Record<string, unknown>,
+  existing: Record<string, unknown>,
+  currentVersion: number,
+  ts: string,
+  wid: string,
+  quantityBySizeRaw: Array<{ sizeCode: string; quantity: number }> | undefined,
+  hasSized: boolean
+): Promise<Record<string, unknown>> {
+  const supabase = getSupabase();
   const nextVersion = currentVersion + 1;
   const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: nextVersion }, id, ts);
   const { data, error } = await supabase
@@ -326,22 +418,18 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
     err.status = 409;
     throw err;
   }
-  const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
-  const quantityBySizeRaw = (body as { quantityBySize?: Array<{ sizeCode: string; quantity: number }> }).quantityBySize;
-  const hasSized = Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0;
-  if (hasSized) {
+  if (hasSized && quantityBySizeRaw?.length) {
     const entries: QuantityBySizeEntry[] = quantityBySizeRaw.map((e) => ({
       sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
       quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
     })).filter((e) => e.sizeCode);
     await setQuantitiesBySize(wid, id, entries);
-    const total = entries.reduce((sum, e) => sum + e.quantity, 0);
-    await setQuantity(wid, id, total);
+    await setQuantity(wid, id, entries.reduce((s, e) => s + e.quantity, 0));
   } else if (typeof (body as { quantity?: number }).quantity === 'number') {
     await setQuantity(wid, id, (body as { quantity: number }).quantity);
   }
-  const qty = hasSized
-    ? (quantityBySizeRaw as QuantityBySizeEntry[]).reduce((s, e) => s + e.quantity, 0)
+  const qty = hasSized && quantityBySizeRaw
+    ? quantityBySizeRaw.reduce((s, e) => s + Math.max(0, Math.floor(Number(e.quantity) ?? 0)), 0)
     : typeof (body as { quantity?: number }).quantity === 'number'
       ? (body as { quantity: number }).quantity
       : await getQuantity(wid, id);

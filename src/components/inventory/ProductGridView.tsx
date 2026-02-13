@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Product } from '../../types';
 import { formatCurrency } from '../../lib/utils';
-import { Package, Edit, Trash2, AlertTriangle } from 'lucide-react';
+import { Package, Edit, Trash2, AlertTriangle, CloudOff, RefreshCw } from 'lucide-react';
 
 interface ProductGridViewProps {
   products: Product[];
@@ -12,6 +13,8 @@ interface ProductGridViewProps {
   canDelete?: boolean;
   canSelect?: boolean;
   showCostPrice?: boolean;
+  isUnsynced?: (productId: string) => boolean;
+  onVerifySaved?: (productId: string) => Promise<{ saved: boolean; product?: Product }>;
 }
 
 export function ProductGridView({
@@ -24,7 +27,11 @@ export function ProductGridView({
   canDelete = true,
   canSelect = true,
   showCostPrice: _showCostPrice = true,
+  isUnsynced,
+  onVerifySaved,
 }: ProductGridViewProps) {
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+
   const handleSelectOne = (id: string, checked: boolean) => {
     onSelectChange(
       checked 
@@ -64,7 +71,33 @@ export function ProductGridView({
                 />
               </div>
             )}
-            
+            {isUnsynced?.(product.id) && (
+              <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-100 text-amber-800 text-xs font-medium" title="Saved on this device only">
+                  <CloudOff className="w-3.5 h-3.5" />
+                  Local only
+                </span>
+                {onVerifySaved && (
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setVerifyingId(product.id);
+                      try {
+                        await onVerifySaved(product.id);
+                      } finally {
+                        setVerifyingId(null);
+                      }
+                    }}
+                    disabled={verifyingId === product.id}
+                    className="p-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"
+                    title="Check if saved to server"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${verifyingId === product.id ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
+              </div>
+            )}
             {product.images[0] ? (
               <img 
                 src={product.images[0]} 

@@ -82,13 +82,21 @@ interface InventoryContextType {
   getProduct: (id: string) => Product | undefined;
   searchProducts: (query: string) => Product[];
   filterProducts: (filters: ProductFilters) => Product[];
-  refreshProducts: () => Promise<void>;
+  refreshProducts: (options?: { silent?: boolean; bypassCache?: boolean }) => Promise<void>;
   /** Push products that exist only in this browser's storage to the API so they appear everywhere. */
   syncLocalInventoryToApi: () => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>;
   /** Number of products that exist only on this device (not yet on server). Always 0 when API is source of truth. */
   unsyncedCount: number;
   /** Last time product list was successfully loaded from server (for "Updated X ago"). */
   lastSyncAt: Date | null;
+  /** True if this product id was saved only locally (API failed). Use to show "Local only" badge. */
+  isUnsynced: (productId: string) => boolean;
+  /** Re-fetch product from server to check if it was saved. Returns { saved, product }. If saved, updates local state and clears unsynced flag. */
+  verifyProductSaved: (productId: string) => Promise<{ saved: boolean; product?: Product }>;
+  /** True if the last attempt to save inventory to this device's local storage failed (e.g. private mode, quota). */
+  storagePersistFailed: boolean;
+  /** Current save phase for product form: idle | saving | verifying. Use for button label (Saving… / Verifying…). */
+  savePhase: 'idle' | 'saving' | 'verifying';
 }
 
 export interface ProductFilters {
@@ -117,6 +125,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const mountedRef = useRef(true);
   /** Ids of products saved only locally (API failed). Cleared when sync succeeds. Used for unsyncedCount and background sync. */
   const [localOnlyIds, setLocalOnlyIds] = useState<Set<string>>(() => new Set());
+  /** Set when setStoredData returns false so UI can warn that local storage may not have been updated. */
+  const [storagePersistFailed, setStoragePersistFailed] = useState(false);
+  /** Save phase for product form so button can show Saving… / Verifying… */
+  const [savePhase, setSavePhase] = useState<'idle' | 'saving' | 'verifying'>('idle');
   const syncRef = useRef<(() => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>) | null>(null);
 
   const PRODUCTS_CACHE_TTL_MS = 60_000; // 60s per-warehouse cache
@@ -192,13 +204,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    * Uses resilient client (retries, circuit breaker). On failure → fallback to localStorage/IndexedDB.
    * @param signal - AbortSignal for cancellation (e.g. on unmount).
    * @param options.silent - If true, do not show full-page loading (for background refresh). Default false.
+   * @param options.bypassCache - If true, always fetch from server (e.g. when opening Inventory page for fresh data).
    */
-  const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean }) => {
+  const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean }) => {
     const silent = options?.silent === true;
+    const bypassCache = options?.bypassCache === true;
     const wid = effectiveWarehouseId;
     const cached = cacheRef.current[wid];
     const now = Date.now();
-    const cacheValid = cached && (now - cached.ts) < PRODUCTS_CACHE_TTL_MS;
+    const cacheValid = !bypassCache && cached && (now - cached.ts) < PRODUCTS_CACHE_TTL_MS;
     if (cacheValid && cached.data.length > 0) {
       setProducts(cached.data);
       setIsLoading(false);
@@ -389,13 +403,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   }, [currentWarehouseId]);
 
-  // Real-time: poll when tab visible so multiple tabs/devices get updates. Silent so the page doesn't flash "Loading products..." and wipe the Add Product section.
-  useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true }), intervalMs: 60_000 });
+  // Real-time: poll when tab visible so inventory always shows latest. 25s interval for swifter updates.
+  useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true }), intervalMs: 25_000 });
 
   // Persist inventory per warehouse so list shows immediately on next login/refresh.
   useEffect(() => {
     if (!isLoading && products.length > 0 && isStorageAvailable()) {
-      setStoredData(productsCacheKey(effectiveWarehouseId), products);
+      const ok = setStoredData(productsCacheKey(effectiveWarehouseId), products);
+      setStoragePersistFailed(!ok);
     }
   }, [products, isLoading, effectiveWarehouseId]);
 
@@ -530,7 +545,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /** Persist current list to localStorage (per-warehouse) and IndexedDB (best-effort cache only; server is source of truth). */
   const persistProducts = (next: Product[]) => {
     if (isStorageAvailable() && next.length >= 0) {
-      setStoredData(productsCacheKey(effectiveWarehouseId), next);
+      const ok = setStoredData(productsCacheKey(effectiveWarehouseId), next);
+      setStoragePersistFailed(!ok);
+      if (!ok) reportError(new Error('Failed to save inventory to local storage (e.g. private mode or quota).'), { context: 'persistProducts' });
     }
     if (isIndexedDBAvailable()) {
       saveProductsToDb(next).catch((e) => {
@@ -539,125 +556,143 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /** Response body is treated as verified when it has id and core fields (server only returns after commit). */
+  const responseIsFullProduct = (raw: any): boolean =>
+    raw && typeof raw === 'object' && raw.id && (raw.name != null || raw.sku != null);
+
   /**
-   * Add product: WRITE PATH. Optimistic: on API success update state immediately so save feels instant (<300ms).
-   * Background verify re-fetches single product; on failure we refresh list and log (no UI block).
+   * Add product: WRITE PATH. Server confirms persistence; then we use response body as verified when complete (one round-trip), else read-after-write GET.
+   * UI shows "Saved" only after we have verified data. No optimistic success; on failure we throw and keep form open.
    */
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => {
     if (!productData?.name?.trim?.()) throw new Error('Product name is required');
-    const stableId = crypto.randomUUID();
-    const payload = productToPayload({
-      ...productData,
-      id: stableId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    const bodyWithWarehouse = { ...payload, warehouseId: productData.warehouseId ?? currentWarehouseId };
-    let savedRaw: any = null;
+    setSavePhase('saving');
     try {
-      savedRaw = await apiPost<any>(API_BASE_URL, '/admin/api/products', bodyWithWarehouse, {
-        idempotencyKey: stableId,
+      const stableId = crypto.randomUUID();
+      const payload = productToPayload({
+        ...productData,
+        id: stableId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
-    } catch {
+      const bodyWithWarehouse = { ...payload, warehouseId: productData.warehouseId ?? currentWarehouseId };
+      let savedRaw: any = null;
       try {
-        savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', bodyWithWarehouse, {
+        savedRaw = await apiPost<any>(API_BASE_URL, '/admin/api/products', bodyWithWarehouse, {
           idempotencyKey: stableId,
         });
       } catch {
-        const saved: Product = normalizeProduct(payload);
-        setLocalOnlyIds((prev) => new Set(prev).add(saved.id));
-        setProducts((prev) => {
-          const next = [...prev, saved];
-          persistProducts(next);
-          return next;
-        });
-        throw new Error(ADD_PRODUCT_SAVED_LOCALLY);
+        try {
+          savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', bodyWithWarehouse, {
+            idempotencyKey: stableId,
+          });
+        } catch {
+          const saved: Product = normalizeProduct(payload);
+          setLocalOnlyIds((prev) => new Set(prev).add(saved.id));
+          setProducts((prev) => {
+            const next = [...prev, saved];
+            persistProducts(next);
+            return next;
+          });
+          throw new Error(ADD_PRODUCT_SAVED_LOCALLY);
+        }
       }
-    }
-    const saved: Product = normalizeProduct(savedRaw);
-    logInventoryCreate({ productId: saved.id, sku: saved.sku, listLength: products.length + 1 });
-    setProducts((prev) => {
-      const next = [...prev, saved];
-      persistProducts(next);
-      return next;
-    });
-    const idToVerify = saved.id;
-    readAfterWriteVerify(idToVerify).then((verified) => {
+      const saved: Product = normalizeProduct(savedRaw);
+      logInventoryCreate({ productId: saved.id, sku: saved.sku, listLength: products.length + 1 });
+      let verified: Product;
+      if (responseIsFullProduct(savedRaw)) {
+        verified = saved;
+      } else {
+        setSavePhase('verifying');
+        try {
+          verified = await readAfterWriteVerify(saved.id);
+        } catch (e) {
+          reportError(e instanceof Error ? e : new Error('Read-after-write verify failed after add'), { productId: saved.id });
+          loadProducts(undefined, { silent: true }).catch(() => {});
+          throw new Error('Save succeeded but verification failed. Please refresh the list or try again.');
+        }
+      }
       if (!mountedRef.current) return;
       setProducts((prev) => {
-        const next = prev.map((p) => (p.id === verified.id ? verified : p));
+        const next = [...prev].some((p) => p.id === verified.id)
+          ? prev.map((p) => (p.id === verified.id ? verified : p))
+          : [...prev, verified];
         persistProducts(next);
         return next;
       });
-    }).catch(() => {
-      if (!mountedRef.current) return;
-      loadProducts(undefined, { silent: true }).catch(() => {});
-      reportError(new Error('Read-after-write verify failed after add'), { productId: idToVerify });
-    });
+    } finally {
+      setSavePhase('idle');
+    }
   };
 
   /**
-   * Update product: WRITE PATH. Optimistic: on PUT success update state immediately; background verify.
-   * Version check (409) still blocks and refreshes.
+   * Update product: WRITE PATH. Server confirms persistence; we use response body as verified when complete (one round-trip), else read-after-write GET.
+   * UI shows "Saved" only after we have verified data. Version check (409) still blocks and refreshes.
    */
   const updateProduct = async (id: string, updates: Partial<Product> & { warehouseId?: string }) => {
     const product = products.find(p => p.id === id);
     if (!product) throw new Error('Product not found');
 
-    const updatedProduct = { ...product, ...updates, updatedAt: new Date() };
-    const payload = productToPayload(updatedProduct);
-    const bodyWithWarehouse = { ...payload, warehouseId: updates.warehouseId ?? currentWarehouseId };
-
-    const doPut = async (): Promise<any> => {
-      try {
-        return await apiPut<any>(API_BASE_URL, `/admin/api/products/${id}`, bodyWithWarehouse);
-      } catch (err: any) {
-        if (err?.status === 409) {
-          await loadProducts();
-          throw new Error(
-            'Someone else updated this product. The list has been refreshed — please try your change again.'
-          );
-        }
-        throw err;
-      }
-    };
-
-    let putResult: any;
+    setSavePhase('saving');
     try {
-      putResult = await doPut();
-    } catch (e) {
-      try {
-        putResult = await apiPut<any>(API_BASE_URL, `/api/products/${id}`, bodyWithWarehouse);
-      } catch (err: any) {
-        if (err?.status === 409) {
-          await loadProducts();
-          throw new Error(
-            'Someone else updated this product. The list has been refreshed — please try your change again.'
-          );
-        }
-        throw err;
-      }
-    }
+      const updatedProduct = { ...product, ...updates, updatedAt: new Date() };
+      const payload = productToPayload(updatedProduct);
+      const bodyWithWarehouse = { ...payload, warehouseId: updates.warehouseId ?? currentWarehouseId };
 
-    const saved: Product = normalizeProduct(putResult);
-    logInventoryUpdate({ productId: id, sku: product.sku });
-    setProducts((prev) => {
-      const next = prev.map(p => (p.id === id ? saved : p));
-      persistProducts(next);
-      return next;
-    });
-    readAfterWriteVerify(id).then((verified) => {
+      const doPut = async (): Promise<any> => {
+        try {
+          return await apiPut<any>(API_BASE_URL, `/admin/api/products/${id}`, bodyWithWarehouse);
+        } catch (err: any) {
+          if (err?.status === 409) {
+            await loadProducts();
+            throw new Error(
+              'Someone else updated this product. The list has been refreshed — please try your change again.'
+            );
+          }
+          throw err;
+        }
+      };
+
+      let putResult: any;
+      try {
+        putResult = await doPut();
+      } catch (e) {
+        try {
+          putResult = await apiPut<any>(API_BASE_URL, `/api/products/${id}`, bodyWithWarehouse);
+        } catch (err: any) {
+          if (err?.status === 409) {
+            await loadProducts();
+            throw new Error(
+              'Someone else updated this product. The list has been refreshed — please try your change again.'
+            );
+          }
+          throw err;
+        }
+      }
+
+      logInventoryUpdate({ productId: id, sku: product.sku });
+      let verified: Product;
+      if (responseIsFullProduct(putResult)) {
+        verified = normalizeProduct(putResult);
+      } else {
+        setSavePhase('verifying');
+        try {
+          verified = await readAfterWriteVerify(id);
+        } catch (e) {
+          reportError(e instanceof Error ? e : new Error('Read-after-write verify failed after update'), { productId: id });
+          loadProducts(undefined, { silent: true }).catch(() => {});
+          throw new Error('Save succeeded but verification failed. Please refresh the list or try again.');
+        }
+      }
       if (!mountedRef.current) return;
       setProducts((prev) => {
         const next = prev.map(p => (p.id === id ? verified : p));
         persistProducts(next);
         return next;
       });
-    }).catch(() => {
-      if (!mountedRef.current) return;
-      loadProducts(undefined, { silent: true }).catch(() => {});
-      reportError(new Error('Read-after-write verify failed after update'), { productId: id });
-    });
+    } finally {
+      setSavePhase('idle');
+    }
   };
 
   /**
@@ -762,6 +797,50 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const isUnsynced = (productId: string) => localOnlyIds.has(productId);
+
+  const verifyProductSaved = async (productId: string): Promise<{ saved: boolean; product?: Product }> => {
+    try {
+      const found = await apiGet<any>(API_BASE_URL, productByIdPath('/api/products', productId));
+      if (!found?.id) return { saved: false };
+      const normalized = normalizeProduct(found);
+      if (mountedRef.current) {
+        setLocalOnlyIds((prev) => {
+          const next = new Set(prev);
+          next.delete(productId);
+          return next;
+        });
+        setProducts((prev) => {
+          const next = prev.map((p) => (p.id === productId ? normalized : p));
+          persistProducts(next);
+          return next;
+        });
+      }
+      return { saved: true, product: normalized };
+    } catch {
+      try {
+        const found = await apiGet<any>(API_BASE_URL, productByIdPath('/admin/api/products', productId));
+        if (!found?.id) return { saved: false };
+        const normalized = normalizeProduct(found);
+        if (mountedRef.current) {
+          setLocalOnlyIds((prev) => {
+            const next = new Set(prev);
+            next.delete(productId);
+            return next;
+          });
+          setProducts((prev) => {
+            const next = prev.map((p) => (p.id === productId ? normalized : p));
+            persistProducts(next);
+            return next;
+          });
+        }
+        return { saved: true, product: normalized };
+      } catch {
+        return { saved: false };
+      }
+    }
+  };
+
   return (
     <InventoryContext.Provider value={{
       products,
@@ -774,10 +853,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       getProduct,
       searchProducts,
       filterProducts,
-      refreshProducts: loadProducts,
+      refreshProducts: (opts) => loadProducts(undefined, opts),
       syncLocalInventoryToApi,
       unsyncedCount: localOnlyIds.size,
       lastSyncAt,
+      isUnsynced,
+      verifyProductSaved,
+      storagePersistFailed,
+      savePhase,
     }}>
       {children}
     </InventoryContext.Provider>

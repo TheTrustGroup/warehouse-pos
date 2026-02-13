@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Product } from '../../types';
 import { formatCurrency, getCategoryDisplay, getLocationDisplay } from '../../lib/utils';
-import { Pencil, Trash2, Eye, Package } from 'lucide-react';
+import { Pencil, Trash2, Eye, Package, CloudOff, RefreshCw } from 'lucide-react';
 
 interface ProductTableViewProps {
   products: Product[];
@@ -14,6 +14,9 @@ interface ProductTableViewProps {
   canDelete?: boolean;
   canSelect?: boolean;
   showCostPrice?: boolean;
+  /** If provided, show "Local only" badge and "Check if saved" for unsynced products */
+  isUnsynced?: (productId: string) => boolean;
+  onVerifySaved?: (productId: string) => Promise<{ saved: boolean; product?: Product }>;
 }
 
 export function ProductTableView({
@@ -27,9 +30,12 @@ export function ProductTableView({
   canDelete = true,
   canSelect = true,
   showCostPrice = true,
+  isUnsynced,
+  onVerifySaved,
 }: ProductTableViewProps) {
   const [sortField, setSortField] = useState<keyof Product>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
   const handleSort = (field: keyof Product) => {
     if (sortField === field) {
@@ -150,7 +156,36 @@ export function ProductTableView({
                   </td>
                   <td className="px-4 py-3 align-middle">
                     <div>
-                      <p className="font-semibold text-slate-900 mb-1">{product.name}</p>
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <p className="font-semibold text-slate-900">{product.name}</p>
+                        {isUnsynced?.(product.id) && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-medium" title="Saved on this device only. Sync to see everywhere.">
+                            <CloudOff className="w-3.5 h-3.5" />
+                            Local only
+                          </span>
+                        )}
+                        {isUnsynced?.(product.id) && onVerifySaved && (
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setVerifyingId(product.id);
+                              try {
+                                const { saved } = await onVerifySaved(product.id);
+                                if (saved) setVerifyingId(null);
+                              } finally {
+                                setVerifyingId(null);
+                              }
+                            }}
+                            disabled={verifyingId === product.id}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-medium hover:bg-slate-200 disabled:opacity-60"
+                            title="Check if this product was saved to the server"
+                          >
+                            {verifyingId === product.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                            {verifyingId === product.id ? 'Checking…' : 'Check if saved'}
+                          </button>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-500">{product.tags.join(', ')}</p>
                     </div>
                   </td>

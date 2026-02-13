@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Product, type QuantityBySizeItem } from '../../types';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
 import { useWarehouse } from '../../contexts/WarehouseContext';
+import { useInventory } from '../../contexts/InventoryContext';
 import { API_BASE_URL } from '../../lib/api';
 import { apiGet } from '../../lib/apiClient';
 import { X, Upload, Plus, Trash2 } from 'lucide-react';
@@ -23,6 +24,7 @@ interface ProductFormModalProps {
 
 export function ProductFormModal({ isOpen, onClose, onSubmit, product }: ProductFormModalProps) {
   const { warehouses, currentWarehouseId } = useWarehouse();
+  const { savePhase } = useInventory();
   const [formData, setFormData] = useState({
     sku: '',
     barcode: '',
@@ -658,7 +660,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
               disabled={isSubmitting}
               aria-busy={isSubmitting}
             >
-              {isSubmitting ? 'Saving…' : product ? 'Update product' : 'Add product'}
+              {isSubmitting
+                ? (savePhase === 'verifying' ? 'Verifying…' : 'Saving…')
+                : product
+                  ? 'Update product'
+                  : 'Add product'}
             </button>
           </div>
         </form>

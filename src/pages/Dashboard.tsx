@@ -1,4 +1,4 @@
-import { Package, DollarSign, AlertTriangle, ShoppingBag, Store as StoreIcon, MapPin } from 'lucide-react';
+import { Package, DollarSign, AlertTriangle, ShoppingBag, Store as StoreIcon, MapPin, Shield, Settings, Users, BarChart3, LayoutGrid } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { StatCard } from '../components/dashboard/StatCard';
 import { SalesChart } from '../components/dashboard/SalesChart';
@@ -27,6 +27,8 @@ export function Dashboard() {
   const [salesByStore, setSalesByStore] = useState<Array<{ storeId: string | null; storeName: string; revenue: number; count: number }>>([]);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isSuperAdmin = user?.role === 'super_admin';
+  const adminRoleLabel = isSuperAdmin ? 'Super Admin' : 'Admin';
   useEffect(() => {
     if (!isAdmin) return;
     const start = new Date();
@@ -98,16 +100,100 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       <div className="animate-fade-in-up">
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Dashboard</h1>
-        <p className="text-slate-500 text-sm mb-2">Inventory, suppliers & point of sale in one place</p>
-        {(currentStore || currentWarehouse) && (
-          <p className="text-sm text-slate-600 font-medium flex items-center gap-2 flex-wrap">
-            <StoreIcon className="w-4 h-4 text-slate-500" aria-hidden />
-            You&apos;re at: {currentStore?.name ?? '—'}{currentStore && currentWarehouse ? ', ' : ''}{currentWarehouse?.name ?? ''}
+        <div className="flex flex-wrap items-center gap-3 mb-2">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            {isAdmin ? 'Admin Control Panel' : 'Dashboard'}
+          </h1>
+          {isAdmin && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 text-white shadow-sm">
+              <Shield className="w-3.5 h-3.5" aria-hidden />
+              {adminRoleLabel}
+            </span>
+          )}
+        </div>
+        <p className="text-slate-500 text-sm mb-2">
+          {isAdmin
+            ? 'Full system access — inventory, POS, reports, users & settings.'
+            : 'Inventory, suppliers & point of sale in one place'}
+        </p>
+        {isAdmin ? (
+          <p className="text-slate-600 text-sm">
+            All locations and features are available. Use the sidebar or quick actions below.
           </p>
+        ) : (
+          <>
+            {(currentStore || currentWarehouse) && (
+              <p className="text-sm text-slate-600 font-medium flex items-center gap-2 flex-wrap">
+                <StoreIcon className="w-4 h-4 text-slate-500" aria-hidden />
+                You&apos;re at: {currentStore?.name ?? '—'}{currentStore && currentWarehouse ? ', ' : ''}{currentWarehouse?.name ?? ''}
+              </p>
+            )}
+            <p className="text-slate-500 text-sm mt-1">Welcome back! Here&apos;s what&apos;s happening today.</p>
+          </>
         )}
-        <p className="text-slate-500 text-sm mt-1">Welcome back! Here&apos;s what&apos;s happening today.</p>
       </div>
+
+      {/* Admin-only: quick access to all control areas */}
+      {isAdmin && (
+        <div className="glass-card p-6 animate-fade-in-up border-slate-200/60">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <LayoutGrid className="w-5 h-5 text-slate-600" />
+            Admin quick access
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/inventory')}
+              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors text-left"
+            >
+              <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
+                <Package className="w-5 h-5" />
+              </div>
+              <span className="font-medium text-slate-900 text-sm">Inventory</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/pos')}
+              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors text-left"
+            >
+              <div className="p-2 rounded-lg bg-green-100 text-green-600">
+                <ShoppingBag className="w-5 h-5" />
+              </div>
+              <span className="font-medium text-slate-900 text-sm">POS</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/reports')}
+              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors text-left"
+            >
+              <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
+                <BarChart3 className="w-5 h-5" />
+              </div>
+              <span className="font-medium text-slate-900 text-sm">Reports</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/settings?tab=users')}
+              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors text-left"
+            >
+              <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
+                <Users className="w-5 h-5" />
+              </div>
+              <span className="font-medium text-slate-900 text-sm">User management</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors text-left"
+            >
+              <div className="p-2 rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="w-5 h-5" />
+              </div>
+              <span className="font-medium text-slate-900 text-sm">Settings</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in-up">
