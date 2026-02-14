@@ -1,7 +1,6 @@
 import { useInventoryPageState } from './useInventoryPageState';
 import { API_BASE_URL } from '../lib/api';
 import { useApiStatus } from '../contexts/ApiStatusContext';
-import { useNetworkStatusContext } from '../contexts/NetworkStatusContext';
 import { ProductTableView } from '../components/inventory/ProductTableView';
 import { ProductGridView } from '../components/inventory/ProductGridView';
 import { ProductFormModal } from '../components/inventory/ProductFormModal';
@@ -20,9 +19,8 @@ import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, Refre
 export function Inventory() {
   const s = useInventoryPageState();
   const { isDegraded } = useApiStatus();
-  const { isOnline } = useNetworkStatusContext();
-  /** Phase 5: Last saved data mode is read-only. Disable add/edit/delete when server unreachable or offline. */
-  const readOnlyMode = isDegraded || !isOnline;
+  /** Read-only when server is unreachable (degraded). When offline, allow add/edit so products can be saved locally and sync when online. */
+  const readOnlyMode = isDegraded;
   const disableDestructive = readOnlyMode;
 
   if (s.isLoading) {

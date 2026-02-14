@@ -516,7 +516,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (import.meta.env.DEV) {
         console.log('[Auth] Login success – full user object:', JSON.stringify(normalizedUser, null, 2));
       }
-      const token = responseToken ?? (data as { token?: string; access_token?: string })?.token ?? (data as { token?: string; access_token?: string })?.access_token;
+      const dataAny = data as { token?: string; access_token?: string; data?: { token?: string; access_token?: string } };
+      const token =
+        responseToken ??
+        dataAny?.token ??
+        dataAny?.access_token ??
+        dataAny?.data?.token ??
+        dataAny?.data?.access_token;
       if (token) {
         localStorage.setItem('auth_token', token.startsWith('Bearer ') ? token : `Bearer ${token}`);
       }

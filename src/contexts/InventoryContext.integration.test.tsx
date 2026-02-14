@@ -51,6 +51,16 @@ vi.mock('../hooks/useRealtimeSync', () => ({
   useRealtimeSync: () => {},
 }));
 
+vi.mock('./AuthContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./AuthContext')>();
+  const tryRefresh = vi.fn(() => Promise.resolve(false));
+  return {
+    ...actual,
+    useAuth: () => ({ tryRefreshSession: tryRefresh }),
+    useOptionalAuth: () => ({ tryRefreshSession: tryRefresh, isLoading: false, isAuthenticated: true }),
+  };
+});
+
 import { apiGet, apiPost } from '../lib/apiClient';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (

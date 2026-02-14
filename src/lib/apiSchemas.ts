@@ -29,11 +29,18 @@ export const authUserPayloadSchema = z
   })
   .passthrough();
 
-/** Login response: { user?, data?: { user? }, token?, access_token? } */
+/** Login response: { user?, data?: { user?, token?, access_token? }, token?, access_token? } */
 export const authLoginResponseSchema = z
   .object({
     user: authUserPayloadSchema.optional(),
-    data: z.object({ user: authUserPayloadSchema.optional() }).optional(),
+    data: z
+      .object({
+        user: authUserPayloadSchema.optional(),
+        token: z.string().optional(),
+        access_token: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
     token: z.string().optional(),
     access_token: z.string().optional(),
   })
@@ -71,7 +78,9 @@ export function parseLoginResponse(data: unknown): {
     throw new Error('Invalid login response: user data missing');
   }
   const userPayload = parseAuthUserPayload(userPayloadRaw);
-  const token = res?.token ?? res?.access_token;
+  const dataObj = res?.data && typeof res.data === 'object' ? res.data as { token?: string; access_token?: string } : null;
+  const rawToken = res?.token ?? res?.access_token ?? dataObj?.token ?? dataObj?.access_token;
+  const token = typeof rawToken === 'string' ? rawToken : undefined;
   return { userPayload, token };
 }
 

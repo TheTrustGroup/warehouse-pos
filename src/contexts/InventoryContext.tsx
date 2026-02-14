@@ -20,6 +20,7 @@ import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPost, apiPut, apiDelete } from '../lib/apiClient';
 import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
 import { useToast } from './ToastContext';
+import { useAuth } from './AuthContext';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
 import { parseProductsResponse } from '../lib/apiSchemas';
 import { useInventory as useOfflineInventory } from '../hooks/useInventory';
@@ -166,6 +167,7 @@ export const ADD_PRODUCT_SAVED_LOCALLY =
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const { currentWarehouseId } = useWarehouse();
   const { showToast } = useToast();
+  const { tryRefreshSession } = useAuth();
   const effectiveWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : DEFAULT_WAREHOUSE_ID;
 
   // Feature flag: when off, use API-only (state); when on, use offline hook (Dexie). INTEGRATION_PLAN Phase 5/7.
@@ -714,12 +716,24 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.timeEnd('Data Preparation');
         console.time('API Request');
       }
+      const postProduct = async (): Promise<Record<string, unknown> | null> => {
+        try {
+          return (await apiPost<Record<string, unknown>>(API_BASE_URL, productsPath('/admin/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+        } catch {
+          return (await apiPost<Record<string, unknown>>(API_BASE_URL, productsPath('/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+        }
+      };
       let created: Record<string, unknown> | null = null;
       try {
-        created = (await apiPost<Record<string, unknown>>(API_BASE_URL, productsPath('/admin/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
-      } catch {
-        created = (await apiPost<Record<string, unknown>>(API_BASE_URL, productsPath('/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+        created = await postProduct();
+      } catch (firstErr) {
+        if ((firstErr as { status?: number })?.status === 401 && (await tryRefreshSession())) {
+          created = await postProduct();
+        } else {
+          throw firstErr;
+        }
       }
+      if (created === null) throw new Error('Failed to save product');
       if (import.meta.env?.DEV) {
         console.timeEnd('API Request');
         console.time('State Update');
@@ -747,7 +761,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       loadProducts(undefined, { silent: true }).catch(() => {});
       return resolvedId;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to save product';
+      const status = (err as { status?: number })?.status;
+      const msg =
+        status === 401
+          ? 'Session expired. Please log in again.'
+          : err instanceof Error
+            ? err.message
+            : 'Failed to save product';
       showToast('error', msg);
       throw err;
     } finally {
@@ -778,11 +798,22 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
       const payload = productToPayload(updated);
+      const putProduct = async (): Promise<Record<string, unknown> | null> => {
+        try {
+          return (await apiPut<Record<string, unknown>>(API_BASE_URL, productByIdPath('/admin/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+        } catch {
+          return (await apiPut<Record<string, unknown>>(API_BASE_URL, productByIdPath('/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+        }
+      };
       let fromApi: Record<string, unknown> | null = null;
       try {
-        fromApi = (await apiPut<Record<string, unknown>>(API_BASE_URL, productByIdPath('/admin/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
-      } catch {
-        fromApi = (await apiPut<Record<string, unknown>>(API_BASE_URL, productByIdPath('/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+        fromApi = await putProduct();
+      } catch (firstErr) {
+        if ((firstErr as { status?: number })?.status === 401 && (await tryRefreshSession())) {
+          fromApi = await putProduct();
+        } else {
+          throw firstErr;
+        }
       }
       if (import.meta.env?.DEV) {
         console.timeEnd('API Request (update)');
@@ -809,7 +840,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       loadProducts(undefined, { silent: true }).catch(() => {});
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to update product';
+      const status = (err as { status?: number })?.status;
+      const msg =
+        status === 401
+          ? 'Session expired. Please log in again.'
+          : err instanceof Error
+            ? err.message
+            : 'Failed to update product';
       showToast('error', msg);
       throw err;
     } finally {

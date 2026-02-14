@@ -50,11 +50,13 @@ The banner is driven by a **circuit breaker** in the API client. It opens after 
 
 ## Phase 5 — Offline / degraded mode guardrails
 
-- **Read-only mode**: When the server is unreachable (**degraded**) or the device is **offline**, the app treats "last saved data" as read-only. `readOnlyMode = isDegraded || !isOnline` (from `useApiStatus()` and `useNetworkStatusContext()`).
+- **Read-only mode**:
+  - **Inventory**: Read-only only when the server is **degraded** (`readOnlyMode = isDegraded`). When **offline**, Add/Edit remain allowed so products can be saved locally and sync when back online (requires offline feature flag).
+  - **POS and Orders**: Read-only when degraded **or** offline (`readOnlyMode = isDegraded || !isOnline`) so Complete sale and order status changes (stock deduction) stay disabled when offline.
 - **Disabled actions**:
-  - **Inventory**: Add product, Add first product, Edit, and Delete are disabled when `readOnlyMode`. ProductFormModal shows a read-only banner and disables Submit.
-  - **POS**: Complete sale is disabled when `readOnlyMode` (PaymentPanel shows "Read-only. Writes disabled until connection is restored." and disables the Complete button).
-  - **Orders**: All order status actions (Confirm, Mark Ready, Assign Driver, Mark Delivered, Mark Failed) are disabled when `readOnlyMode` so stock is not deducted while offline/degraded.
+  - **Inventory**: Add product, Add first product, Edit, and Delete are disabled only when **degraded**. When offline, add/edit are allowed (local save + sync when online).
+  - **POS**: Complete sale is disabled when degraded or offline (PaymentPanel shows "Read-only. Writes disabled until connection is restored." and disables the Complete button).
+  - **Orders**: All order status actions are disabled when degraded or offline so stock is not deducted while offline/degraded.
 - **Labels**:
   - **Offline**: Top banner (NetworkStatusContext) shows "Working Offline — Read-only. Add, edit, and sales disabled."
   - **Degraded**: Layout banner shows "Server temporarily unavailable. Last saved data — read-only. Add, edit, and sales disabled until server is back."
@@ -65,3 +67,21 @@ The banner is driven by a **circuit breaker** in the API client. It opens after 
 - **ProductFormModal**: `src/components/inventory/ProductFormModal.tsx` (`readOnlyMode` prop, banner, disabled Submit).  
 - **PaymentPanel**: `src/components/pos/PaymentPanel.tsx` (`disableComplete` prop).  
 - **Labels**: `src/components/layout/Layout.tsx` (degraded banner copy), `src/contexts/NetworkStatusContext.tsx` (offline banner copy), `src/components/SyncStatusBar.tsx` (offline + sync-pending label).
+
+## Enabling offline product saves
+
+When the device is **offline**, Inventory allows Add/Edit so products can be saved locally and synced when back online. That behavior requires the **offline feature flag** to be on.
+
+1. **Set env (build-time)**  
+   - **Local**: In `.env.local` (or copy from `.env.example`), set:
+     - `VITE_OFFLINE_ENABLED=true`
+     - Optional: `VITE_OFFLINE_ROLLOUT_PERCENT=100` (omit = 100% when enabled).
+   - **Vercel**: In the frontend project → Settings → Environment Variables, add:
+     - `VITE_OFFLINE_ENABLED` = `true`
+     - Optionally `VITE_OFFLINE_ROLLOUT_PERCENT` = `100`.
+
+2. **Rebuild and redeploy**  
+   Vite inlines env at build time. After changing these variables, run `npm run build` and redeploy the frontend (e.g. push to trigger Vercel deploy).
+
+3. **Where it’s read**  
+   `src/lib/offlineFeatureFlag.ts`: `isOfflineEnabled()` is true when `VITE_OFFLINE_ENABLED` is `true` and (if set) the session falls within `VITE_OFFLINE_ROLLOUT_PERCENT`. When true, Inventory uses IndexedDB + sync queue; add/update offline write locally and sync when online.
