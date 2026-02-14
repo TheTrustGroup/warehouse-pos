@@ -23,60 +23,6 @@ export function Inventory() {
   const readOnlyMode = isDegraded;
   const disableDestructive = readOnlyMode;
 
-  if (s.isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60dvh]" role="status" aria-live="polite">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary-200 border-t-primary-600 mx-auto mb-4" />
-          <p className="text-slate-600 text-sm font-medium">Loading products…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (s.error) {
-    return (
-      <div className="flex items-center justify-center min-h-[60dvh]">
-        <div className="solid-card max-w-md w-full mx-auto text-center p-8">
-          <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle className="w-7 h-7 text-red-600" aria-hidden />
-          </div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">Error loading products</h2>
-          <p className="text-slate-600 text-sm mb-4">{s.error}</p>
-          <p className="text-slate-500 text-xs mb-6 break-all font-mono">
-            Backend: {API_BASE_URL}
-          </p>
-          <Button variant="primary" onClick={() => s.refreshProducts({ bypassCache: true, timeoutMs: 60_000 })} className="inline-flex items-center gap-2" aria-label="Retry loading products">
-            <RefreshCw className="w-4 h-4" />
-            Retry
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (s.products.length === 0) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="solid-card max-w-md w-full mx-auto text-center p-8">
-          <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Package className="w-7 h-7 text-slate-400" aria-hidden />
-          </div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">No products yet</h2>
-          <p className="text-slate-600 text-sm mb-6">
-            Add your first product to get started.
-          </p>
-          {s.canCreate && (
-            <Button variant="primary" onClick={() => { s.setEditingProduct(null); s.setIsModalOpen(true); }} disabled={readOnlyMode} title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined} className="inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed" aria-label="Add first product">
-              <Plus className="w-5 h-5" />
-              Add first product
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   const handleAddProduct = () => {
     s.setEditingProduct(null);
     s.setIsModalOpen(true);
@@ -188,6 +134,53 @@ export function Inventory() {
   };
 
   return (
+    <>
+      {s.isLoading && (
+        <div className="flex items-center justify-center min-h-[60dvh]" role="status" aria-live="polite">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary-200 border-t-primary-600 mx-auto mb-4" />
+            <p className="text-slate-600 text-sm font-medium">Loading products…</p>
+          </div>
+        </div>
+      )}
+      {!s.isLoading && s.error && (
+        <div className="flex items-center justify-center min-h-[60dvh]">
+          <div className="solid-card max-w-md w-full mx-auto text-center p-8">
+            <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="w-7 h-7 text-red-600" aria-hidden />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">Error loading products</h2>
+            <p className="text-slate-600 text-sm mb-4">{s.error}</p>
+            <p className="text-slate-500 text-xs mb-6 break-all font-mono">
+              Backend: {API_BASE_URL}
+            </p>
+            <Button variant="primary" onClick={() => s.refreshProducts({ bypassCache: true, timeoutMs: 60_000 })} className="inline-flex items-center gap-2" aria-label="Retry loading products">
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </Button>
+          </div>
+        </div>
+      )}
+      {!s.isLoading && !s.error && s.products.length === 0 && (
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="solid-card max-w-md w-full mx-auto text-center p-8">
+            <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Package className="w-7 h-7 text-slate-400" aria-hidden />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">No products yet</h2>
+            <p className="text-slate-600 text-sm mb-6">
+              Add your first product to get started.
+            </p>
+            {s.canCreate && (
+              <Button variant="primary" onClick={() => { s.setEditingProduct(null); s.setIsModalOpen(true); }} disabled={readOnlyMode} title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined} className="inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed" aria-label="Add first product">
+                <Plus className="w-5 h-5" />
+                Add first product
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+      {!s.isLoading && !s.error && s.products.length > 0 && (
     <div className="space-y-6">
       {s.isBackgroundRefreshing && (
         <div className="flex items-center gap-2 rounded-lg bg-slate-100/90 px-3 py-2 text-slate-600 text-sm" role="status" aria-live="polite">
@@ -362,6 +355,8 @@ export function Inventory() {
         </div>
       </div>
 
+    </div>
+      )}
       <ProductFormModal
         isOpen={s.isModalOpen}
         onClose={() => { s.setIsModalOpen(false); s.setEditingProduct(null); }}
@@ -369,6 +364,6 @@ export function Inventory() {
         product={s.editingProduct}
         readOnlyMode={readOnlyMode}
       />
-    </div>
+    </>
   );
 }

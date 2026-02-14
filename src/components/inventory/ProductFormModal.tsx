@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Product, type QuantityBySizeItem } from '../../types';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
 import { safeValidateProductForm } from '../../lib/validationSchemas';
@@ -69,8 +69,19 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sizeCodes, setSizeCodes] = useState<SizeCodeOption[]>([]);
   const [sizeCodesLoading, setSizeCodesLoading] = useState(false);
+  const wasOpenRef = useRef(false);
 
+  // Only sync form to product when the modal opens (not on every re-render while open).
+  // This prevents the form from resetting when background refresh or context updates change product/currentWarehouseId.
   useEffect(() => {
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
+    const justOpened = !wasOpenRef.current;
+    wasOpenRef.current = true;
+    if (!justOpened) return;
+
     if (product) {
       const qtyBySize = (product.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
       setFormData({
@@ -123,7 +134,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       });
       setImagePreview([]);
     }
-  }, [product, isOpen, currentWarehouseId]);
+  }, [isOpen, product, currentWarehouseId]);
 
   useEffect(() => {
     if (!isOpen || !isOnline) return;
