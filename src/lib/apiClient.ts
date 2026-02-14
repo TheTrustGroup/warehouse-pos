@@ -81,8 +81,15 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
   if (idempotencyKey) {
     headers.set('Idempotency-Key', idempotencyKey);
   }
-  if (!headers.has('x-request-id')) {
-    headers.set('x-request-id', crypto.randomUUID());
+  // Only send x-request-id when same-origin (or same host). Cross-origin APIs (e.g. extremedeptkidz.com from warehouse.extremedeptkidz.com) may not allow it in CORS, causing preflight to fail and dashboard to show zeros.
+  try {
+    const apiOrigin = new URL(url).origin;
+    const pageOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    if (apiOrigin === pageOrigin && !headers.has('x-request-id')) {
+      headers.set('x-request-id', crypto.randomUUID());
+    }
+  } catch {
+    if (!headers.has('x-request-id')) headers.set('x-request-id', crypto.randomUUID());
   }
 
   let lastError: Error | null = null;
