@@ -174,6 +174,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [apiOnlyLoading, setApiOnlyLoadingState] = useState(true);
 
   const offline = useOfflineInventory();
+  /** Refs to keep refreshProducts stable and avoid re-run loops when server is down (prevents list jitter). */
+  const loadProductsRef = useRef<(signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => Promise<void>>(() => Promise.resolve());
+  const offlineRef = useRef(offline);
+  offlineRef.current = offline;
+
   const products = useMemo(
     (): Product[] => (offlineEnabled ? (offline.products ?? []) : apiOnlyProducts),
     [offlineEnabled, offline.products, apiOnlyProducts]
@@ -490,6 +495,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
+  loadProductsRef.current = loadProducts;
 
   // On mount: show cached products immediately when available so entering Inventory doesn't show a full-screen "Loading products..." spinner. Then refresh from API (silent if we had cache).
   useEffect(() => {
@@ -548,7 +554,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   }, [currentWarehouseId]);
 
-  // Real-time: poll when tab visible so inventory always shows latest. 25s interval for swifter updates.
+  // Real-time: poll when tab visible so inventory shows latest. 25s interval.
   useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true }), intervalMs: 25_000 });
 
   // When user clicks "Try again" on the server-unavailable banner, refetch products.
@@ -947,6 +953,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /** Stable so Inventory page effect doesn't re-run in a loop when server is down (prevents list jitter). */
+  const refreshProducts = useCallback(
+    (options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => {
+      if (offlineEnabled) return offlineRef.current.forceSync();
+      return loadProductsRef.current(undefined, { bypassCache: true, ...options });
+    },
+    [offlineEnabled]
+  );
+
   return (
     <InventoryContext.Provider value={{
       products,
@@ -960,7 +975,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       getProduct,
       searchProducts,
       filterProducts,
-      refreshProducts: (options) => (offlineEnabled ? offline.forceSync() : loadProducts(undefined, { bypassCache: true, ...options })),
+      refreshProducts,
       isBackgroundRefreshing: offlineEnabled ? offline.isSyncing : isBackgroundRefreshing,
       syncLocalInventoryToApi,
       unsyncedCount: offlineEnabled ? unsyncedCountFromHook + localOnlyIds.size : 0,
