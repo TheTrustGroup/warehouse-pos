@@ -40,6 +40,13 @@ The banner is driven by a **circuit breaker** in the API client. It opens after 
 - **When server is unavailable**: Banner (already exists). **Destructive actions disabled**: Inventory delete and bulk delete are disabled when the circuit is open (`useApiStatus().isDegraded`). User sees disabled buttons and tooltip "Server unavailable".
 - **False "saved"**: Success toasts for server writes only after confirmed 2xx. Local-only saves show "Saved locally. Syncing when online." (InventoryContext, OrderContext already follow this.)
 
+## 413 Payload too large (sync / add product)
+
+Vercel has a **4.5 MB** body size limit. Product images are stored as base64 in the app; one or two large photos can exceed that and cause **413** (often reported in the console as CORS because the 413 response may not include CORS headers).
+
+- **Sync ("Syncing 1 item...")**: When syncing local-only products to the API, the app sends payloads **without images** (`omitImagesForSync`) so sync stays under the limit. The product is created/updated with metadata; you can add images later by editing the product (use smaller images or fewer).
+- **Add/Edit product (single save)**: If you hit 413 when saving one product with large images, reduce the number or size of images (e.g. one small image per product), or add images after the product is saved.
+
 ## Files involved
 
 - **Circuit breaker**: `src/lib/circuit.ts` (threshold, cooldown), `src/lib/apiClient.ts` (when we call `recordFailure`).

@@ -582,9 +582,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   /** Minimal payload for API POST/PUT: only fields backend persists. Reduces payload size and avoids sending UI-only data. */
-  const productToPayload = (product: Product): Record<string, unknown> => {
+  /** When omitImagesForSync is true, images are sent as [] to avoid 413 (payload too large) from base64 images exceeding Vercel's body limit. */
+  const productToPayload = (product: Product, options?: { omitImagesForSync?: boolean }): Record<string, unknown> => {
     const toIso = (d: Date | string | null | undefined) =>
       d instanceof Date ? d.toISOString() : d ?? null;
+    const images = options?.omitImagesForSync
+      ? []
+      : (Array.isArray(product.images) ? product.images : []);
     return {
       id: product.id,
       sku: product.sku ?? '',
@@ -599,7 +603,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       reorderLevel: product.reorderLevel ?? 0,
       location: product.location && typeof product.location === 'object' ? product.location : { warehouse: '', aisle: '', rack: '', bin: '' },
       supplier: product.supplier && typeof product.supplier === 'object' ? product.supplier : { name: '', contact: '', email: '' },
-      images: Array.isArray(product.images) ? product.images : [],
+      images,
       expiryDate: toIso(product.expiryDate ?? null),
       createdBy: product.createdBy ?? '',
       createdAt: toIso(product.createdAt),
@@ -642,10 +646,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     let failed = 0;
     const runOne = async (product: Product): Promise<boolean> => {
       try {
+        const payload = productToPayload(product, { omitImagesForSync: true });
         try {
-          await apiPost(API_BASE_URL, '/admin/api/products', productToPayload(product));
+          await apiPost(API_BASE_URL, '/admin/api/products', payload);
         } catch {
-          await apiPost(API_BASE_URL, '/api/products', productToPayload(product));
+          await apiPost(API_BASE_URL, '/api/products', payload);
         }
         return true;
       } catch {
