@@ -18,7 +18,7 @@ import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, Refre
 type ViewMode = 'table' | 'grid';
 
 export function Inventory() {
-  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi, unsyncedCount, lastSyncAt, isUnsynced, verifyProductSaved, storagePersistFailed } = useInventory();
+  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi, unsyncedCount, lastSyncAt, isUnsynced, verifyProductSaved } = useInventory();
   const { hasPermission } = useAuth();
   const { currentWarehouse, currentWarehouseId } = useWarehouse();
   const { showToast } = useToast();
@@ -100,7 +100,10 @@ export function Inventory() {
             <AlertTriangle className="w-7 h-7 text-red-600" aria-hidden />
           </div>
           <h2 className="text-lg font-semibold text-slate-900 mb-2">Error loading products</h2>
-          <p className="text-slate-600 text-sm mb-6">{error}</p>
+          <p className="text-slate-600 text-sm mb-4">{error}</p>
+          <p className="text-slate-500 text-xs mb-6 break-all font-mono">
+            Backend: {API_BASE_URL}
+          </p>
           <button
             type="button"
             onClick={() => refreshProducts()}
@@ -272,17 +275,6 @@ export function Inventory() {
   /* Vertical rhythm: space-y-6 (section spacing); one primary CTA per screen = Add Product */
   return (
     <div className="space-y-6">
-      {storagePersistFailed && (
-        <div className="rounded-xl border border-red-200 bg-red-50/90 px-4 py-3 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" aria-hidden />
-          <div className="flex-1">
-            <p className="text-red-900 text-sm font-medium">Inventory could not be saved to this device&apos;s storage.</p>
-            <p className="text-red-800 text-xs mt-1">
-              This can happen in private browsing or when storage is full. Recorded items may not appear after refresh. Check <strong>Settings → Data &amp; cache</strong> to see what is stored, or use a normal browser window.
-            </p>
-          </div>
-        </div>
-      )}
       {unsyncedCount > 0 && (
         <div className="rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <p className="text-amber-900 text-sm font-medium flex-1">

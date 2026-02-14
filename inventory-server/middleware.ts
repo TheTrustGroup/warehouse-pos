@@ -28,7 +28,7 @@ function corsHeaders(request: NextRequest): HeadersInit {
   const headers: HeadersInit = {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, x-request-id, x-correlation-id',
     'Access-Control-Max-Age': '86400',
   };
   // Required when frontend sends credentials: 'include'

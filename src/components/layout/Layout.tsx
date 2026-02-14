@@ -17,11 +17,25 @@ export function Layout() {
     return () => clearInterval(id);
   }, []);
 
+  const handleTryAgain = () => {
+    const circuit = getApiCircuitBreaker();
+    circuit.reset();
+    setDegraded(false);
+    window.dispatchEvent(new CustomEvent('circuit-retry'));
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       {degraded && (
-        <div className="bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium" role="status">
-          Server temporarily unavailable. Showing last saved data. Changes will sync when the server is back.
+        <div className="bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap" role="status">
+          <span>Server temporarily unavailable. Showing last saved data. Changes will sync when the server is back.</span>
+          <button
+            type="button"
+            onClick={handleTryAgain}
+            className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-amber-800 rounded"
+          >
+            Try again
+          </button>
         </div>
       )}
       <div className="hidden lg:block">

@@ -321,14 +321,25 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
       reportError(err, { context: 'loadProducts' });
-      const message =
-        /load failed|failed to fetch|network error|networkrequestfailed|temporarily unavailable/i.test(
-          err instanceof Error ? err.message : String(err)
-        )
-          ? 'Cannot reach the server. Check your connection and try again.'
-          : err instanceof Error
-            ? err.message
-            : 'Failed to load products. Please check your connection.';
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const status = (err as { status?: number })?.status;
+      const isNetwork =
+        /load failed|failed to fetch|network error|networkrequestfailed|temporarily unavailable/i.test(errMsg);
+      let message: string;
+      if (status === 404) {
+        message =
+          'Products API not found (404). Ensure the backend is deployed and VITE_API_BASE_URL points to it (e.g. in Vercel env).';
+      } else if (status === 403) {
+        message = 'Access denied (403). Check your login and permissions.';
+      } else if (status === 401) {
+        message = 'Please log in again. Session may have expired.';
+      } else if (status != null && status >= 500) {
+        message = `Server error (${status}). Try again in a moment or check backend logs.`;
+      } else if (isNetwork) {
+        message = 'Cannot reach the server. Check your connection and that the backend URL is correct.';
+      } else {
+        message = errMsg || 'Failed to load products. Please check your connection.';
+      }
       if (!silent) setError(message);
       if (isIndexedDBAvailable()) {
         const fromDb = await loadProductsFromDb<any>();
@@ -405,6 +416,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   // Real-time: poll when tab visible so inventory always shows latest. 25s interval for swifter updates.
   useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true }), intervalMs: 25_000 });
+
+  // When user clicks "Try again" on the server-unavailable banner, refetch products.
+  useEffect(() => {
+    const onRetry = () => loadProducts(undefined, { bypassCache: true });
+    window.addEventListener('circuit-retry', onRetry);
+    return () => window.removeEventListener('circuit-retry', onRetry);
+  }, []);
 
   // Persist inventory per warehouse so list shows immediately on next login/refresh.
   useEffect(() => {

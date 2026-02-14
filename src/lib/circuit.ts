@@ -68,6 +68,13 @@ export class CircuitBreaker {
   isDegraded(): boolean {
     return this.getState() === 'open';
   }
+
+  /** Reset to closed so the user can try again without waiting for cooldown. */
+  reset(): void {
+    this.state = 'closed';
+    this.failures = 0;
+    this.onStateChange?.(this.state);
+  }
 }
 
 let sharedCircuit: CircuitBreaker | null = null;
