@@ -62,8 +62,8 @@ export function OnboardingModal() {
   const Icon = current?.icon ?? Cloud;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div className="glass-card max-w-md w-full p-6 relative animate-fade-in-up">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 solid-overlay">
+      <div className="solid-card max-w-md w-full p-6 relative animate-fade-in-up">
         <button
           type="button"
           onClick={dismiss}

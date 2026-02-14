@@ -166,7 +166,7 @@ export function NetworkStatusProvider({ children }: NetworkStatusProviderProps) 
           role="status"
           aria-live="polite"
         >
-          Working Offline
+          Working Offline — Read-only. Add, edit, and sales disabled.
         </div>
       )}
       {showBackOnline && (

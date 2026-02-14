@@ -13,7 +13,7 @@ export function TopProducts({ products }: TopProductsProps) {
   const maxRevenue = Math.max(...products.map(p => p.revenue));
 
   return (
-    <div className="glass-card animate-fade-in-up">
+    <div className="solid-card animate-fade-in-up">
       <h3 className="text-lg font-semibold text-slate-900 mb-6">Top Products</h3>
       <div className="space-y-5">
         {products.map((product, index) => (
@@ -30,7 +30,7 @@ export function TopProducts({ products }: TopProductsProps) {
               </div>
               <span className="font-bold text-slate-900 ml-4 flex-shrink-0">{formatCurrency(product.revenue)}</span>
             </div>
-            <div className="w-full bg-slate-100/80 rounded-full h-2 overflow-hidden backdrop-blur-[10px]">
+            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
               <div 
                 className="bg-gradient-to-r from-primary-500 to-primary-600 h-2 rounded-full transition-all duration-500 shadow-sm"
                 style={{ width: `${(product.revenue / maxRevenue) * 100}%` }}

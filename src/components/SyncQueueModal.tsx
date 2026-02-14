@@ -73,7 +73,7 @@ export function SyncQueueModal({ isOpen, onClose }: SyncQueueModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4 glass-overlay"
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4 solid-overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby="sync-queue-title"
@@ -92,7 +92,7 @@ export function SyncQueueModal({ isOpen, onClose }: SyncQueueModalProps) {
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-slate-100 bg-slate-50/80">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-slate-100 bg-slate-50">
           <Button
             type="button"
             variant="secondary"

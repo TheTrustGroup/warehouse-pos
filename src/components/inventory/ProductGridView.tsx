@@ -22,6 +22,8 @@ interface ProductGridViewProps {
   isUnsynced?: (productId: string) => boolean;
   onVerifySaved?: (productId: string) => Promise<{ saved: boolean; product?: Product }>;
   onRetrySync?: () => void;
+  /** When true, disable delete (e.g. server unavailable). */
+  disableDestructiveActions?: boolean;
 }
 
 export function ProductGridView({
@@ -37,6 +39,7 @@ export function ProductGridView({
   isUnsynced,
   onVerifySaved,
   onRetrySync,
+  disableDestructiveActions = false,
 }: ProductGridViewProps) {
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [ripple, setRipple] = useState<{ productId: string; x: number; y: number; id: number } | null>(null);
@@ -84,7 +87,7 @@ export function ProductGridView({
             {...hover}
             {...morph}
             onClick={(e) => handleCardClick(e, product.id)}
-            className={`glass-card group cursor-pointer relative overflow-hidden ${
+            className={`solid-card group cursor-pointer relative overflow-hidden ${
               canSelect && isSelected ? 'ring-2 ring-primary-500 ring-offset-2' : ''
             }`}
           >
@@ -166,7 +169,7 @@ export function ProductGridView({
                 className="w-full h-40 object-cover rounded-xl mb-4 group-hover:scale-105 transition-transform duration-300 shadow-md"
               />
             ) : (
-              <div className="w-full h-48 bg-slate-100/80 backdrop-blur-[10px] rounded-lg mb-4 flex items-center justify-center border border-slate-200/50">
+              <div className="w-full h-48 bg-slate-100 rounded-lg mb-4 flex items-center justify-center border border-slate-200/50">
                 <Package className="w-16 h-16 text-slate-400" />
               </div>
             )}
@@ -205,7 +208,7 @@ export function ProductGridView({
                 </div>
               )}
               {(product.quantity === 0 || product.quantity <= product.reorderLevel) && (
-                <div className="flex items-center gap-2 text-amber-700 bg-amber-50/80 backdrop-blur-[10px] px-3 py-2 rounded-lg border border-amber-200/30">
+                <div className="flex items-center gap-2 text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                   <span className="text-xs font-semibold">{status.label}</span>
                 </div>
@@ -229,12 +232,15 @@ export function ProductGridView({
                     <Button
                       type="button"
                       variant="danger"
+                      disabled={disableDestructiveActions}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (disableDestructiveActions) return;
                         if (confirm('Delete this product?')) onDelete(product.id);
                       }}
-                      className="py-2.5 px-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 inline-flex items-center justify-center min-w-touch"
+                      className="py-2.5 px-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center min-w-touch"
                       aria-label={`Delete ${product.name}`}
+                      title={disableDestructiveActions ? 'Server unavailable' : undefined}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

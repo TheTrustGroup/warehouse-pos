@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       const friendlyMessage = this.state.error ? getUserFriendlyMessage(this.state.error) : 'Something went wrong. Please try again.';
       return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="min-h-[var(--min-h-viewport)] flex items-center justify-center bg-slate-50 p-4">
           <Card className="max-w-md text-center animate-fade-in-up p-8">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle className="w-8 h-8 text-red-600" />

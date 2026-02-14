@@ -1,6 +1,6 @@
 /**
  * Single source of truth for form inputs. Applies input-field class and optional label/error.
- * Use for <input> and <select>; pass through ref when needed.
+ * Labels are always visible when provided; validation errors are inline and reserve space (no overlap).
  */
 import { InputHTMLAttributes, SelectHTMLAttributes, ReactNode, forwardRef } from 'react';
 
@@ -25,11 +25,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   ref
 ) {
   const combined = [fieldClass, className].filter(Boolean).join(' ');
+  const wrapperClass = error ? 'block mb-2' : 'block';
   return (
-    <label className="block">
-      {label && <span className="block text-sm font-medium text-slate-600 mb-1">{label}</span>}
-      <input ref={ref} className={combined} {...props} />
-      {error && <span className="block text-sm text-red-600 mt-1" role="alert">{error}</span>}
+    <label className={wrapperClass}>
+      {label != null && label !== '' && <span className="block text-sm font-medium text-slate-600 mb-1.5">{label}</span>}
+      <input ref={ref} className={combined} aria-invalid={!!error} {...props} />
+      {error && <span className="block text-sm text-red-600 mt-1 mb-1" role="alert">{error}</span>}
     </label>
   );
 });
@@ -39,13 +40,16 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   ref
 ) {
   const combined = [fieldClass, className].filter(Boolean).join(' ');
+  const wrapperClass = error ? 'block mb-2' : 'block';
   return (
-    <label className="block">
-      {label && <span className="block text-sm font-medium text-slate-600 mb-1">{label}</span>}
-      <select ref={ref} className={combined} {...props}>
-        {children}
-      </select>
-      {error && <span className="block text-sm text-red-600 mt-1" role="alert">{error}</span>}
+    <label className={wrapperClass}>
+      {label != null && label !== '' && <span className="block text-sm font-medium text-slate-600 mb-1.5">{label}</span>}
+      <div className="input-select-wrapper">
+        <select ref={ref} className={combined} aria-invalid={!!error} {...props}>
+          {children}
+        </select>
+      </div>
+      {error && <span className="block text-sm text-red-600 mt-1 mb-1" role="alert">{error}</span>}
     </label>
   );
 });

@@ -32,8 +32,36 @@ The banner is driven by a **circuit breaker** in the API client. It opens after 
    - User can click **Try again** to reset the circuit and retry, or **Dismiss** to hide it for the session.
    - Cached products and last saved data continue to work; changes sync when the server is back.
 
+## Phase 4 — API reliability and endpoint verification
+
+- **Base URL**: Single source of truth is `API_BASE_URL` from `src/lib/api.ts`. All callers (Inventory, Orders, POS, Reports, Auth, sync) use it. Set `VITE_API_BASE_URL` in env; no hardcoded domains, no browser-specific routing.
+- **Timeouts**: All API helpers (GET, POST, PUT, PATCH, DELETE) support `timeoutMs`; default 45s. Timeout aborts the request and can open the circuit.
+- **Retry**: Only **GET** (and safe methods) are retried (default 3 attempts with backoff). **POST/PUT/PATCH/DELETE use zero retries** to avoid double submissions and false "saved" states.
+- **When server is unavailable**: Banner (already exists). **Destructive actions disabled**: Inventory delete and bulk delete are disabled when the circuit is open (`useApiStatus().isDegraded`). User sees disabled buttons and tooltip "Server unavailable".
+- **False "saved"**: Success toasts for server writes only after confirmed 2xx. Local-only saves show "Saved locally. Syncing when online." (InventoryContext, OrderContext already follow this.)
+
 ## Files involved
 
 - **Circuit breaker**: `src/lib/circuit.ts` (threshold, cooldown), `src/lib/apiClient.ts` (when we call `recordFailure`).
-- **Banner**: `src/components/layout/Layout.tsx` (debounce, show/hide, Try again / Dismiss).
-- **Modal/panel opacity**: `src/styles/glassmorphism.css` (`.glass-panel`), `src/components/inventory/ProductFormModal.tsx` (opaque overlay + panel).
+- **Banner**: `src/components/layout/Layout.tsx` (debounce, show/hide, Try again / Dismiss), `src/contexts/ApiStatusContext.tsx` (single source for `isDegraded`).
+- **API base & client**: `src/lib/api.ts` (API_BASE_URL), `src/lib/apiClient.ts` (timeouts, retry GET-only, circuit).
+- **Destructive actions**: `src/pages/Inventory.tsx` (disable delete when degraded), `ProductTableView` / `ProductGridView` (`disableDestructiveActions`).
+- **Modal/panel opacity**: `src/styles/glassmorphism.css` (`.solid-panel`), `src/components/inventory/ProductFormModal.tsx` (opaque overlay + panel).
+
+## Phase 5 — Offline / degraded mode guardrails
+
+- **Read-only mode**: When the server is unreachable (**degraded**) or the device is **offline**, the app treats "last saved data" as read-only. `readOnlyMode = isDegraded || !isOnline` (from `useApiStatus()` and `useNetworkStatusContext()`).
+- **Disabled actions**:
+  - **Inventory**: Add product, Add first product, Edit, and Delete are disabled when `readOnlyMode`. ProductFormModal shows a read-only banner and disables Submit.
+  - **POS**: Complete sale is disabled when `readOnlyMode` (PaymentPanel shows "Read-only. Writes disabled until connection is restored." and disables the Complete button).
+  - **Orders**: All order status actions (Confirm, Mark Ready, Assign Driver, Mark Delivered, Mark Failed) are disabled when `readOnlyMode` so stock is not deducted while offline/degraded.
+- **Labels**:
+  - **Offline**: Top banner (NetworkStatusContext) shows "Working Offline — Read-only. Add, edit, and sales disabled."
+  - **Degraded**: Layout banner shows "Server temporarily unavailable. Last saved data — read-only. Add, edit, and sales disabled until server is back."
+  - **Sync pending**: SyncStatusBar shows "Offline — Read-only. Sync pending: N items" when offline with pending sync items; "Syncing N items..." when syncing.
+
+**Files involved (Phase 5)**  
+- **Read-only mode**: `src/pages/Inventory.tsx`, `src/pages/POS.tsx`, `src/pages/Orders.tsx` (compute `readOnlyMode`; disable Add/Edit/Delete, Complete sale, order status actions).  
+- **ProductFormModal**: `src/components/inventory/ProductFormModal.tsx` (`readOnlyMode` prop, banner, disabled Submit).  
+- **PaymentPanel**: `src/components/pos/PaymentPanel.tsx` (`disableComplete` prop).  
+- **Labels**: `src/components/layout/Layout.tsx` (degraded banner copy), `src/contexts/NetworkStatusContext.tsx` (offline banner copy), `src/components/SyncStatusBar.tsx` (offline + sync-pending label).

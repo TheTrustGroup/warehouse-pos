@@ -60,7 +60,7 @@ const Users = () => {
         <h1 className="text-[32px] font-bold text-slate-900 tracking-tight mb-1">Users</h1>
         <p className="text-slate-500 text-sm">Redirecting to User Management...</p>
       </div>
-      <div className="glass-card text-center p-12">
+      <div className="solid-card text-center p-12">
         <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -123,7 +123,7 @@ function ProtectedRoutes() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      <div className="min-h-[var(--min-h-viewport)] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
           <p className="text-slate-600">Loading...</p>
@@ -139,7 +139,7 @@ function ProtectedRoutes() {
   // Only render app when user is fully loaded (role may be applied as fallback in AuthContext)
   if (user == null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      <div className="min-h-[var(--min-h-viewport)] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
           <p className="text-slate-600">Loading...</p>
@@ -178,7 +178,7 @@ function App() {
           <AuthProvider>
             <BrowserRouter>
             <OnboardingModal />
-            <Suspense fallback={<LoadingSpinner />}>
+            <Suspense fallback={<div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 gap-4"><LoadingSpinner size="lg" /><p className="text-slate-600 text-sm font-medium">Loading…</p></div>}>
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/" element={<ProtectedRoutes />}>

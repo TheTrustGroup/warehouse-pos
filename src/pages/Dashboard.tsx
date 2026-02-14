@@ -136,7 +136,7 @@ export function Dashboard() {
 
       {/* Admin-only: quick access to all control areas */}
       {isAdmin && (
-        <div className="glass-card p-6 animate-fade-in-up border-slate-200/60">
+        <div className="solid-card p-6 animate-fade-in-up border-slate-200/60">
           <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <LayoutGrid className="w-5 h-5 text-slate-600" />
             Admin quick access
@@ -240,7 +240,7 @@ export function Dashboard() {
 
       {/* Sales by store (Phase 3) — graceful when no stores */}
       {salesByStore.length > 0 && (
-        <div className="glass-card p-6 animate-fade-in-up">
+        <div className="solid-card p-6 animate-fade-in-up">
           <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <StoreIcon className="w-5 h-5 text-slate-600" />
             Sales by store (last 30 days)
@@ -270,7 +270,7 @@ export function Dashboard() {
 
       {/* Warehouse → Store mapping (Phase 3) — graceful when no stores */}
       {stores.length > 0 && warehouses.length > 0 && (
-        <div className="glass-card p-6 animate-fade-in-up">
+        <div className="solid-card p-6 animate-fade-in-up">
           <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <MapPin className="w-5 h-5 text-slate-600" />
             Warehouse → Store
@@ -318,7 +318,7 @@ export function Dashboard() {
 
       {/* Alerts Section */}
       {stats.lowStockItems > 0 && (
-        <div className="glass-card bg-amber-50/80 border-amber-200/50 animate-fade-in-up">
+        <div className="solid-card bg-amber-50 border-amber-200 animate-fade-in-up">
           <div className="flex items-start gap-4">
             <div className="p-2.5 bg-amber-100/80 rounded-lg border border-amber-200/30">
               <AlertTriangle className="w-5 h-5 text-amber-600" />
@@ -342,7 +342,7 @@ export function Dashboard() {
       )}
 
       {stats.outOfStockItems > 0 && (
-        <div className="glass-card bg-red-50/80 border-red-200/50 animate-fade-in-up">
+        <div className="solid-card bg-red-50 border-red-200 animate-fade-in-up">
           <div className="flex items-start gap-4">
             <div className="p-2.5 bg-red-100/80 rounded-lg border border-red-200/30">
               <AlertTriangle className="w-5 h-5 text-red-600" />

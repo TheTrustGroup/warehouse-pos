@@ -30,7 +30,7 @@ export function ProtectedRoute({
   // Show loading state while checking authentication
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-[var(--min-h-viewport)] flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-slate-600">Loading...</p>
@@ -68,7 +68,7 @@ function AccessDenied() {
   const { user } = useAuth();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="min-h-[var(--min-h-viewport)] flex items-center justify-center bg-slate-50">
       <Card className="max-w-md text-center p-8">
         <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <ShieldX className="w-10 h-10 text-red-600" />

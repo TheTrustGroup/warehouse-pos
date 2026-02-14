@@ -33,7 +33,7 @@ export function DateRangePicker({
   };
 
   return (
-    <div className="glass-card animate-fade-in-up">
+    <div className="solid-card animate-fade-in-up">
       <div className="flex items-center gap-2 mb-6">
         <Calendar className="w-5 h-5 text-primary-600" strokeWidth={2} />
         <h3 className="font-semibold text-slate-900">Date Range</h3>

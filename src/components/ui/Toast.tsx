@@ -32,7 +32,7 @@ export function Toast({ type, message, onClose, duration = 3000 }: ToastProps) {
   return (
     <div
       role="alert"
-      className={`glass-card flex items-center gap-3 px-4 py-3 min-h-touch border-2 ${colors[type]} shadow-large`}
+      className={`solid-card flex items-center gap-3 px-4 py-3 min-h-touch border-2 ${colors[type]} shadow-lg`}
     >
       <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} aria-hidden />
       <p className="font-medium flex-1 text-sm">{message}</p>

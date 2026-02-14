@@ -54,7 +54,7 @@ export function BrowserCheck({ children }: { children: ReactNode }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/90 p-4">
-      <div className="glass-card max-w-md p-6 text-center">
+      <div className="solid-card max-w-md p-6 text-center">
         <h1 className="text-xl font-bold text-slate-900 mb-2">Browser not fully supported</h1>
         <p className="text-slate-600 text-sm mb-4">
           This app works best on <strong>Chrome 87+</strong>, <strong>Safari 14+</strong>, <strong>Firefox 78+</strong>, or <strong>Edge 87+</strong> for offline features and reliability.

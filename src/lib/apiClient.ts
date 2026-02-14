@@ -19,6 +19,10 @@ const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 /** Default request timeout. Kept high (45s) for serverless cold start + slow networks. */
 const DEFAULT_TIMEOUT_MS = 45_000;
 
+/** Retries only for safe methods (GET/HEAD/OPTIONS). Mutating methods use maxRetries: 0 to avoid double submissions. */
+const DEFAULT_MAX_RETRIES_GET = 3;
+const DEFAULT_MAX_RETRIES_MUTATE = 0;
+
 export interface ApiRequestOptions extends RequestInit {
   /** Base URL (no trailing slash). */
   baseUrl: string;
@@ -192,16 +196,16 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
   }
 }
 
-/** GET with optional signal, timeout, and retries. Use maxRetries: 0 to fail fast (e.g. product list so cache shows on 500). */
+/** GET with optional signal, timeout, and retries. Safe to retry; default maxRetries 3. */
 export function apiGet<T>(
   baseUrl: string,
   path: string,
   options?: { signal?: AbortSignal | null; timeoutMs?: number; maxRetries?: number }
 ): Promise<T> {
-  return apiRequest<T>({ ...options, baseUrl, path, method: 'GET' });
+  return apiRequest<T>({ ...options, maxRetries: options?.maxRetries ?? DEFAULT_MAX_RETRIES_GET, baseUrl, path, method: 'GET' });
 }
 
-/** POST with optional idempotency key, signal, and timeout. Sends Content-Type: application/json. */
+/** POST with optional idempotency key, signal, and timeout. No retries (safe GETs only). */
 export function apiPost<T>(
   baseUrl: string,
   path: string,
@@ -212,6 +216,7 @@ export function apiPost<T>(
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   return apiRequest<T>({
     ...options,
+    maxRetries: DEFAULT_MAX_RETRIES_MUTATE,
     baseUrl,
     path,
     method: 'POST',
@@ -220,7 +225,7 @@ export function apiPost<T>(
   });
 }
 
-/** PUT with optional signal and timeout. Sends Content-Type: application/json. */
+/** PUT with optional signal and timeout. No retries (safe GETs only). */
 export function apiPut<T>(
   baseUrl: string,
   path: string,
@@ -231,6 +236,7 @@ export function apiPut<T>(
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   return apiRequest<T>({
     ...options,
+    maxRetries: DEFAULT_MAX_RETRIES_MUTATE,
     baseUrl,
     path,
     method: 'PUT',
@@ -239,27 +245,31 @@ export function apiPut<T>(
   });
 }
 
-/** PATCH with optional signal. */
+/** PATCH with optional signal and timeout. No retries (safe GETs only). */
 export function apiPatch<T>(
   baseUrl: string,
   path: string,
   body: unknown,
-  options?: { signal?: AbortSignal | null }
+  options?: { signal?: AbortSignal | null; timeoutMs?: number }
 ): Promise<T> {
+  const headers = new Headers(getApiHeaders());
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   return apiRequest<T>({
     ...options,
+    maxRetries: DEFAULT_MAX_RETRIES_MUTATE,
     baseUrl,
     path,
     method: 'PATCH',
+    headers,
     body: JSON.stringify(body),
   });
 }
 
-/** DELETE with optional signal. */
+/** DELETE with optional signal and timeout. No retries (safe GETs only). */
 export function apiDelete(
   baseUrl: string,
   path: string,
-  options?: { signal?: AbortSignal | null }
+  options?: { signal?: AbortSignal | null; timeoutMs?: number }
 ): Promise<void> {
-  return apiRequest({ ...options, baseUrl, path, method: 'DELETE' });
+  return apiRequest({ ...options, maxRetries: DEFAULT_MAX_RETRIES_MUTATE, baseUrl, path, method: 'DELETE' });
 }

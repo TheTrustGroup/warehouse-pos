@@ -9,9 +9,11 @@ import { Button } from '../ui/Button';
 
 interface PaymentPanelProps {
   onComplete: (payments: Payment[]) => void;
+  /** Phase 5: when true, Complete sale is disabled (read-only / last saved data). */
+  disableComplete?: boolean;
 }
 
-export function PaymentPanel({ onComplete }: PaymentPanelProps) {
+export function PaymentPanel({ onComplete, disableComplete = false }: PaymentPanelProps) {
   const { calculateTotal, calculateSubtotal, discount, setDiscount } = usePOS();
   const { canPerformAction, requireApproval } = useAuth();
   const { showToast } = useToast();
@@ -158,13 +160,19 @@ export function PaymentPanel({ onComplete }: PaymentPanelProps) {
         </div>
       )}
 
+      {disableComplete && (
+        <p className="text-amber-700 text-sm font-medium mb-2" role="status">
+          Read-only. Writes disabled until connection is restored.
+        </p>
+      )}
       <Button
         type="button"
         variant="primary"
         onClick={handlePayment}
-        disabled={paymentMethod === 'cash' && cashAmount < total}
+        disabled={disableComplete || (paymentMethod === 'cash' && cashAmount < total)}
+        title={disableComplete ? 'Read-only. Writes disabled until connection is restored.' : undefined}
         className="w-full py-3.5 text-base disabled:opacity-50 disabled:cursor-not-allowed"
-        aria-label={`Complete payment ${formatCurrency(total)}`}
+        aria-label={disableComplete ? 'Complete sale (disabled — read-only)' : `Complete payment ${formatCurrency(total)}`}
       >
         Complete sale — {formatCurrency(total)}
       </Button>

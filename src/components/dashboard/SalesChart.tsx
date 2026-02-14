@@ -10,7 +10,7 @@ interface SalesChartProps {
 
 export function SalesChart({ data }: SalesChartProps) {
   return (
-    <div className="glass-card animate-fade-in-up">
+    <div className="solid-card animate-fade-in-up">
       <h3 className="text-lg font-semibold text-slate-900 mb-6">Sales Trend (Last 7 Days)</h3>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={data}>
@@ -28,11 +28,10 @@ export function SalesChart({ data }: SalesChartProps) {
           />
           <Tooltip 
             contentStyle={{
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(226, 232, 240, 0.5)',
+              backgroundColor: '#fff',
+              border: '1px solid rgba(226, 232, 240, 0.9)',
               borderRadius: '12px',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
               padding: '12px',
             }}
             labelStyle={{ fontWeight: '600', color: '#0f172a', marginBottom: '4px' }}

@@ -63,23 +63,23 @@ export function SyncStatusBar() {
   if (failed > 0) {
     variant = 'failed';
     label = 'Sync failed - Check connection';
-    icon = <AlertTriangle className="w-5 h-5" aria-hidden />;
+    icon = <AlertTriangle className="w-5 h-5 shrink-0" strokeWidth={2} aria-hidden />;
     barClass = 'bg-red-600 text-white';
   } else if (!isOnline && total > 0) {
     variant = 'offline';
-    label = `Working offline - ${total} item${total !== 1 ? 's' : ''} pending`;
-    icon = <CloudOff className="w-5 h-5" aria-hidden />;
+    label = `Offline — Read-only. Sync pending: ${total} item${total !== 1 ? 's' : ''}`;
+    icon = <CloudOff className="w-5 h-5 shrink-0" strokeWidth={2} aria-hidden />;
     barClass = 'bg-amber-500 text-amber-950';
   } else if (isSyncing || total > 0) {
     variant = 'syncing';
     const n = total || 1;
     label = `Syncing ${n} item${n !== 1 ? 's' : ''}...`;
-    icon = <Loader2 className="w-5 h-5 animate-spin" aria-hidden />;
+    icon = <Loader2 className="w-5 h-5 animate-spin shrink-0" strokeWidth={2} aria-hidden />;
     barClass = 'bg-blue-600 text-white';
   } else if (total === 0 && isOnline) {
     variant = 'synced';
     label = 'All changes synced ✓';
-    icon = <Check className="w-5 h-5" aria-hidden />;
+    icon = <Check className="w-5 h-5 shrink-0" strokeWidth={2} aria-hidden />;
     barClass = 'bg-emerald-600 text-white';
   }
 

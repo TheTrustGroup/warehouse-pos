@@ -31,14 +31,14 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
   /* Receipt modal: backdrop click + Escape close; scroll lock. Primary = Print; Close secondary. */
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center glass-overlay modal-overlay-padding"
+      className="fixed inset-0 z-50 flex items-center justify-center solid-overlay modal-overlay-padding"
       role="dialog"
       aria-modal="true"
       aria-labelledby="receipt-title"
       onClick={() => onClose()}
     >
       <div
-        className="glass-card rounded-2xl shadow-large w-full max-w-md overflow-hidden flex flex-col modal-content-fit mx-2 sm:mx-4"
+        className="solid-card rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col modal-content-fit mx-2 sm:mx-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4 border-b border-slate-200/50 flex items-center justify-between flex-shrink-0 print:hidden">

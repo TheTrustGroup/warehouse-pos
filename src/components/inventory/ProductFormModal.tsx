@@ -24,9 +24,11 @@ interface ProductFormModalProps {
   onClose: () => void;
   onSubmit: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => void | Promise<void>;
   product?: Product | null;
+  /** Phase 5: when true, form is read-only (last saved data). Submit disabled. */
+  readOnlyMode?: boolean;
 }
 
-export function ProductFormModal({ isOpen, onClose, onSubmit, product }: ProductFormModalProps) {
+export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyMode = false }: ProductFormModalProps) {
   const { warehouses, currentWarehouseId } = useWarehouse();
   const { savePhase } = useInventory();
   const { showToast } = useToast();
@@ -228,17 +230,17 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
   /* Modal: opaque panel so form is readable (no background bleed-through). Backdrop click + Escape close. Scroll lock when open. */
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 modal-overlay-padding"
+      className="fixed inset-0 solid-overlay flex items-center justify-center z-50 modal-overlay-padding"
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-form-title"
       onClick={() => onClose()}
     >
       <div
-        className="glass-panel rounded-2xl shadow-large w-full max-w-4xl overflow-hidden flex flex-col modal-content-fit mx-2 sm:mx-4"
+        className="solid-panel rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col modal-content-fit mx-2 sm:mx-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 glass-panel border-b border-slate-200/50 px-4 sm:px-6 py-4 flex items-center justify-between z-10 flex-shrink-0">
+        <div className="sticky top-0 solid-panel border-b border-slate-200/80 px-4 sm:px-6 py-4 flex items-center justify-between z-10 flex-shrink-0">
           <h2 id="product-form-title" className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate pr-2">
             {product ? 'Edit product' : 'Add product'}
           </h2>
@@ -248,10 +250,10 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto flex-1 min-h-0">
-          {!isOnline && (
+          {readOnlyMode && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-center gap-2 text-amber-900 text-sm font-medium" role="status">
               <CloudOff className="w-5 h-5 flex-shrink-0" aria-hidden />
-              <span>You&apos;re offline. Product will be saved locally and synced when online.</span>
+              <span>Last saved data — read-only. Writes disabled until connection is restored.</span>
             </div>
           )}
           {/* Basic info: labels calm (font-medium), inputs min-h-touch */}
@@ -343,7 +345,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
                 <label className="block text-sm font-medium text-slate-600 mb-1.5">
                   Total quantity
                 </label>
-                <div className="input-field bg-slate-50 min-h-[44px] flex items-center">
+                <div className="min-h-[44px] px-4 py-3 rounded-xl border border-[#e2e8f0] bg-slate-50 text-slate-700 flex items-center">
                   {formData.quantityBySize.reduce((s, e) => s + (e.quantity || 0), 0)}
                 </div>
               </div>
@@ -497,7 +499,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            <div>
+            <div className="input-select-wrapper">
               <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Warehouse *
               </label>
@@ -690,15 +692,16 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
           </div>
 
           {/* One primary action = Save; Cancel secondary, de-emphasized */}
-          <div className="flex justify-end gap-3 pt-6 border-t border-slate-200/50 sticky bottom-0 bg-white/90 backdrop-blur-md -mx-6 lg:-mx-8 px-6 lg:px-8 pb-6">
+          <div className="flex justify-end gap-3 pt-6 border-t border-slate-200/80 sticky bottom-0 bg-white -mx-6 lg:-mx-8 px-6 lg:px-8 pb-6">
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancel
             </Button>
             <Button
               type="submit"
               variant="primary"
-              disabled={isSubmitting}
+              disabled={isSubmitting || readOnlyMode}
               aria-busy={isSubmitting}
+              title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
             >
               {isSubmitting
                 ? (savePhase === 'verifying' ? 'Verifying…' : 'Saving…')

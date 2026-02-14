@@ -30,8 +30,9 @@ export const StatCard = memo(function StatCard({ title, value, icon: Icon, trend
     ? safeNum.toLocaleString()
     : typeof value === 'string' || typeof value === 'number' ? value : String(value ?? '');
 
+  /* Phase 6: equal card height in grid; icon centered, strokeWidth 2 */
   return (
-    <div className="glass-card animate-fade-in-up p-6">
+    <div className="solid-card animate-fade-in-up p-6 min-h-[8.5rem] flex flex-col justify-center">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-slate-600 mb-3">{title}</p>
@@ -52,8 +53,8 @@ export const StatCard = memo(function StatCard({ title, value, icon: Icon, trend
             </div>
           )}
         </div>
-        <div className={`p-3 rounded-xl border backdrop-blur-[10px] ${colorClasses[color]} flex-shrink-0`}>
-          <Icon className="w-5 h-5" strokeWidth={2} />
+        <div className={`p-3 rounded-xl border ${colorClasses[color]} flex-shrink-0 flex items-center justify-center`}>
+          <Icon className="w-5 h-5" strokeWidth={2} aria-hidden />
         </div>
       </div>
     </div>

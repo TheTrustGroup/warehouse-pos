@@ -32,7 +32,7 @@ export function QuickActions() {
   ];
 
   return (
-    <div className="glass-card animate-fade-in-up">
+    <div className="solid-card animate-fade-in-up">
       <h3 className="text-lg font-semibold text-slate-900 mb-6">Quick Actions</h3>
       <div className="grid grid-cols-2 gap-3">
         {actions.map((action) => (

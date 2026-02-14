@@ -254,7 +254,7 @@ export function AdminDashboard() {
           Sync statistics
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="glass-card p-4">
+          <div className="solid-card p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wide">Success rate</p>
             <p className="text-xl font-semibold text-slate-900">
               {telemetry?.syncSuccessRate != null
@@ -262,7 +262,7 @@ export function AdminDashboard() {
                 : '—'}
             </p>
           </div>
-          <div className="glass-card p-4">
+          <div className="solid-card p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wide">Avg sync time</p>
             <p className="text-xl font-semibold text-slate-900">
               {telemetry?.averageSyncTimeMs != null
@@ -270,7 +270,7 @@ export function AdminDashboard() {
                 : '—'}
             </p>
           </div>
-          <div className="glass-card p-4">
+          <div className="solid-card p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wide">Offline duration</p>
             <p className="text-xl font-semibold text-slate-900">
               {telemetry?.offlineDurationMs
@@ -278,7 +278,7 @@ export function AdminDashboard() {
                 : '—'}
             </p>
           </div>
-          <div className="glass-card p-4">
+          <div className="solid-card p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wide">Conflicts</p>
             <p className="text-xl font-semibold text-slate-900">
               {telemetry?.conflictCount ?? 0}
@@ -335,7 +335,7 @@ export function AdminDashboard() {
             <AlertTriangle className="w-5 h-5 text-amber-500" />
             Failed sync items
           </h2>
-          <div className="glass-card overflow-hidden">
+          <div className="solid-card overflow-hidden">
             <ul className="divide-y divide-slate-200 max-h-48 overflow-y-auto">
               {failedItems.map((item) => (
                 <li key={item.id} className="px-4 py-2 text-sm flex justify-between items-center">
@@ -366,7 +366,7 @@ export function AdminDashboard() {
           <Database className="w-5 h-5" />
           Logs (last 100)
         </h2>
-        <div className="glass-card overflow-hidden">
+        <div className="solid-card overflow-hidden">
           <div className="flex justify-end gap-2 p-2 border-b border-slate-200">
             <Button variant="secondary" size="sm" onClick={handleExportLogs}>
               <Download className="w-4 h-4 mr-1" />

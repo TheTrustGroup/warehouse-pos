@@ -1,39 +1,40 @@
 /* src/index.css - UI Polish: calm, intentional, production-ready (Apple-grade)
+ * Phase 6: One font (Inter), 8pt grid, equal card heights, button/icon consistency, mobile-first.
  * Design tokens: vertical rhythm, spacing over borders, one primary action per screen.
- * No backend/API/schema changes — visual only.
  *
- * UI POLISH SUMMARY
- * -----------------
- * Improvements: (1) Layout & structure: vertical rhythm (space-y-6), consistent margins,
- * main max-width and overflow-x-hidden to avoid horizontal scroll; (2) Spacing & typography:
- * CSS vars for section/block/touch/input; labels text-slate-600 font-medium; inputs min-h 44px;
- * (3) Action hierarchy: one primary CTA per screen (Add product, Complete sale, Print receipt),
- * secondary de-emphasized, destructive (clear cart, delete) clearly separated; (4) POS: cart
- * line-item spacing, quantity controls ≥44px, totals always visible; (5) Feedback: loading/empty/error
- * states standardized, toasts role="alert" and dismiss with adequate hit area; (6) Consistency:
- * same btn-primary/secondary/action, glass-card, modal behavior and headers across Inventory & POS.
- * Remaining UX risks: (a) Create delivery order on POS uses window.prompt — consider a simple
- * modal for customer details; (b) Table view on very small viewports still scrolls horizontally
- * (min-w table preserved for readability).
+ * CONSISTENCY (Phase 6)
+ * --------------------
+ * - One font family: Inter (body + Tailwind font-sans). No other font imports.
+ * - 8pt spacing grid: use --grid-8, --grid-16, --grid-24, --grid-32, --grid-40, --grid-48 for layout.
+ * - Touch targets: min 44px (--touch-min). Buttons and icon buttons use Button component or min-h-touch.
+ * - Cards: .solid-card has default padding ≥16px; equal heights in grids via min-h or flex.
+ * - Icons: Lucide strokeWidth={2}, centered (flex items-center justify-center).
+ * - Mobile: padding ≥16px (max(1rem, safe-area)); no edge-touch; thumb-friendly primary actions.
  */
 
 /* Font: Inter only, loaded in index.html (400,500,600,700). No additional font imports. */
+/* @import must precede other statements (CSS spec); centralized glassmorphism. */
+@import './styles/glassmorphism.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Centralized glassmorphism (performance-aware: max 3 blur layers per viewport) */
-@import './styles/glassmorphism.css';
-
-/* ---- Design tokens: mobile-first spacing & typography ---- */
+/* ---- Design tokens: 8pt grid + mobile-first spacing & typography ---- */
 :root {
-  /* Spacing rhythm (section > block > inline) */
+  /* 8pt grid: base unit 8px; use for all spacing (Phase 6) */
+  --grid-8: 8px;
+  --grid-16: 16px;
+  --grid-24: 24px;
+  --grid-32: 32px;
+  --grid-40: 40px;
+  --grid-48: 48px;
+  /* Spacing rhythm (aligned to 8pt grid) */
   --space-section: 1.5rem;   /* 24px: between major sections */
-  --space-block: 1rem;        /* 16px: between related blocks */
-  --space-inline: 0.75rem;    /* 12px: between inline elements */
-  --touch-min: 44px;          /* Minimum hit area (WCAG, thumb reach) */
-  --input-height: 44px;       /* Input/select min-height; no cramped fields */
+  --space-block: 1rem;       /* 16px: between related blocks */
+  --space-inline: 0.75rem;   /* 12px: between inline elements */
+  --touch-min: 44px;         /* Minimum hit area (WCAG, thumb reach); ≥44px for primary actions */
+  --input-height: 44px;      /* Input/select min-height; no cramped fields */
   --radius-base: 10px;
   --radius-lg: 12px;
   /* Typography: one scale. Use text-xs/sm/base/lg/xl/2xl only; headings avoid overpowering on small screens */
@@ -54,6 +55,15 @@
   --z-mobile-menu: 40;
   --z-modal: 50;
   --z-toast: 60;
+  /* Viewport: use dvh on iOS Safari to avoid 100vh jump; fallback for older browsers */
+  --min-h-viewport: 100vh;
+  --h-viewport: 100vh;
+}
+@supports (height: 100dvh) {
+  :root {
+    --min-h-viewport: min(100dvh, 100vh);
+    --h-viewport: 100dvh;
+  }
 }
 
 @layer base {
@@ -70,15 +80,7 @@
 }
 
 @layer components {
-  /* Card: spacing; glass styling from glassmorphism.css */
-  .card {
-    @apply rounded-2xl p-6 transition-shadow duration-200;
-  }
-  .card.glass-card {
-    /* Uses .glass-card from glassmorphism.css when combined */
-  }
-
-  /* Primary action: one per screen; clear, no competing decoration */
+  /* Primary action: one per screen; clear, no competing decoration. Height ≥44px (Phase 6). */
   .btn-primary {
     min-height: var(--touch-min);
     @apply px-6 py-3 rounded-xl font-semibold text-white shadow-primary transition-all duration-200 active:scale-[0.98];
@@ -101,7 +103,7 @@
     border-color: rgba(203, 213, 225, 0.8);
   }
 
-  /* Icon/ghost actions: consistent hit area, calm; destructive clearly separated */
+  /* Icon/ghost actions: consistent hit area (≥44px), centered; destructive clearly separated (Phase 6) */
   .btn-action {
     min-width: var(--touch-min);
     min-height: var(--touch-min);
@@ -119,17 +121,38 @@
     /* Destructive: clearly separated from primary so mistakes are avoidable */
   }
 
-  /* Inputs: clear labels, adequate hit area, no cramped fields */
+  /* Inputs: solid background, clear borders, no transparency (Phase 3 form usability) */
   .input-field {
     min-height: var(--input-height);
-    @apply w-full px-4 py-3 rounded-xl transition-all duration-200 text-base;
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid rgba(226, 232, 240, 0.8);
+    @apply w-full px-4 py-3 rounded-xl transition-all duration-200 text-base text-slate-900;
+    background-color: #fff;
+    border: 1px solid #e2e8f0;
+  }
+  .input-field::placeholder {
+    @apply text-slate-400;
   }
   .input-field:focus {
-    @apply outline-none border-primary-500;
-    background: #fff;
+    @apply outline-none;
+    border-color: #ef4444;
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+  }
+  .input-field[aria-invalid="true"],
+  .input-field.border-red-500 {
+    border-color: #ef4444;
+  }
+  /* Select wrapper: keep dropdown above content, prevent clipping in scroll containers */
+  .input-select-wrapper {
+    position: relative;
+    z-index: 10;
+    isolation: isolate;
+  }
+  .input-select-wrapper .input-field {
+    appearance: auto;
+  }
+  /* Textarea: same as input-field (solid, clear border) */
+  textarea.input-field {
+    min-height: auto;
+    resize: vertical;
   }
 
   /* Badges: calm labels, not loud; hierarchy via size/color only */
@@ -170,17 +193,19 @@
     @apply rounded-2xl;
   }
   .table-container {
-    @apply overflow-hidden rounded-2xl border border-white/40;
-    background: rgba(255, 255, 255, 0.7);
-    -webkit-backdrop-filter: blur(20px);
-    backdrop-filter: blur(20px);
+    @apply overflow-hidden rounded-2xl border border-slate-200/80;
+    background-color: #fff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   .table-container .table-scroll-wrap {
     border-radius: inherit;
   }
 
   .table-header {
-    @apply bg-slate-50/80 backdrop-blur-sm border-b border-slate-200/50;
+    @apply bg-slate-50 border-b border-slate-200/80;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .table-row {
@@ -249,11 +274,13 @@
   .scroll-lock {
     overflow: hidden;
     touch-action: none;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: auto;
   }
 
-  /* Modal overlay: padding respects safe-area; mobile-friendly scroll and touch */
+  /* Modal overlay: padding ≥16px (8pt grid), respects safe-area; no edge-touch (Phase 6) */
   .modal-overlay-padding {
-    padding: max(0.5rem, var(--safe-top)) max(0.5rem, var(--safe-right)) max(0.5rem, var(--safe-bottom)) max(0.5rem, var(--safe-left));
+    padding: max(var(--grid-16), var(--safe-top)) max(var(--grid-16), var(--safe-right)) max(var(--grid-16), var(--safe-bottom)) max(var(--grid-16), var(--safe-left));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -264,17 +291,7 @@
     max-width: 56rem;
   }
 
-  /* Glass Background */
-  .bg-glass {
-    background: rgba(255, 255, 255, 0.7);
-    -webkit-backdrop-filter: blur(20px);
-    backdrop-filter: blur(20px);
-  }
-
-  /* Glass Border */
-  .border-glass {
-    border: 1px solid rgba(255, 255, 255, 0.3);
-  }
+  /* Phase 6: solid surfaces use .solid-card / .solid-panel (glassmorphism.css). Unused .bg-glass / .border-glass removed. */
 }
 
 /* Custom Scrollbar */

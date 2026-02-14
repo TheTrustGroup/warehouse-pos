@@ -27,7 +27,7 @@ const actionColors = {
 
 export function RecentActivity({ activities }: RecentActivityProps) {
   return (
-    <div className="glass-card animate-fade-in-up">
+    <div className="solid-card animate-fade-in-up">
       <h3 className="text-lg font-semibold text-slate-900 mb-6">Recent Activity</h3>
       <div className="space-y-4">
         {activities.map((activity) => {
@@ -36,7 +36,7 @@ export function RecentActivity({ activities }: RecentActivityProps) {
           
           return (
             <div key={activity.id} className="flex items-start gap-4 p-3 rounded-lg hover:bg-slate-50/50 transition-colors duration-150">
-              <div className={`p-2.5 rounded-lg ${colorClass} backdrop-blur-[10px] border border-current/20 flex-shrink-0`}>
+              <div className={`p-2.5 rounded-lg ${colorClass} border border-current/20 flex-shrink-0`}>
                 <Icon className="w-4 h-4" />
               </div>
               <div className="flex-1 min-w-0">

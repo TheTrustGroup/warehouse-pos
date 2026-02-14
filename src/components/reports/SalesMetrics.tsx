@@ -57,13 +57,13 @@ export function SalesMetrics({ report }: SalesMetricsProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {metrics.map((metric, idx) => (
-        <div key={idx} className="glass-card animate-fade-in-up" style={{ animationDelay: `${idx * 50}ms` }}>
+        <div key={idx} className="solid-card animate-fade-in-up" style={{ animationDelay: `${idx * 50}ms` }}>
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-600 mb-2">{metric.label}</p>
               <p className="text-2xl font-bold text-slate-900 tracking-tight">{metric.value}</p>
             </div>
-            <div className={`p-3.5 rounded-xl border backdrop-blur-[10px] ${colorClasses[metric.color]} flex-shrink-0 ml-4`}>
+            <div className={`p-3.5 rounded-xl border ${colorClasses[metric.color]} flex-shrink-0 ml-4`}>
               <metric.icon className="w-5 h-5" strokeWidth={2} />
             </div>
           </div>

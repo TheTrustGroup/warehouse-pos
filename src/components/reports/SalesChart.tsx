@@ -12,7 +12,7 @@ export function SalesChart({ report }: SalesChartProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Daily Sales */}
-      <div className="glass-card animate-fade-in-up">
+      <div className="solid-card animate-fade-in-up">
         <h3 className="text-lg font-semibold text-slate-900 mb-6">Daily Sales</h3>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={report.salesByDay}>
@@ -21,11 +21,10 @@ export function SalesChart({ report }: SalesChartProps) {
             <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
             <Tooltip 
               contentStyle={{
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(226, 232, 240, 0.5)',
+                backgroundColor: '#fff',
+                border: '1px solid rgba(226, 232, 240, 0.9)',
                 borderRadius: '12px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
                 padding: '12px',
               }}
               formatter={(value: number) => formatCurrency(value)}
@@ -37,7 +36,7 @@ export function SalesChart({ report }: SalesChartProps) {
       </div>
 
       {/* Category Distribution */}
-      <div className="glass-card animate-fade-in-up">
+      <div className="solid-card animate-fade-in-up">
         <h3 className="text-lg font-semibold text-slate-900 mb-6">Sales by Category</h3>
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>

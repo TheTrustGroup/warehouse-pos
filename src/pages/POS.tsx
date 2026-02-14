@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { WifiOff, ShoppingCart, Trash2, MapPin, Lock, Store, RefreshCw } from 'lucide-react';
 import { usePOS } from '../contexts/POSContext';
+import { useApiStatus } from '../contexts/ApiStatusContext';
 import { useOrders } from '../contexts/OrderContext';
 import { useToast } from '../contexts/ToastContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
@@ -18,7 +19,10 @@ const DELIVERY_FEE = 20;
 
 export function POS() {
   const { cart, clearCart, isOnline, processTransaction, calculateSubtotal, calculateTax, calculateTotal, discount, pendingSyncCount, syncNow } = usePOS();
+  const { isDegraded } = useApiStatus();
   const { createOrder } = useOrders();
+  /** Phase 5: last saved data mode is read-only. Disable Complete sale when server unreachable or offline. */
+  const readOnlyMode = isDegraded || !isOnline;
   const { showToast } = useToast();
   const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse, isWarehouseBoundToSession } = useWarehouse();
   const { stores, currentStoreId, setCurrentStoreId, currentStore, isSingleStore } = useStore();
@@ -135,7 +139,7 @@ export function POS() {
       </div>
 
       {warehouseRequired && (
-        <div className="glass-card bg-amber-50/80 border border-amber-200/50 p-4">
+        <div className="solid-card bg-amber-50 border border-amber-200 p-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <MapPin className="w-5 h-5 text-amber-600 flex-shrink-0" strokeWidth={2} aria-hidden />
             <div className="flex-1 min-w-0">
@@ -234,7 +238,7 @@ export function POS() {
       )}
 
       {!isOnline && (
-        <div className="glass-card bg-amber-50/80 border border-amber-200/50 p-4">
+        <div className="solid-card bg-amber-50 border border-amber-200 p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
               <WifiOff className="w-5 h-5 text-amber-600" strokeWidth={2} aria-hidden />
@@ -248,7 +252,7 @@ export function POS() {
       )}
 
       {pendingSyncCount > 0 && (
-        <div className="glass-card bg-amber-50/80 border border-amber-200/50 p-4">
+        <div className="solid-card bg-amber-50 border border-amber-200 p-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <p className="font-medium text-amber-900">{pendingSyncCount} sale(s) pending or failed sync</p>
@@ -272,14 +276,14 @@ export function POS() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-x-hidden">
         <div className="lg:col-span-2 min-w-0">
-          <div className="glass-card h-full p-5">
+          <div className="solid-card h-full p-5">
             <h2 className="text-lg font-semibold text-slate-900 mb-4">Products</h2>
             <ProductSearch />
           </div>
         </div>
 
         <div className="space-y-5">
-          <div className="glass-card p-5">
+          <div className="solid-card p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                 <ShoppingCart className="w-5 h-5 text-slate-600" strokeWidth={2} aria-hidden />
@@ -312,10 +316,10 @@ export function POS() {
           )}
 
           {cart.length > 0 && (
-            <div className="glass-card p-5">
+            <div className="solid-card p-5">
               <h2 className="text-lg font-semibold text-slate-900 mb-4">Payment</h2>
               {canCompleteSale ? (
-                <PaymentPanel onComplete={handleCompletePayment} />
+                <PaymentPanel onComplete={handleCompletePayment} disableComplete={readOnlyMode} />
               ) : (
                 <p className="text-amber-700 text-sm">Select a warehouse above to complete payment.</p>
               )}

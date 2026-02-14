@@ -1,4 +1,5 @@
 // tailwind.config.js - Premium Figma-Inspired Configuration
+// Phase 6: One font (Inter), 8pt grid (spacing 2=8px, 4=16px, 6=24px), touch 44px.
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [

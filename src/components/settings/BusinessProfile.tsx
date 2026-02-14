@@ -41,7 +41,7 @@ export function BusinessProfile() {
   };
 
   return (
-    <div className="glass-card animate-fade-in-up">
+    <div className="solid-card animate-fade-in-up">
       <div className="flex items-center gap-3 mb-6">
         <Building2 className="w-6 h-6 text-primary-600" strokeWidth={2} />
         <h2 className="text-xl font-semibold text-slate-900">Business Profile</h2>

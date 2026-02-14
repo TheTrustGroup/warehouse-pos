@@ -79,8 +79,8 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4">
-      <div className="glass-card max-w-md w-full p-8 animate-fade-in-up">
+    <div className="min-h-[var(--min-h-viewport)] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4">
+      <div className="solid-card max-w-md w-full p-8 animate-fade-in-up">
         {/* Logo */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-extrabold gradient-text mb-2">
@@ -140,7 +140,7 @@ export function Login() {
                 aria-describedby={fieldErrors.email ? 'login-email-error' : undefined}
               />
               {fieldErrors.email && (
-                <p id="login-email-error" className="text-red-600 text-sm mt-1">{fieldErrors.email}</p>
+                <p id="login-email-error" className="text-red-600 text-sm mt-1 mb-1" role="alert">{fieldErrors.email}</p>
               )}
             </div>
           </div>
@@ -166,7 +166,7 @@ export function Login() {
                 aria-describedby={fieldErrors.password ? 'login-password-error' : undefined}
               />
               {fieldErrors.password && (
-                <p id="login-password-error" className="text-red-600 text-sm mt-1">{fieldErrors.password}</p>
+                <p id="login-password-error" className="text-red-600 text-sm mt-1 mb-1" role="alert">{fieldErrors.password}</p>
               )}
             </div>
           </div>

@@ -47,7 +47,7 @@ export function CategoryManagement() {
   };
 
   return (
-    <div className="glass-card animate-fade-in-up">
+    <div className="solid-card animate-fade-in-up">
       <div className="flex items-center gap-3 mb-6">
         <Tag className="w-6 h-6 text-primary-600" />
         <h2 className="text-xl font-bold text-slate-900">Category Management</h2>

@@ -40,7 +40,7 @@ export function SyncRejectionsCard() {
   if (list.length === 0) return null;
 
   return (
-    <div className="glass-card p-5 border-amber-200/60 bg-amber-50/50">
+    <div className="solid-card p-5 border-amber-200 bg-amber-50">
       <div className="flex items-center gap-2 mb-4">
         <AlertTriangle className="w-5 h-5 text-amber-600" strokeWidth={2} aria-hidden />
         <h2 className="text-lg font-semibold text-amber-900">Failed syncs (needs review)</h2>
@@ -61,7 +61,7 @@ export function SyncRejectionsCard() {
         {list.map((r) => (
           <li
             key={r.id}
-            className="flex flex-wrap items-center justify-between gap-2 py-2 px-3 rounded-lg bg-white/80 border border-amber-200/50"
+            className="flex flex-wrap items-center justify-between gap-2 py-2 px-3 rounded-lg bg-white border border-amber-200"
           >
             <div className="min-w-0">
               <span className="font-mono text-xs text-slate-600 truncate block">{r.idempotencyKey}</span>

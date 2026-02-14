@@ -1,6 +1,7 @@
 /**
  * Single source of truth for buttons. Use instead of raw <button> with btn-* classes.
  * Variants map to design tokens: primary, secondary, action (icon/ghost), danger (destructive).
+ * Phase 6: default (md) keeps min-height 44px for thumb-friendly CTAs; sm is for compact contexts only.
  */
 import { ButtonHTMLAttributes, ReactNode } from 'react';
 
@@ -26,7 +27,7 @@ const variantClasses: Record<ButtonVariant, string> = {
 };
 
 const sizeClasses = {
-  sm: 'text-sm px-4 py-2 min-h-0',
+  sm: 'text-sm px-4 py-2 min-h-0', /* compact only; prefer md for primary actions (44px min) */
   md: '',
   lg: 'py-3.5 text-base',
 };

@@ -94,14 +94,14 @@ export function ProductSearch() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[calc(100vh-320px)] overflow-y-auto min-h-0">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[calc(var(--h-viewport)-320px)] overflow-y-auto min-h-0">
         {filteredProducts.map((product) => (
           <Button
             key={product.id}
             type="button"
             variant="secondary"
             onClick={() => handleProductClick(product.id)}
-            className="glass-card p-3 text-left transition-shadow hover:shadow-card-hover"
+            className="solid-card p-4 text-left transition-shadow hover:shadow-lg"
           >
             {product.images[0] ? (
               <img

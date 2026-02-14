@@ -149,7 +149,7 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
 
   if (internal.isCriticalDataLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4">
+      <div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4" />
         <p className="text-slate-600 font-medium">Loading your data...</p>
         <p className="text-slate-500 text-sm mt-1">Stores, warehouses, inventory, orders</p>

@@ -221,7 +221,7 @@ Create this user in your backend admin panel with these exact credentials.`;
     <div className="space-y-6 animate-fade-in-up">
       {/* Default logins section hidden in production */}
       {!import.meta.env.PROD && (
-        <div className="glass-card p-6">
+        <div className="solid-card p-6">
           <div className="flex items-center gap-2 mb-4">
             <KeyRound className="w-5 h-5 text-primary-600" />
             <h3 className="text-lg font-bold text-slate-900">Logins for other roles</h3>
@@ -270,7 +270,7 @@ Create this user in your backend admin panel with these exact credentials.`;
         </div>
       )}
 
-      <div className="glass-card animate-fade-in-up">
+      <div className="solid-card animate-fade-in-up">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <UsersIcon className="w-6 h-6 text-primary-600" />

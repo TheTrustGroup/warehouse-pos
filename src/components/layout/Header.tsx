@@ -42,7 +42,7 @@ export function Header() {
   };
 
   return (
-    <header className="fixed top-0 left-0 lg:left-[280px] right-0 min-h-[72px] glass border-b border-white/40 flex items-center justify-between pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] lg:px-8 pt-[var(--safe-top)] z-10">
+    <header className="fixed top-0 left-0 lg:left-[280px] right-0 min-h-[72px] solid-panel border-b border-slate-200/80 flex items-center justify-between pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] lg:px-8 pt-[var(--safe-top)] z-10">
       {/* Search Bar */}
       {/* Search: adequate hit area; label-style placeholder, not loud */}
       <div className="flex-1 max-w-2xl">
@@ -68,7 +68,7 @@ export function Header() {
           </span>
         )}
         <div className="flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-slate-600" aria-hidden />
+          <MapPin className="w-4 h-4 text-slate-600 shrink-0" strokeWidth={2} aria-hidden />
           {showLocationAsStatic || warehouses.length === 0 ? (
           <span className="text-sm font-medium text-slate-800">
             {isMainTownPos ? 'Main Town' : (currentWarehouse?.name ?? (currentWarehouseId ? 'Warehouse' : 'Main Store'))}

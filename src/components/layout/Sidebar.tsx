@@ -59,9 +59,9 @@ export function Sidebar() {
   );
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[280px] glass-panel border-r border-white/40 flex flex-col shadow-glass">
+    <aside className="fixed left-0 top-0 w-[280px] min-w-[280px] h-[var(--h-viewport)] max-h-[var(--h-viewport)] solid-panel border-r border-slate-200/80 flex flex-col shadow-lg flex-shrink-0">
       {/* Logo: hierarchy via size, not weight overload */}
-      <div className="p-5 border-b border-slate-200/30">
+      <div className="p-5 border-b border-slate-200/30 flex-shrink-0">
         <div className="flex flex-col gap-0.5">
           <h1 className="text-xl font-bold leading-tight tracking-tight gradient-text">
             Extreme Dept Kidz
@@ -72,8 +72,8 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Nav: vertical rhythm space-y-1, touch targets via .nav-item */}
-      <nav className="flex-1 py-5 px-2 space-y-1 overflow-y-auto">
+      {/* Nav: vertical rhythm space-y-1, touch targets via .nav-item; fixed item height to avoid resize on role change */}
+      <nav className="flex-1 min-h-0 py-5 px-2 space-y-1 overflow-y-auto">
         {navigation.map((item) => (
           <NavLink
             key={item.name}
@@ -88,8 +88,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-slate-200/30 space-y-3">
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 hover:bg-slate-100/60 transition-colors">
+      <div className="p-4 border-t border-slate-200/30 space-y-3 flex-shrink-0 min-h-[5.5rem]">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors min-h-[3.5rem]">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm shadow-lg">
             {user?.fullName?.charAt(0) || 'U'}
           </div>

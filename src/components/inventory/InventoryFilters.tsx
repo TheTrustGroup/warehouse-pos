@@ -16,7 +16,7 @@ export function InventoryFilters({ filters, onFiltersChange, categories }: Inven
   };
 
   return (
-    <div className="glass-card p-5">
+    <div className="solid-card p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-slate-500" strokeWidth={2} aria-hidden />
@@ -38,7 +38,7 @@ export function InventoryFilters({ filters, onFiltersChange, categories }: Inven
       </div>
 
       <div className="space-y-4">
-        <div>
+        <div className="input-select-wrapper">
           <label className="block text-sm font-medium text-slate-600 mb-1.5">Category</label>
           <select
             value={filters.category || ''}

@@ -71,7 +71,7 @@ export function Settings() {
       </div>
 
       {/* Tabs */}
-      <div className="glass-card p-0 overflow-hidden animate-fade-in-up">
+      <div className="solid-card p-0 overflow-hidden animate-fade-in-up">
         <nav className="flex gap-2 px-6 border-b border-slate-200/50">
           {tabs.map(tab => (
             <button

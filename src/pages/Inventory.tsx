@@ -1,5 +1,7 @@
 import { useInventoryPageState } from './useInventoryPageState';
 import { API_BASE_URL } from '../lib/api';
+import { useApiStatus } from '../contexts/ApiStatusContext';
+import { useNetworkStatusContext } from '../contexts/NetworkStatusContext';
 import { ProductTableView } from '../components/inventory/ProductTableView';
 import { ProductGridView } from '../components/inventory/ProductGridView';
 import { ProductFormModal } from '../components/inventory/ProductFormModal';
@@ -17,10 +19,15 @@ import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, Refre
  */
 export function Inventory() {
   const s = useInventoryPageState();
+  const { isDegraded } = useApiStatus();
+  const { isOnline } = useNetworkStatusContext();
+  /** Phase 5: Last saved data mode is read-only. Disable add/edit/delete when server unreachable or offline. */
+  const readOnlyMode = isDegraded || !isOnline;
+  const disableDestructive = readOnlyMode;
 
   if (s.isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]" role="status" aria-live="polite">
+      <div className="flex items-center justify-center min-h-[60dvh]" role="status" aria-live="polite">
         <div className="text-center">
           <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary-200 border-t-primary-600 mx-auto mb-4" />
           <p className="text-slate-600 text-sm font-medium">Loading products…</p>
@@ -31,8 +38,8 @@ export function Inventory() {
 
   if (s.error) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="glass-card max-w-md w-full mx-auto text-center p-8">
+      <div className="flex items-center justify-center min-h-[60dvh]">
+        <div className="solid-card max-w-md w-full mx-auto text-center p-8">
           <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertTriangle className="w-7 h-7 text-red-600" aria-hidden />
           </div>
@@ -53,7 +60,7 @@ export function Inventory() {
   if (s.products.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="glass-card max-w-md w-full mx-auto text-center p-8">
+        <div className="solid-card max-w-md w-full mx-auto text-center p-8">
           <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Package className="w-7 h-7 text-slate-400" aria-hidden />
           </div>
@@ -62,7 +69,7 @@ export function Inventory() {
             Add your first product to get started.
           </p>
           {s.canCreate && (
-            <Button variant="primary" onClick={() => { s.setEditingProduct(null); s.setIsModalOpen(true); }} className="inline-flex items-center gap-2" aria-label="Add first product">
+            <Button variant="primary" onClick={() => { s.setEditingProduct(null); s.setIsModalOpen(true); }} disabled={readOnlyMode} title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined} className="inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed" aria-label="Add first product">
               <Plus className="w-5 h-5" />
               Add first product
             </Button>
@@ -235,7 +242,7 @@ export function Inventory() {
           )}
         </div>
         {s.canCreate && (
-          <Button variant="primary" onClick={handleAddProduct} className="flex items-center justify-center gap-2 w-full sm:w-auto" aria-label="Add product">
+          <Button variant="primary" onClick={handleAddProduct} disabled={readOnlyMode} title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined} className="flex items-center justify-center gap-2 w-full sm:w-auto disabled:opacity-60 disabled:cursor-not-allowed" aria-label="Add product">
             <Plus className="w-5 h-5" />
             Add product
           </Button>
@@ -246,7 +253,7 @@ export function Inventory() {
         <div className="flex-1 min-w-0">
           <InventorySearchBar value={s.searchQuery} onChange={s.setSearchQuery} />
         </div>
-        <div className="flex items-center gap-1 bg-white/80 rounded-xl border border-slate-200/60 p-1 flex-shrink-0 self-start sm:self-center">
+        <div className="flex items-center gap-1 bg-white rounded-xl border border-slate-200 p-1 flex-shrink-0 self-start sm:self-center">
           <button
             type="button"
             onClick={() => s.setViewMode('table')}
@@ -279,7 +286,7 @@ export function Inventory() {
 
         <div className="lg:col-span-3 space-y-4">
           {s.canBulk && s.selectedIds.length > 0 && (
-            <div className="glass-card bg-primary-50/60 border border-primary-200/50 px-4 py-3">
+            <div className="solid-card bg-primary-50 border border-primary-200 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm font-medium text-primary-900">
                   {s.selectedIds.length} selected
@@ -293,7 +300,9 @@ export function Inventory() {
                     <button
                       type="button"
                       onClick={handleBulkDelete}
-                      className="min-h-touch px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 inline-flex items-center gap-2 transition-colors"
+                      disabled={disableDestructive}
+                      title={disableDestructive ? 'Server unavailable. Try again when the banner is gone.' : undefined}
+                      className="min-h-touch px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2 transition-colors"
                       aria-label="Delete selected products"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -306,7 +315,7 @@ export function Inventory() {
           )}
 
           {s.filteredProducts.length === 0 ? (
-            <div className="glass-card text-center p-8">
+            <div className="solid-card text-center p-8">
               <Package className="w-10 h-10 text-slate-400 mx-auto mb-3" aria-hidden />
               <h2 className="text-base font-semibold text-slate-900 mb-1">No products match</h2>
               <p className="text-slate-600 text-sm mb-4">
@@ -333,6 +342,7 @@ export function Inventory() {
               isUnsynced={(id) => s.isUnsyncedBySyncStatus(id) || s.isUnsynced(id)}
               onVerifySaved={s.verifyProductSaved}
               onRetrySync={s.refreshProducts}
+              disableDestructiveActions={disableDestructive}
             />
           ) : (
             <ProductGridView
@@ -348,6 +358,7 @@ export function Inventory() {
               isUnsynced={(id) => s.isUnsyncedBySyncStatus(id) || s.isUnsynced(id)}
               onVerifySaved={s.verifyProductSaved}
               onRetrySync={s.refreshProducts}
+              disableDestructiveActions={disableDestructive}
             />
           )}
         </div>
@@ -358,6 +369,7 @@ export function Inventory() {
         onClose={() => { s.setIsModalOpen(false); s.setEditingProduct(null); }}
         onSubmit={handleSubmitProduct}
         product={s.editingProduct}
+        readOnlyMode={readOnlyMode}
       />
     </div>
   );

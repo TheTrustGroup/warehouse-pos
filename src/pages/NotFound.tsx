@@ -4,7 +4,7 @@ import { Button, Card } from '../components/ui';
 
 export function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4">
+    <div className="min-h-[var(--min-h-viewport)] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4">
       <Card className="max-w-md text-center animate-fade-in-up">
         <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <span className="text-4xl font-bold text-slate-400">404</span>

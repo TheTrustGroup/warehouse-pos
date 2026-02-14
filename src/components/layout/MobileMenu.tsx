@@ -63,7 +63,7 @@ export function MobileMenu() {
       <Button
         variant="action"
         onClick={() => setIsOpen(!isOpen)}
-        className="lg:hidden fixed top-[88px] left-4 z-40 min-h-touch min-w-touch flex items-center justify-center glass rounded-xl shadow-medium"
+        className="lg:hidden fixed top-[88px] left-4 z-40 min-h-touch min-w-touch flex items-center justify-center bg-white border border-slate-200 rounded-xl shadow-md"
         aria-label="Toggle menu"
         aria-expanded={isOpen}
       >
@@ -76,9 +76,9 @@ export function MobileMenu() {
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="absolute inset-0 glass-overlay" onClick={() => setIsOpen(false)} aria-hidden></div>
-        <aside className="relative w-[280px] max-w-[85vw] h-full flex flex-col glass-panel shadow-large border-r border-slate-200/50">
-          <div className="px-5 py-5 border-b border-slate-200/30">
+        <div className="absolute inset-0 solid-overlay" onClick={() => setIsOpen(false)} aria-hidden></div>
+        <aside className="relative w-[280px] min-w-[280px] max-w-[85vw] h-full min-h-[var(--h-viewport)] flex flex-col solid-panel shadow-xl border-r border-slate-200/80 flex-shrink-0">
+          <div className="px-5 py-5 border-b border-slate-200/30 flex-shrink-0">
             <div className="flex flex-col gap-0.5">
               <h1 className="text-xl font-bold leading-tight tracking-tight gradient-text">
                 Extreme Dept Kidz
@@ -87,7 +87,7 @@ export function MobileMenu() {
             </div>
           </div>
 
-          <nav className="px-3 py-6 space-y-1 flex-1 overflow-y-auto">
+          <nav className="px-3 py-6 space-y-1 flex-1 min-h-0 overflow-y-auto">
             {navigation.map(item => (
               <NavLink
                 key={item.name}
@@ -102,7 +102,7 @@ export function MobileMenu() {
               </NavLink>
             ))}
           </nav>
-          <div className="p-4 border-t border-slate-200/30 space-y-3">
+          <div className="p-4 border-t border-slate-200/30 space-y-3 flex-shrink-0 min-h-[5rem]">
             {user && (
               <p className="text-xs text-slate-500">
                 <span className="font-medium text-slate-600">Role: </span>

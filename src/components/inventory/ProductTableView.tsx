@@ -20,6 +20,8 @@ interface ProductTableViewProps {
   isUnsynced?: (productId: string) => boolean;
   onVerifySaved?: (productId: string) => Promise<{ saved: boolean; product?: Product }>;
   onRetrySync?: () => void;
+  /** When true, disable delete (e.g. server unavailable). */
+  disableDestructiveActions?: boolean;
 }
 
 export function ProductTableView({
@@ -36,6 +38,7 @@ export function ProductTableView({
   isUnsynced,
   onVerifySaved,
   onRetrySync,
+  disableDestructiveActions = false,
 }: ProductTableViewProps) {
   const [sortField, setSortField] = useState<keyof Product>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -251,7 +254,7 @@ export function ProductTableView({
                           </Button>
                         )}
                         {canDelete && (
-                          <Button variant="danger" onClick={() => onDelete(product.id)} title="Delete" aria-label={`Delete ${product.name}`}>
+                          <Button variant="danger" onClick={() => onDelete(product.id)} disabled={disableDestructiveActions} title={disableDestructiveActions ? 'Server unavailable' : 'Delete'} aria-label={`Delete ${product.name}`}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         )}

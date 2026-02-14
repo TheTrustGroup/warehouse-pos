@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useOrders } from '../contexts/OrderContext';
+import { useApiStatus } from '../contexts/ApiStatusContext';
+import { useNetworkStatusContext } from '../contexts/NetworkStatusContext';
 import { OrderStatus } from '../types/order';
 import {
   Package,
@@ -23,6 +25,10 @@ export function Orders() {
     markAsDelivered,
     markAsFailed,
   } = useOrders();
+  const { isDegraded } = useApiStatus();
+  const { isOnline } = useNetworkStatusContext();
+  /** Phase 5: last saved data mode is read-only. Disable status updates (e.g. deduct stock) when server unreachable or offline. */
+  const readOnlyMode = isDegraded || !isOnline;
 
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -62,7 +68,38 @@ export function Orders() {
   };
 
   if (isLoading) {
-    return <div>Loading orders...</div>;
+    return (
+      <div className="space-y-6 min-h-[60dvh]" role="status" aria-live="polite">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="h-8 w-32 bg-slate-200 rounded animate-pulse" />
+            <div className="h-4 w-24 bg-slate-100 rounded mt-2 animate-pulse" />
+          </div>
+          <div className="h-12 w-32 bg-slate-200 rounded-xl animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="solid-card p-4">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 bg-slate-200 rounded-xl animate-pulse flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="h-4 w-16 bg-slate-100 rounded mb-2 animate-pulse" />
+                  <div className="h-7 w-10 bg-slate-200 rounded animate-pulse" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="solid-card p-4">
+          <div className="h-12 bg-slate-100 rounded-xl animate-pulse w-full max-w-md" />
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="solid-card p-4 h-24 animate-pulse bg-slate-50" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -79,62 +116,62 @@ export function Orders() {
         </Button>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards — Phase 6: equal height (min-h), 8pt grid gap, icon stroke consistent */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="glass-card">
+        <div className="solid-card min-h-[7.5rem] flex flex-col justify-center">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-yellow-50 rounded-xl">
-              <Clock className="w-6 h-6 text-yellow-600" />
+            <div className="p-3 bg-yellow-50 rounded-xl flex items-center justify-center shrink-0">
+              <Clock className="w-6 h-6 text-yellow-600" strokeWidth={2} aria-hidden />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-slate-600">Pending</p>
               <p className="text-2xl font-bold text-slate-900">{stats.pending}</p>
             </div>
           </div>
         </div>
 
-        <div className="glass-card">
+        <div className="solid-card min-h-[7.5rem] flex flex-col justify-center">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-50 rounded-xl">
-              <Package className="w-6 h-6 text-purple-600" />
+            <div className="p-3 bg-purple-50 rounded-xl flex items-center justify-center shrink-0">
+              <Package className="w-6 h-6 text-purple-600" strokeWidth={2} aria-hidden />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-slate-600">Processing</p>
               <p className="text-2xl font-bold text-slate-900">{stats.processing}</p>
             </div>
           </div>
         </div>
 
-        <div className="glass-card">
+        <div className="solid-card min-h-[7.5rem] flex flex-col justify-center">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-orange-50 rounded-xl">
-              <Truck className="w-6 h-6 text-orange-600" />
+            <div className="p-3 bg-orange-50 rounded-xl flex items-center justify-center shrink-0">
+              <Truck className="w-6 h-6 text-orange-600" strokeWidth={2} aria-hidden />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-slate-600">Out for Delivery</p>
               <p className="text-2xl font-bold text-slate-900">{stats.out_for_delivery}</p>
             </div>
           </div>
         </div>
 
-        <div className="glass-card">
+        <div className="solid-card min-h-[7.5rem] flex flex-col justify-center">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-green-50 rounded-xl">
-              <CheckCircle className="w-6 h-6 text-green-600" />
+            <div className="p-3 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
+              <CheckCircle className="w-6 h-6 text-green-600" strokeWidth={2} aria-hidden />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-slate-600">Delivered</p>
               <p className="text-2xl font-bold text-slate-900">{stats.delivered}</p>
             </div>
           </div>
         </div>
 
-        <div className="glass-card">
+        <div className="solid-card min-h-[7.5rem] flex flex-col justify-center">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-red-50 rounded-xl">
-              <XCircle className="w-6 h-6 text-red-600" />
+            <div className="p-3 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
+              <XCircle className="w-6 h-6 text-red-600" strokeWidth={2} aria-hidden />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-slate-600">Failed</p>
               <p className="text-2xl font-bold text-slate-900">{stats.failed}</p>
             </div>
@@ -142,27 +179,33 @@ export function Orders() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="glass-card">
-        <div className="flex items-center gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search by order number, customer name or phone..."
-              className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-            />
+      {/* Filters — Phase 6: card uses default solid-card padding (≥16px) */}
+      <div className="solid-card">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">Search</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Order number, customer, phone..."
+                className="input-field w-full pl-10 pr-4"
+                aria-label="Search orders"
+              />
+            </div>
           </div>
 
-          <select
-            value={selectedStatus}
-            onChange={e => setSelectedStatus(e.target.value as OrderStatus | 'all')}
-            className="input-field"
-            aria-label="Filter by status"
-          >
-            <option value="all">All Status</option>
+          <div className="input-select-wrapper min-w-[140px]">
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">Status</label>
+            <select
+              value={selectedStatus}
+              onChange={e => setSelectedStatus(e.target.value as OrderStatus | 'all')}
+              className="input-field"
+              aria-label="Filter by status"
+            >
+              <option value="all">All Status</option>
             <option value="pending">Pending</option>
             <option value="confirmed">Confirmed</option>
             <option value="processing">Processing</option>
@@ -171,14 +214,15 @@ export function Orders() {
             <option value="delivered">Delivered</option>
             <option value="failed">Failed</option>
             <option value="cancelled">Cancelled</option>
-          </select>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Orders List */}
       <div className="space-y-4">
         {filteredOrders.map(order => (
-          <div key={order.id} className="glass-card hover:shadow-xl transition-all">
+          <div key={order.id} className="solid-card hover:shadow-xl transition-all">
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
@@ -222,8 +266,9 @@ export function Orders() {
                 {order.status === 'pending' && (
                   <button
                     onClick={() => updateOrderStatus(order.id, 'confirmed')}
-                    disabled={busyOrderId === order.id}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
+                    disabled={readOnlyMode || busyOrderId === order.id}
+                    title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
+                    className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                   >
                     {busyOrderId === order.id ? 'Updating…' : 'Confirm'}
                   </button>
@@ -232,8 +277,9 @@ export function Orders() {
                 {(order.status === 'confirmed' || order.status === 'processing') && (
                   <button
                     onClick={() => updateOrderStatus(order.id, 'ready')}
-                    disabled={busyOrderId === order.id}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
+                    disabled={readOnlyMode || busyOrderId === order.id}
+                    title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
+                    className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                   >
                     {busyOrderId === order.id ? 'Updating…' : 'Mark Ready'}
                   </button>
@@ -248,8 +294,9 @@ export function Orders() {
                         assignDriver(order.id, driver, phone);
                       }
                     }}
-                    disabled={busyOrderId === order.id}
-                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
+                    disabled={readOnlyMode || busyOrderId === order.id}
+                    title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
+                    className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                   >
                     {busyOrderId === order.id ? 'Updating…' : 'Assign Driver'}
                   </button>
@@ -261,8 +308,9 @@ export function Orders() {
                       onClick={() =>
                         markAsDelivered(order.id, { recipientName: order.customer.name })
                       }
-                      disabled={busyOrderId === order.id}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
+                      disabled={readOnlyMode || busyOrderId === order.id}
+                      title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
+                      className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                     >
                       {busyOrderId === order.id ? 'Updating…' : 'Mark Delivered'}
                     </button>
@@ -271,8 +319,9 @@ export function Orders() {
                         const reason = prompt('Reason for failure:');
                         if (reason) markAsFailed(order.id, reason);
                       }}
-                      disabled={busyOrderId === order.id}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
+                      disabled={readOnlyMode || busyOrderId === order.id}
+                      title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
+                      className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                     >
                       {busyOrderId === order.id ? 'Updating…' : 'Mark Failed'}
                     </button>
@@ -301,7 +350,7 @@ export function Orders() {
         ))}
 
         {filteredOrders.length === 0 && (
-          <div className="glass-card text-center py-12">
+          <div className="solid-card text-center py-12">
             <Package className="w-16 h-16 text-slate-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-slate-900 mb-2">No orders found</h3>
             <p className="text-slate-600">Try adjusting your filters or create a new order</p>

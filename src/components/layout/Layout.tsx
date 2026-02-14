@@ -5,7 +5,7 @@ import { Header } from './Header';
 import { MobileMenu } from './MobileMenu';
 import { SyncStatusBar } from '../SyncStatusBar';
 import { ConflictModalContainer } from '../ConflictModalContainer';
-import { getApiCircuitBreaker } from '../../lib/observability';
+import { ApiStatusProvider, useApiStatus } from '../../contexts/ApiStatusContext';
 import { useCriticalData } from '../../contexts/CriticalDataContext';
 import { Button } from '../ui/Button';
 
@@ -15,7 +15,15 @@ const BANNER_DEBOUNCE_MS = 4000;
 
 /** Layout: single vertical rhythm — section spacing (24px) and consistent main padding. Mobile-first. */
 export function Layout() {
-  const [degraded, setDegraded] = useState(false);
+  return (
+    <ApiStatusProvider>
+      <LayoutContent />
+    </ApiStatusProvider>
+  );
+}
+
+function LayoutContent() {
+  const { isDegraded: degraded, retry } = useApiStatus();
   const [showBanner, setShowBanner] = useState(false);
   const degradedSinceRef = useRef<number | null>(null);
   const [dismissed, setDismissed] = useState(() => {
@@ -23,14 +31,6 @@ export function Layout() {
     return sessionStorage.getItem(DISMISS_BANNER_KEY) === '1';
   });
   const { criticalDataError, isSyncingCriticalData, reloadCriticalData } = useCriticalData();
-
-  useEffect(() => {
-    const circuit = getApiCircuitBreaker();
-    const check = () => setDegraded(circuit.isDegraded());
-    check();
-    const id = setInterval(check, 2000);
-    return () => clearInterval(id);
-  }, []);
 
   // Debounce: show banner only after degraded for BANNER_DEBOUNCE_MS so brief flickers don't cause jitter
   useEffect(() => {
@@ -59,12 +59,9 @@ export function Layout() {
   }, [degraded]);
 
   const handleTryAgain = () => {
-    const circuit = getApiCircuitBreaker();
-    circuit.reset();
-    setDegraded(false);
     if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(DISMISS_BANNER_KEY);
     setDismissed(false);
-    window.dispatchEvent(new CustomEvent('circuit-retry'));
+    retry();
   };
 
   const handleDismissBanner = () => {
@@ -76,7 +73,7 @@ export function Layout() {
   const showSyncingBar = isSyncingCriticalData;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+    <div className="min-h-[var(--min-h-viewport)] bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <div className="hidden lg:block">
         <Sidebar />
       </div>
@@ -110,7 +107,7 @@ export function Layout() {
           className="lg:ml-[280px] mt-[calc(72px+var(--safe-top))] bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-amber-600/20"
           role="status"
         >
-          <span>Server temporarily unavailable. Showing last saved data. Changes will sync when the server is back.</span>
+          <span>Server temporarily unavailable. Last saved data — read-only. Add, edit, and sales disabled until server is back.</span>
           <Button
             type="button"
             variant="ghost"
@@ -129,8 +126,9 @@ export function Layout() {
           </Button>
         </div>
       )}
+      {/* Phase 6: main padding ≥16px (max(1rem, safe-area)); no edge-touch; reserves space for SyncStatusBar */}
       <main
-        className={`lg:ml-[280px] pt-20 lg:pt-8 pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] lg:px-8 pb-[max(2rem,var(--safe-bottom))] min-h-[calc(100vh-72px)] max-w-[1600px] overflow-x-hidden ${
+        className={`lg:ml-[280px] pt-20 lg:pt-8 pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] lg:px-8 pb-[max(3.5rem,calc(var(--safe-bottom)+3.5rem))] min-h-[calc(var(--min-h-viewport)-72px)] max-w-[1600px] overflow-x-hidden ${
           showDegradedBanner || showSyncingBar ? 'mt-0' : 'mt-[calc(72px+var(--safe-top))]'
         }`}
       >
