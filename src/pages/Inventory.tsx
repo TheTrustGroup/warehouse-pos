@@ -71,6 +71,7 @@ export function Inventory() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
 
   // All hooks must run unconditionally (before any early returns) to avoid React error #310
   const categories = useMemo(() => {
@@ -91,6 +92,21 @@ export function Inventory() {
     }
     return result;
   }, [products, searchQuery, filters, searchProducts, filterProducts]);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      const now = Date.now();
+      setUndoStack((prev) => prev.filter((e) => now - e.at < UNDO_WINDOW_MS));
+      const latest = undoStack[0];
+      if (latest) {
+        const left = Math.max(0, Math.ceil((UNDO_WINDOW_MS - (now - latest.at)) / 1000));
+        setUndoSecondsLeft(left);
+      } else {
+        setUndoSecondsLeft(0);
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [undoStack]);
 
   /* Loading: immediate feedback, calm copy */
   if (isLoading) {
@@ -226,23 +242,6 @@ export function Inventory() {
       showToast('error', 'Could not undo.');
     }
   };
-
-  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      const now = Date.now();
-      setUndoStack((prev) => prev.filter((e) => now - e.at < UNDO_WINDOW_MS));
-      const latest = undoStack[0];
-      if (latest) {
-        const left = Math.max(0, Math.ceil((UNDO_WINDOW_MS - (now - latest.at)) / 1000));
-        setUndoSecondsLeft(left);
-      } else {
-        setUndoSecondsLeft(0);
-      }
-    }, 1000);
-    return () => clearInterval(t);
-  }, [undoStack]);
 
   const latestUndoEntry = undoStack.length > 0 ? undoStack[0] : null;
   const canUndoLatest = latestUndoEntry && undoSecondsLeft > 0;

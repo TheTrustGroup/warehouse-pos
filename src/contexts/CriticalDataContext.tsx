@@ -91,9 +91,9 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
       // Show app immediately; phase 2 (inventory, orders) runs in background so products appear from cache then refresh
       internal.setCriticalDataLoading(false);
       internal.setSyncingCriticalData(true);
-      // Phase 2: inventory + orders (heavier) — don't block; InventoryContext already shows cache on mount
+      // Phase 2: inventory + orders (heavier) — silent so we don't replace cache with "Loading products..." spinner
       Promise.all([
-        withRetry(() => refreshProducts({ bypassCache: true, timeoutMs: INITIAL_LOAD_TIMEOUT_MS }), MAX_RETRIES),
+        withRetry(() => refreshProducts({ bypassCache: true, timeoutMs: INITIAL_LOAD_TIMEOUT_MS, silent: true }), MAX_RETRIES),
         withRetry(() => refreshOrders(initialOpts), MAX_RETRIES),
       ])
         .catch((err) => {
@@ -113,7 +113,7 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
           internal.setCriticalDataLoading(false);
           internal.setSyncingCriticalData(true);
           Promise.all([
-            withRetry(() => refreshProducts({ bypassCache: true, timeoutMs: INITIAL_LOAD_TIMEOUT_MS }), MAX_RETRIES),
+            withRetry(() => refreshProducts({ bypassCache: true, timeoutMs: INITIAL_LOAD_TIMEOUT_MS, silent: true }), MAX_RETRIES),
             withRetry(() => refreshOrders(initialOpts), MAX_RETRIES),
           ])
             .catch((retryErr) => {
