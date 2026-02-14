@@ -7,7 +7,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 import { X, Save, Server, Monitor, GitMerge, Clock } from 'lucide-react';
-import { getConflictPreference, setConflictPreference, appendConflictAuditLog } from '../db/inventoryDB';
+import { setConflictPreference, appendConflictAuditLog } from '../db/inventoryDB';
 
 export type ConflictStrategy = 'keep_local' | 'keep_server' | 'merge' | 'last_write_wins';
 
@@ -82,31 +82,28 @@ export function ConflictModal({
   operation,
   onResolve,
 }: ConflictModalProps) {
+  void operation; // reserved for future use
   const [useForFuture, setUseForFuture] = useState(false);
   const [strategyForFuture, setStrategyForFuture] = useState<ConflictStrategy | null>(null);
   const [mergeMode, setMergeMode] = useState(false);
-  const [mergedForm, setMergedForm] = useState<ConflictVersion>(() => ({
-    ...localVersion,
-    ...(serverVersion && { ...serverVersion, price: (serverVersion as Record<string, unknown>).sellingPrice ?? serverVersion.price }),
-  }));
+  const toConflictVersion = (local: ConflictVersion, server: ConflictVersion | null): ConflictVersion => {
+    const priceVal = server && (typeof (server as Record<string, unknown>).sellingPrice === 'number' ? (server as Record<string, unknown>).sellingPrice : server.price);
+    return { ...local, ...(server && { ...server, price: typeof priceVal === 'number' ? priceVal : undefined }) };
+  };
+  const [mergedForm, setMergedForm] = useState<ConflictVersion>(() => toConflictVersion(localVersion, serverVersion));
   const conflictIdRef = useRef<string | number | undefined>(undefined);
   useEffect(() => {
     const id = queueItemId ?? localVersion.id ?? serverVersion?.id;
     if (id !== conflictIdRef.current) {
       conflictIdRef.current = id;
-      setMergedForm({
-        ...localVersion,
-        ...(serverVersion && { ...serverVersion, price: (serverVersion as Record<string, unknown>).sellingPrice ?? serverVersion.price }),
-      });
+      setMergedForm(toConflictVersion(localVersion, serverVersion));
     }
   }, [queueItemId, localVersion, serverVersion]);
 
-  const serverDisplay = useMemo(() => {
-    if (!serverVersion) return {} as ConflictVersion;
-    return {
-      ...serverVersion,
-      price: (serverVersion as Record<string, unknown>).sellingPrice ?? serverVersion.price,
-    };
+  const serverDisplay = useMemo((): ConflictVersion => {
+    if (!serverVersion) return {};
+    const p = (serverVersion as Record<string, unknown>).sellingPrice ?? serverVersion.price;
+    return { ...serverVersion, price: typeof p === 'number' ? p : undefined };
   }, [serverVersion]);
   const diffs = useMemo(() => {
     const map: Record<string, { local: string | number; server: string | number; same: boolean }> = {};

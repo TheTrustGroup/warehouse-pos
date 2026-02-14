@@ -17,7 +17,7 @@ import { createContext, useContext, useState, useRef, ReactNode, useEffect, useM
 import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL } from '../lib/api';
-import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from '../lib/apiClient';
+import { apiGet, apiPost, apiPut, apiDelete } from '../lib/apiClient';
 import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
 import { useToast } from './ToastContext';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
@@ -115,7 +115,6 @@ import {
   logInventoryUpdate,
   logInventoryRead,
   logInventoryDelete,
-  logInventoryError,
 } from '../lib/inventoryLogger';
 
 interface InventoryContextType {
@@ -176,7 +175,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const offline = useOfflineInventory();
   const products = useMemo(
-    () => (offlineEnabled ? (offline.products ?? []) : apiOnlyProducts),
+    (): Product[] => (offlineEnabled ? (offline.products ?? []) : apiOnlyProducts),
     [offlineEnabled, offline.products, apiOnlyProducts]
   );
   const isLoading = offlineEnabled ? offline.isLoading : apiOnlyLoading;
@@ -553,56 +552,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return `${base}/${productId}?${params.toString()}`;
   };
 
-  /**
-   * Read-after-write verification: re-fetch single product from server. Fast path (<300ms) so save feels instant.
-   * Used in background after optimistic update; on failure we refresh list and log.
-   */
-  const readAfterWriteVerify = async (productId: string): Promise<Product> => {
-    let found: any = null;
-    try {
-      found = await apiGet<any>(API_BASE_URL, productByIdPath('/api/products', productId));
-    } catch {
-      try {
-        found = await apiGet<any>(API_BASE_URL, productByIdPath('/admin/api/products', productId));
-      } catch {
-        /* fallback to full list for backwards compatibility if by-id not available */
-        const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/api/products'));
-        const list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
-        found = list.find((p: any) => p && p.id === productId);
-      }
-    }
-    if (!found || !found.id) {
-      logInventoryError('Read-after-write verification failed: saved product not found', { productId });
-      throw new Error('Save succeeded but verification failed. Please refresh the list.');
-    }
-    return normalizeProduct(found);
-  };
-
-  /**
-   * Read-after-delete verification: re-fetch list and ensure deleted id(s) are no longer present.
-   * If any id still appears, backend did not persist delete — throw and do not remove from local state.
-   */
-  const readAfterDeleteVerify = async (deletedIds: string[]): Promise<void> => {
-    if (deletedIds.length === 0) return;
-    let list: any[] = [];
-    try {
-      const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/api/products'));
-      list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
-    } catch {
-      const res = await apiGet<{ data?: any[] } | any[]>(API_BASE_URL, productsPath('/admin/api/products'));
-      list = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: any[] }).data) ? (res as { data: any[] }).data : []);
-    }
-    const stillPresent = deletedIds.filter((id) => list.some((p: any) => p && p.id === id));
-    if (stillPresent.length > 0) {
-      logInventoryError('Read-after-delete verification failed: deleted product(s) still present', {
-        productId: stillPresent[0],
-        deletedIds: stillPresent,
-        listLength: list.length,
-      });
-      throw new Error('Delete succeeded but verification failed. Please refresh the list.');
-    }
-  };
-
   /** Minimal payload for API POST/PUT: only fields backend persists. Reduces payload size and avoids sending UI-only data. */
   const productToPayload = (product: Product): Record<string, unknown> => {
     const toIso = (d: Date | string | null | undefined) =>
@@ -705,10 +654,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [localOnlyIds.size]);
 
-  /** Response body is treated as verified when it has id and core fields (server only returns after commit). */
-  const responseIsFullProduct = (raw: any): boolean =>
-    raw && typeof raw === 'object' && raw.id && (raw.name != null || raw.sku != null);
-
   /**
    * Add product: offline-first when enabled; API-only when flag off (INTEGRATION_PLAN).
    * @returns The new product id (for undo when offline).
@@ -754,7 +699,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    * Update product: offline-first when enabled; API-only when flag off.
    */
   const updateProduct = async (id: string, updates: Partial<Product> & { warehouseId?: string }) => {
-    const product = products.find(p => p.id === id);
+    const product = products.find((p: Product) => p.id === id);
     if (!product) throw new Error('Product not found');
     setSavePhase('saving');
     setError(null);
@@ -765,7 +710,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         showToast('success', 'Product updated. Syncing to server when online.');
         return;
       }
-      const updated = { ...product, ...updates, updatedAt: new Date() };
+      const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
       const payload = productToPayload(updated);
       try {
         await apiPut(API_BASE_URL, productByIdPath('/admin/api/products', id), payload);
@@ -845,27 +790,27 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   const getProduct = (id: string) => {
-    return products.find(p => p.id === id);
+    return products.find((p: Product) => p.id === id);
   };
 
   const searchProducts = (query: string) => {
     if (!query || query.trim() === '') return products;
     
     const lowercaseQuery = query.toLowerCase().trim();
-    return products.filter(p => {
+    return products.filter((p: Product) => {
       if (!p) return false;
       return (
         (p.name?.toLowerCase().includes(lowercaseQuery)) ||
         (p.sku?.toLowerCase().includes(lowercaseQuery)) ||
         (p.barcode?.toLowerCase().includes(lowercaseQuery)) ||
         (p.description?.toLowerCase().includes(lowercaseQuery)) ||
-        (p.tags?.some(tag => tag.toLowerCase().includes(lowercaseQuery)))
+        (p.tags?.some((tag: string) => tag.toLowerCase().includes(lowercaseQuery)))
       );
     });
   };
 
   const filterProducts = (filters: ProductFilters) => {
-    return products.filter(p => {
+    return products.filter((p: Product) => {
       if (filters.category && getCategoryDisplay(p.category) !== filters.category) return false;
       if (filters.minQuantity !== undefined && p.quantity < filters.minQuantity) return false;
       if (filters.maxQuantity !== undefined && p.quantity > filters.maxQuantity) return false;

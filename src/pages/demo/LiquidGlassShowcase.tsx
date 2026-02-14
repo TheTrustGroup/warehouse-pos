@@ -12,7 +12,6 @@ import {
   liquidMorph,
   rippleVariants,
   floatingBlur,
-  shimmerSweep,
   modalOverlayVariants,
   modalContentVariants,
   buttonMorphVariants,

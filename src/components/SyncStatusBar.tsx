@@ -3,7 +3,7 @@
  * Click opens SyncQueueModal. Auto-hides when everything is synced.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Loader2, CloudOff, AlertTriangle } from 'lucide-react';
 import { useNetworkStatusContext } from '../contexts/NetworkStatusContext';

@@ -52,7 +52,7 @@ export function DebugPanel() {
         entries.map((e) => ({
           name: e.name,
           duration: e.duration,
-          type: e.initiatorType,
+          type: (e as PerformanceResourceTiming).initiatorType ?? '',
         }))
       );
     }

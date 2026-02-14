@@ -2,9 +2,8 @@ import { useState } from 'react';
 import { Product } from '../../types';
 import { formatCurrency, getCategoryDisplay, getLocationDisplay } from '../../lib/utils';
 import { Button } from '../ui/Button';
-import { SyncStatusBadge } from './SyncStatusBadge';
 import { ProductSyncBadge } from '../ProductSyncBadge';
-import { Pencil, Trash2, Eye, Package, CloudOff, RefreshCw } from 'lucide-react';
+import { Pencil, Trash2, Eye, Package, RefreshCw } from 'lucide-react';
 
 interface ProductTableViewProps {
   products: Product[];

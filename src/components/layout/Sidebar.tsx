@@ -1,5 +1,6 @@
 // src/components/layout/Sidebar.tsx - Premium Figma-Inspired Design
 import { NavLink } from 'react-router-dom';
+import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   Package,
@@ -11,9 +12,17 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { PERMISSIONS, ROLES } from '../../types/permissions';
+import { PERMISSIONS, ROLES, type Permission } from '../../types/permissions';
 
-const baseNavigation = [
+interface NavItem {
+  name: string;
+  to: string;
+  icon: LucideIcon;
+  permission?: Permission;
+  anyPermissions?: Permission[];
+}
+
+const baseNavigation: NavItem[] = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD.VIEW },
   { name: 'Inventory', to: '/inventory', icon: Package, permission: PERMISSIONS.INVENTORY.VIEW },
   { name: 'Orders', to: '/orders', icon: ClipboardList, permission: PERMISSIONS.ORDERS.VIEW },
