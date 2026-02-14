@@ -12,14 +12,14 @@
 @layer components {
   /* ---- Solid surfaces (interactive: no blur, no transparency) ---- */
   .solid-overlay {
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(15, 23, 42, 0.6);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     pointer-events: auto;
     transition: opacity 0.2s ease;
   }
   .dark .solid-overlay {
-    background: rgba(0, 0, 0, 0.65);
+    background: rgba(0, 0, 0, 0.75);
   }
 
   .solid-panel {

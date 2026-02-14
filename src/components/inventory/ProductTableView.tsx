@@ -171,6 +171,9 @@ export function ProductTableView({
                             onRetry={onRetrySync}
                           />
                         )}
+                        {product._pending && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary-50 text-primary-700 text-xs font-medium" aria-live="polite">Saving…</span>
+                        )}
                         {isUnsynced?.(product.id) && onVerifySaved && (
                           <Button
                             type="button"

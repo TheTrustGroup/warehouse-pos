@@ -1,6 +1,8 @@
 /**
- * Resilient API client: retries with exponential backoff, circuit breaker, AbortSignal.
- * Use this for all server calls that should tolerate transient failures.
+ * Resilient API client (Phase 5): timeouts, retry GET only (never POST/PUT/DELETE), circuit breaker.
+ * - Request timeout: configurable timeoutMs (default 45s); aborts and opens circuit on timeout.
+ * - Retries: GET/HEAD/OPTIONS only. Mutating methods use maxRetries: 0 to avoid duplicate writes.
+ * - When circuit is open (server unreachable): allowRequest() returns false; caller should disable writes and show banner.
  */
 
 import { getApiHeaders } from './api';
@@ -10,7 +12,7 @@ const DEFAULT_MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 10000;
 
-/** HTTP methods that are safe to retry (no body or idempotent). */
+/** Only GET/HEAD/OPTIONS are retried. POST/PUT/PATCH/DELETE never retried (no duplicate entries). */
 const RETRYABLE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /** Status codes that are worth retrying (transient). */

@@ -1,18 +1,11 @@
 /**
- * API configuration and utilities
- *
- * BASE URL (Phase 4 — single source of truth)
- * - All API calls must use API_BASE_URL from this module. No hardcoded domains.
- * - Set VITE_API_BASE_URL in .env / Vercel to your backend. Omit protocol to get https.
- * - Same URL in prod and staging builds; only env at build time changes the target. No browser-specific routing.
- *
- * INVENTORY RELIABILITY — AUTHORITATIVE DATA STORE (see also INVENTORY_FLOW_AND_AUTHORITY.md)
- * - What database is used? The backend at API_BASE_URL owns the DB. This client does not connect to any DB.
- * - Warehouse vs storefront DB? Both must call the SAME API_BASE_URL so they share one backend and one DB. Different URLs = desync and data loss.
- * - Never show "Saved" for server without a confirmed 2xx write; when saved locally only, show "Saved locally. Syncing when online."
+ * API configuration (Phase 5 stability — single source of truth for base URL).
+ * All API calls must use API_BASE_URL from this module. No hardcoded domains in production.
+ * Production build fails if VITE_API_BASE_URL is unset. Never show "Saved" without confirmed 2xx.
  */
 
-const DEFAULT_API_BASE = 'https://extremedeptkidz.com';
+/** Dev-only fallback when VITE_API_BASE_URL is unset. Production build requires env. */
+const DEFAULT_API_BASE = import.meta.env.PROD ? '' : 'https://extremedeptkidz.com';
 const _rawApiBase = import.meta.env.VITE_API_BASE_URL;
 const _trimmed = (_rawApiBase && String(_rawApiBase).trim() ? _rawApiBase : DEFAULT_API_BASE).replace(/\/$/, '');
 // Must be a full URL (https://...) so fetch() hits the API host, not the frontend host. If set without protocol, prepend https://.

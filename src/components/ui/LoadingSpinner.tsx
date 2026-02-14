@@ -26,7 +26,7 @@ export function PageLoader() {
 export function SkeletonCard() {
   return (
     <div className="solid-card rounded-2xl p-6 overflow-hidden relative min-h-[8.5rem]">
-      <div className="absolute inset-0 glass-shimmer pointer-events-none" aria-hidden />
+      <div className="absolute inset-0 skeleton-shimmer pointer-events-none" aria-hidden />
       <div className="h-4 bg-slate-200/80 dark:bg-slate-600/50 rounded w-1/4 mb-4 animate-pulse"></div>
       <div className="h-8 bg-slate-200/80 dark:bg-slate-600/50 rounded w-1/2 mb-2 animate-pulse"></div>
       <div className="h-3 bg-slate-200/80 dark:bg-slate-600/50 rounded w-3/4 animate-pulse"></div>

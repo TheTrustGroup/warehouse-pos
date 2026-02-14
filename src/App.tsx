@@ -115,11 +115,11 @@ function OfflineQuotaToastListener() {
 }
 
 /**
- * Protected Routes Wrapper
- * Checks authentication before rendering the Layout
+ * Protected Routes: block dashboard until role confirmed from server (Phase 1 stability).
+ * No role fallback; invalid role → authError → redirect to login.
  */
 function ProtectedRoutes() {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, authError } = useAuth();
 
   if (isLoading) {
     return (
@@ -132,11 +132,16 @@ function ProtectedRoutes() {
     );
   }
 
+  // Invalid role or session: block dashboard and force re-login (authError shown on Login page).
+  if (authError) {
+    return <Navigate to="/login" replace />;
+  }
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  // Only render app when user is fully loaded (role may be applied as fallback in AuthContext)
+  // Block dashboard until role is confirmed from server (no UI fallback for role).
   if (user == null) {
     return (
       <div className="min-h-[var(--min-h-viewport)] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50">

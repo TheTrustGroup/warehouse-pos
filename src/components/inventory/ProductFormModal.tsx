@@ -241,7 +241,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   /* Modal: opaque panel so form is readable (no background bleed-through). Backdrop click + Escape close. Scroll lock when open. */
   return (
     <div
-      className="fixed inset-0 solid-overlay flex items-center justify-center z-50 modal-overlay-padding"
+      className="fixed inset-0 solid-overlay flex items-center justify-center z-[var(--z-modal,50)] modal-overlay-padding"
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-form-title"
@@ -710,11 +710,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             <Button
               type="submit"
               variant="primary"
-              disabled={isSubmitting || readOnlyMode}
-              aria-busy={isSubmitting}
+              disabled={isSubmitting || readOnlyMode || savePhase === 'saving'}
+              aria-busy={isSubmitting || savePhase === 'saving'}
               title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
             >
-              {isSubmitting
+              {(isSubmitting || savePhase === 'saving')
                 ? (savePhase === 'verifying' ? 'Verifying…' : 'Saving…')
                 : product
                   ? 'Update product'

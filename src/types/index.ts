@@ -62,6 +62,8 @@ export interface Product {
   sizeKind?: 'na' | 'one_size' | 'sized';
   /** When sizeKind === 'sized', per-size quantities. Enables fast size lookup and POS size selector. */
   quantityBySize?: QuantityBySizeItem[];
+  /** True while product is optimistically shown before server confirm (Phase 4). Do not persist. */
+  _pending?: boolean;
 }
 
 export interface Transaction {

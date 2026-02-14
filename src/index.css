@@ -55,14 +55,14 @@
   --z-mobile-menu: 40;
   --z-modal: 50;
   --z-toast: 60;
-  /* Viewport: use dvh on iOS Safari to avoid 100vh jump; fallback for older browsers */
-  --min-h-viewport: 100vh;
-  --h-viewport: 100vh;
+  /* Viewport: 100dvh first (mobile Safari safe); fallback 100vh for older browsers */
+  --min-h-viewport: min(100dvh, 100vh);
+  --h-viewport: 100dvh;
 }
-@supports (height: 100dvh) {
+@supports not (height: 100dvh) {
   :root {
-    --min-h-viewport: min(100dvh, 100vh);
-    --h-viewport: 100dvh;
+    --min-h-viewport: 100vh;
+    --h-viewport: 100vh;
   }
 }
 
@@ -208,8 +208,10 @@
     -webkit-backdrop-filter: none;
   }
 
+  /* Stability: consistent row height so list doesn't collapse during fetch; skeleton matches (Phase 2/3). */
   .table-row {
     @apply border-b border-slate-200/40 transition-colors duration-150;
+    min-height: 72px;
   }
 
   .table-row:hover,

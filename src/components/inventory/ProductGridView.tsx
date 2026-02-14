@@ -44,9 +44,10 @@ export function ProductGridView({
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [ripple, setRipple] = useState<{ productId: string; x: number; y: number; id: number } | null>(null);
   const { reduced } = useAnimations();
-  const reveal = glassReveal(reduced);
-  const hover = glassHover(reduced);
-  const morph = liquidMorph(reduced);
+  /* Stable layout: no y/scale on reveal or hover to prevent list jitter (Phase 3). */
+  const reveal = glassReveal(true);
+  const hover = glassHover(true);
+  const morph = liquidMorph(true);
   const rippleV = rippleVariants(reduced);
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>, productId: string) => {
@@ -87,7 +88,7 @@ export function ProductGridView({
             {...hover}
             {...morph}
             onClick={(e) => handleCardClick(e, product.id)}
-            className={`solid-card group cursor-pointer relative overflow-hidden ${
+            className={`solid-card group cursor-pointer relative overflow-hidden min-h-[380px] ${
               canSelect && isSelected ? 'ring-2 ring-primary-500 ring-offset-2' : ''
             }`}
           >
@@ -128,6 +129,11 @@ export function ProductGridView({
                   status={(product as Product & { syncStatus?: string }).syncStatus as 'synced' | 'pending' | 'syncing' | 'error'}
                   onRetry={onRetrySync}
                 />
+              </div>
+            )}
+            {product._pending && (
+              <div className="absolute top-3 right-3 z-10 flex items-center gap-1 px-2 py-1 rounded-lg bg-primary-50 text-primary-700 text-xs font-medium" aria-live="polite">
+                Saving…
               </div>
             )}
             {((product as Product & { syncStatus?: string }).syncStatus || isUnsynced?.(product.id)) && !(product as Product & { syncStatus?: string }).syncStatus && (

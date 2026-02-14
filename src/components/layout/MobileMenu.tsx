@@ -109,11 +109,11 @@ export function MobileMenu() {
                 {getRoleDisplayName(user?.role)}
               </p>
             )}
-            {canSeeSwitchRole && (
+            {canSeeSwitchRole && user && (
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 block mb-1">Switch role (testing)</span>
                 <select
-                  value={user?.role ?? 'viewer'}
+                  value={user.role}
                   onChange={(e) => { switchRole(e.target.value); setIsOpen(false); }}
                   className="input-field w-full text-sm font-medium text-slate-900"
                   aria-label="Switch role"

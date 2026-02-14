@@ -100,11 +100,11 @@ export function Sidebar() {
             <p className="text-xs text-slate-600 font-medium">{getRoleDisplayName(user?.role)}</p>
           </div>
         </div>
-        {canSeeSwitchRole && (
+        {canSeeSwitchRole && user && (
           <label className="block">
             <span className="sr-only">Switch role (for testing)</span>
             <select
-              value={user?.role ?? 'viewer'}
+              value={user.role}
               onChange={(e) => switchRole(e.target.value)}
               className="input-field w-full text-sm font-medium text-slate-900"
               aria-label="Switch role to see different features"

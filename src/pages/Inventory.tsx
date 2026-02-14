@@ -6,6 +6,7 @@ import { ProductGridView } from '../components/inventory/ProductGridView';
 import { ProductFormModal } from '../components/inventory/ProductFormModal';
 import { InventoryFilters } from '../components/inventory/InventoryFilters';
 import { InventorySearchBar } from '../components/inventory/InventorySearchBar';
+import { InventoryListSkeleton } from '../components/inventory/InventoryListSkeleton';
 import { Product } from '../types';
 import { getLocationDisplay, formatRelativeTime } from '../lib/utils';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
@@ -133,18 +134,14 @@ export function Inventory() {
     }
   };
 
+  /* Stability (Phase 2): stable min-height so list never collapses; keep list visible while loading. */
+  const listMinHeight = 'min-h-[60dvh]';
+
   return (
     <>
-      {s.isLoading && (
-        <div className="flex items-center justify-center min-h-[60dvh]" role="status" aria-live="polite">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary-200 border-t-primary-600 mx-auto mb-4" />
-            <p className="text-slate-600 text-sm font-medium">Loading products…</p>
-          </div>
-        </div>
-      )}
+      {/* Error: only when not loading and error is set */}
       {!s.isLoading && s.error && (
-        <div className="flex items-center justify-center min-h-[60dvh]">
+        <div className={`flex items-center justify-center ${listMinHeight}`}>
           <div className="solid-card max-w-md w-full mx-auto text-center p-8">
             <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle className="w-7 h-7 text-red-600" aria-hidden />
@@ -161,8 +158,9 @@ export function Inventory() {
           </div>
         </div>
       )}
+      {/* Empty state: only when not loading, no error, and truly no products */}
       {!s.isLoading && !s.error && s.products.length === 0 && (
-        <div className="flex items-center justify-center min-h-[50vh]">
+        <div className={`flex items-center justify-center ${listMinHeight}`}>
           <div className="solid-card max-w-md w-full mx-auto text-center p-8">
             <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Package className="w-7 h-7 text-slate-400" aria-hidden />
@@ -180,9 +178,16 @@ export function Inventory() {
           </div>
         </div>
       )}
-      {!s.isLoading && !s.error && s.products.length > 0 && (
-    <div className="space-y-6">
-      {s.isBackgroundRefreshing && (
+      {/* Loading with no products yet: show stable skeleton (no collapse). Never clear list state before fetch. */}
+      {s.isLoading && s.products.length === 0 && (
+        <div className={listMinHeight} role="status" aria-live="polite">
+          <InventoryListSkeleton viewMode={s.viewMode} count={8} />
+        </div>
+      )}
+      {/* Has products: show list (keep visible while loading — no collapse, no full replace). */}
+      {s.products.length > 0 && (
+    <div className={`space-y-6 ${listMinHeight}`}>
+      {(s.isLoading || s.isBackgroundRefreshing) && (
         <div className="flex items-center gap-2 rounded-lg bg-slate-100/90 px-3 py-2 text-slate-600 text-sm" role="status" aria-live="polite">
           <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" aria-hidden />
           <span>Updating…</span>
@@ -275,7 +280,7 @@ export function Inventory() {
           <InventoryFilters filters={s.filters} onFiltersChange={s.setFilters} categories={s.categories} />
         </div>
 
-        <div className="lg:col-span-3 space-y-4">
+        <div className="lg:col-span-3 space-y-4 min-h-[50dvh]">
           {s.canBulk && s.selectedIds.length > 0 && (
             <div className="solid-card bg-primary-50 border border-primary-200 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">

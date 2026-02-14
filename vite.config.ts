@@ -21,8 +21,14 @@ function failBuildIfEnvMissing() {
   };
 }
 
+// Build version for cache invalidation and cross-browser consistency (log on app start).
+const buildVersion = process.env.VITE_BUILD_VERSION || `build-${Date.now()}`;
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode: _mode }) => ({
+  define: {
+    __APP_BUILD_VERSION__: JSON.stringify(buildVersion),
+  },
   plugins: [
     failBuildIfEnvMissing(),
     react(),

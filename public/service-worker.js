@@ -1,7 +1,8 @@
 /**
- * Service worker using Workbox: caching, background sync, periodic sync, update handling.
- * Bump CACHE_* version on deploy to invalidate old caches (see DEPLOYMENT.md).
- * Served at /service-worker.js
+ * Service worker: static-asset caching only (Phase 1 stability — Safari/Brave/Chrome same build).
+ * - HTML/document: never cached (NetworkOnly) so users always get latest shell.
+ * - Static assets only: /assets/* and script/style/image/font. No API cache.
+ * Bump CACHE_VERSION on each production deploy (see DEPLOYMENT.md).
  */
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
@@ -10,36 +11,29 @@ workbox.setConfig({ modulePathPrefix: 'https://storage.googleapis.com/workbox-cd
 
 // Bump CACHE_VERSION on each production deploy to invalidate old caches. Old caches are
 // deleted in the 'activate' handler (eviction strategy).
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const CACHE_STATIC = `extremedept-static-v${CACHE_VERSION}`;
-const CACHE_API = `extremedept-api-v${CACHE_VERSION}`;
 
-// --- Caching: static assets (CacheFirst) ---
+// --- HTML / document: never cache (ensure same build across Safari, Brave, Chrome) ---
+workbox.routing.registerRoute(
+  ({ request }) => request.mode === 'navigate' || request.destination === 'document',
+  new workbox.strategies.NetworkOnly(),
+  'GET'
+);
+
+// --- Caching: static assets only (CacheFirst); no API, no HTML ---
 workbox.routing.registerRoute(
   ({ request, url }) => {
     if (url.origin !== self.location.origin) return false;
     const path = url.pathname;
     const dest = request.destination;
     return (
-      dest === 'script' ||
-      dest === 'style' ||
-      dest === 'image' ||
-      dest === 'font' ||
+      (dest === 'script' || dest === 'style' || dest === 'image' || dest === 'font') ||
       path.startsWith('/assets/') ||
       /\.(js|css|png|jpg|jpeg|gif|webp|ico|svg|woff2?|ttf|eot)(\?.*)?$/i.test(path)
     );
   },
   new workbox.strategies.CacheFirst({ cacheName: CACHE_STATIC })
-);
-
-// --- Caching: API (NetworkFirst, 5s timeout) ---
-workbox.routing.registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/') || url.pathname.startsWith('/admin/api/'),
-  new workbox.strategies.NetworkFirst({
-    cacheName: CACHE_API,
-    networkTimeoutSeconds: 5,
-  }),
-  'GET'
 );
 
 // --- Update handling: skip waiting and claim clients; delete old caches ---
@@ -53,7 +47,7 @@ self.addEventListener('activate', (event) => {
       await self.clients.claim();
       // Evict caches from previous versions (any cache not in current CACHE_* names)
       const names = await self.caches.keys();
-      const current = [CACHE_STATIC, CACHE_API];
+      const current = [CACHE_STATIC];
       await Promise.all(
         names
           .filter((name) => name.startsWith('extremedept-') && !current.includes(name))

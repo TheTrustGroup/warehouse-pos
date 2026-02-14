@@ -127,31 +127,6 @@ function buildFallbackCashierUser(userData: any): User {
   };
 }
 
-/**
- * Fallback viewer User when server returns 200 but role is missing/invalid and email is not in known lists.
- * Ensures we never block login with "role could not be verified" and never expose undefined role to UI.
- */
-function buildFallbackViewerUser(userData: any): User {
-  const email = (userData.email ?? '').trim().toLowerCase();
-  const role = ROLES.VIEWER;
-  return {
-    id: userData.id ?? 'api-session-user',
-    username: userData.username || userData.email?.split('@')[0] || 'user',
-    email: userData.email ?? email,
-    role: 'viewer',
-    fullName: userData.fullName || userData.name || userData.email || email,
-    avatar: userData.avatar,
-    permissions: userData.permissions ?? role.permissions,
-    isActive: userData.isActive !== undefined ? userData.isActive : true,
-    lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : new Date(),
-    createdAt: userData.createdAt ? new Date(userData.createdAt) : new Date(),
-    warehouseId: userData.warehouse_id ?? userData.warehouseId ?? undefined,
-    storeId: userData.store_id !== undefined ? userData.store_id : userData.storeId,
-    deviceId: userData.device_id ?? userData.deviceId ?? undefined,
-    assignedPos: userData.assignedPos === 'main_town' || userData.assignedPos === 'store' ? userData.assignedPos : undefined,
-  };
-}
-
 /** Safe role for permission/UI: never undefined so callers never throw on user.role. */
 function getEffectiveRole(user: User | null): string {
   if (!user) return DEFAULT_ROLE;
@@ -209,14 +184,14 @@ function normalizeUserData(userData: any): User | null {
   if (!role && !isSuperAdmin) {
     if (email === KNOWN_ADMIN_EMAIL) return buildFallbackAdminUser(userData);
     if (KNOWN_POS_EMAILS.has(email)) return buildFallbackCashierUser(userData);
-    return buildFallbackViewerUser(userData);
+    return null; // Invalid/missing role → force logout (no viewer fallback).
   }
   const effectiveRole = isSuperAdmin ? ROLES.SUPER_ADMIN : role!;
   const roleId = (isSuperAdmin ? 'super_admin' : role!.id) as User['role'];
   if (!KNOWN_ROLE_IDS.includes(roleId)) {
     if (email === KNOWN_ADMIN_EMAIL) return buildFallbackAdminUser(userData);
     if (KNOWN_POS_EMAILS.has(email)) return buildFallbackCashierUser(userData);
-    return buildFallbackViewerUser(userData);
+    return null; // Invalid role → force logout (no viewer fallback).
   }
 
   return {
@@ -248,7 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearSessionExpired = useCallback(() => setSessionExpired(false), []);
   const clearAuthError = useCallback(() => setAuthError(null), []);
 
-  // Session verification: call /admin/api/me (then /api/auth/user on 404/403). Block rendering until role confirmed; no role from localStorage.
+  // Session verification: on app load always call auth/me (admin/api/me then api/auth/user). Block dashboard until role is confirmed; no role from localStorage.
   useEffect(() => {
     checkAuthStatus();
   }, []);
@@ -312,7 +287,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
       const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
 
-      // Try /admin/api/me first, then /api/auth/user on 404, 403, or 401 (cross-browser: one endpoint may accept Bearer when the other doesn't).
+      // Always call auth/me on load: /admin/api/me first, then /api/auth/user on 404, 403, or 401 (cross-browser).
       let response = await fetch(`${API_BASE_URL}/admin/api/me`, opts);
       if (response.status === 404 || response.status === 403 || response.status === 401) {
         response = await fetch(`${API_BASE_URL}/api/auth/user`, opts);

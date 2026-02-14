@@ -24,6 +24,10 @@ if (import.meta.env.VITE_HEALTH_URL) startHealthPings();
 
 if (typeof window !== 'undefined') {
   initErrorHandlers();
+  /* Stability: same build version across Safari/Brave/Chrome (Phase 1). */
+  if (typeof __APP_BUILD_VERSION__ !== 'undefined') {
+    console.info('[App] Build version:', __APP_BUILD_VERSION__);
+  }
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

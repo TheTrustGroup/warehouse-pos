@@ -1,23 +1,21 @@
 /**
  * INVENTORY LIFECYCLE FLOW (single source of truth: backend at API_BASE_URL)
  *
- * 1. UI form (Inventory.tsx ProductFormModal) → local state
- * 2. Submit → addProduct() / updateProduct() in this context
- * 3. apiPost/apiPut(API_BASE_URL, '/admin/api/products' or '/api/products') → API route (external backend)
- * 4. Backend: validation → database write (authoritative). This repo does NOT contain that backend.
- * 5. DB: owned by backend. Same DB must back both warehouse and storefront.
- * 6. Read: loadProducts() → apiGet(products) → normalize → setProducts(); optional merge of "localOnly" from localStorage (client cache only)
- * 7. Cache: localStorage 'warehouse_products', IndexedDB 'products' — NOT source of truth; cross-device requires server.
- * 8. UI: products state → ProductTableView / ProductGridView
+ * 1. UI form → addProduct() / updateProduct()
+ * 2. apiPost/apiPut(API_BASE_URL, ...) → backend; DB owned by backend.
+ * 3. Read: loadProducts() → setProducts(); never clear list before fetch (Phase 2 stability).
+ * 4. Cache: localStorage / IndexedDB — NOT source of truth.
  *
- * HIGH RISK: When API fails, addProduct currently saves to local state + localStorage + IndexedDB and throws ADD_PRODUCT_SAVED_LOCALLY.
- * That creates "fake persistence": user sees "saved locally" but other devices see nothing. We never show "Saved" for server without confirmed write + read-back.
+ * STABILITY (Phase 4): Add product uses optimistic UI — insert temp with _pending, then replace with
+ * server response on success; on failure remove temp and show error. No full refetch after add.
+ * No "saved" without confirmed 2xx. Offline path still uses local-first; ADD_PRODUCT_SAVED_LOCALLY for that flow.
  */
 import { createContext, useContext, useState, useRef, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPost, apiPut, apiDelete } from '../lib/apiClient';
+import { getApiCircuitBreaker } from '../lib/circuit';
 import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
@@ -702,8 +700,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   }, [localOnlyIds.size]);
 
   /**
-   * Add product: offline-first when enabled; API-only when flag off (INTEGRATION_PLAN).
-   * Uses API response to update state immediately (no full refetch) so "Saving..." disappears quickly.
+   * Add product: offline-first when enabled; API-only uses true optimistic UI (Phase 4).
+   * Optimistic (API-only): insert temp with _pending, then on success replace with server item; on failure remove temp and show error. No full refetch.
    * @returns The new product id (for undo when offline).
    */
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }): Promise<string> => {
@@ -724,14 +722,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         showToast('success', 'Product saved. Syncing to server when online.');
         return id;
       }
-      const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const newProduct: Product = {
+      if (!getApiCircuitBreaker().allowRequest()) {
+        throw new Error('Server is temporarily unavailable. Writes disabled until connection is restored.');
+      }
+      const tempId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const tempProduct: Product = {
         ...productData,
-        id,
+        id: tempId,
         createdAt: new Date(),
         updatedAt: new Date(),
+        _pending: true,
       } as Product;
-      const payload = productToPayload(newProduct);
+      setApiOnlyProductsState((prev) => [tempProduct, ...prev]);
+      const payload = productToPayload({ ...tempProduct, _pending: undefined } as Product);
       if (import.meta.env?.DEV) {
         console.timeEnd('Data Preparation');
         console.time('API Request');
@@ -747,25 +750,35 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       try {
         created = await postProduct();
       } catch (firstErr) {
-        if ((firstErr as { status?: number })?.status === 401 && (await tryRefreshSession())) {
-          created = await postProduct();
-        } else {
-          throw firstErr;
-        }
+        setApiOnlyProductsState((prev) => prev.filter((p) => p.id !== tempId));
+        throw firstErr;
       }
-      if (created === null) throw new Error('Failed to save product');
+      if (created === null) {
+        setApiOnlyProductsState((prev) => prev.filter((p) => p.id !== tempId));
+        throw new Error('Failed to save product');
+      }
       if (import.meta.env?.DEV) {
         console.timeEnd('API Request');
         console.time('State Update');
       }
-      const normalized = created && (created as { id?: string }).id
+      const normalized = (created as { id?: string }).id
         ? normalizeProduct(created as any)
-        : (newProduct as Product);
-      const resolvedId = (normalized as Product).id ?? id;
-      lastAddedProductRef.current = { product: normalized as Product, at: Date.now() };
-      setApiOnlyProductsState((prev) => [normalized as Product, ...prev]);
-      cacheRef.current[effectiveWarehouseId] = { data: [normalized as Product, ...apiOnlyProducts], ts: Date.now() };
+        : ({ ...tempProduct, _pending: undefined, id: tempId } as Product);
+      const resolvedId = normalized.id ?? tempId;
+      lastAddedProductRef.current = { product: normalized, at: Date.now() };
+      setApiOnlyProductsState((prev) => prev.map((p) => (p.id === tempId ? normalized : p)));
+      cacheRef.current[effectiveWarehouseId] = { data: [normalized, ...apiOnlyProducts.filter((p) => p.id !== tempId)], ts: Date.now() };
       setLastSyncAt(new Date());
+      if (isStorageAvailable()) {
+        const nextList = [normalized, ...apiOnlyProducts.filter((p) => p.id !== tempId)];
+        setStoredData(productsCacheKey(effectiveWarehouseId), nextList);
+      }
+      if (isIndexedDBAvailable()) {
+        const nextList = [normalized, ...apiOnlyProducts.filter((p) => p.id !== tempId)];
+        saveProductsToDb(nextList).catch((e) => {
+          reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: nextList.length });
+        });
+      }
       logInventoryCreate({ productId: resolvedId, sku: productData.sku ?? '', listLength: apiOnlyProducts.length + 1 });
       showToast('success', 'Product saved.');
       if (import.meta.env?.DEV) {
