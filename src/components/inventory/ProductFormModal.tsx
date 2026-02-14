@@ -225,20 +225,20 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
 
   if (!isOpen) return null;
 
-  /* Modal: one primary action = Save/Update; Cancel secondary. Backdrop click + Escape close. Scroll lock when open. */
+  /* Modal: opaque panel so form is readable (no background bleed-through). Backdrop click + Escape close. Scroll lock when open. */
   return (
     <div
-      className="fixed inset-0 glass-overlay flex items-center justify-center z-50 modal-overlay-padding"
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 modal-overlay-padding"
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-form-title"
       onClick={() => onClose()}
     >
       <div
-        className="glass rounded-2xl shadow-large w-full max-w-4xl overflow-hidden flex flex-col modal-content-fit mx-2 sm:mx-4"
+        className="glass-panel rounded-2xl shadow-large w-full max-w-4xl overflow-hidden flex flex-col modal-content-fit mx-2 sm:mx-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 glass border-b border-slate-200/50 px-4 sm:px-6 py-4 flex items-center justify-between z-10 flex-shrink-0">
+        <div className="sticky top-0 glass-panel border-b border-slate-200/50 px-4 sm:px-6 py-4 flex items-center justify-between z-10 flex-shrink-0">
           <h2 id="product-form-title" className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate pr-2">
             {product ? 'Edit product' : 'Add product'}
           </h2>

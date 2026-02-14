@@ -3,8 +3,8 @@
  * After consecutive failures, "opens" and blocks calls until cooldown.
  */
 
-const DEFAULT_FAILURE_THRESHOLD = 5;
-const DEFAULT_COOLDOWN_MS = 30_000;
+const DEFAULT_FAILURE_THRESHOLD = 8;
+const DEFAULT_COOLDOWN_MS = 45_000;
 
 type State = 'closed' | 'open' | 'half-open';
 
@@ -82,8 +82,8 @@ let sharedCircuit: CircuitBreaker | null = null;
 export function getApiCircuitBreaker(): CircuitBreaker {
   if (!sharedCircuit) {
     sharedCircuit = new CircuitBreaker({
-      failureThreshold: 5,
-      cooldownMs: 30_000,
+      failureThreshold: 8,
+      cooldownMs: 45_000,
     });
   }
   return sharedCircuit;

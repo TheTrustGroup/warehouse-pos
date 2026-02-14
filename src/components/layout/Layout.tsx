@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -10,10 +10,14 @@ import { useCriticalData } from '../../contexts/CriticalDataContext';
 import { Button } from '../ui/Button';
 
 const DISMISS_BANNER_KEY = 'dismiss_degraded_banner_session';
+/** Only show "server offline" banner after degraded for this long to avoid jitter from brief blips. */
+const BANNER_DEBOUNCE_MS = 4000;
 
 /** Layout: single vertical rhythm — section spacing (24px) and consistent main padding. Mobile-first. */
 export function Layout() {
   const [degraded, setDegraded] = useState(false);
+  const [showBanner, setShowBanner] = useState(false);
+  const degradedSinceRef = useRef<number | null>(null);
   const [dismissed, setDismissed] = useState(() => {
     if (typeof sessionStorage === 'undefined') return false;
     return sessionStorage.getItem(DISMISS_BANNER_KEY) === '1';
@@ -27,6 +31,24 @@ export function Layout() {
     const id = setInterval(check, 2000);
     return () => clearInterval(id);
   }, []);
+
+  // Debounce: show banner only after degraded for BANNER_DEBOUNCE_MS so brief flickers don't cause jitter
+  useEffect(() => {
+    if (degraded) {
+      const now = Date.now();
+      if (degradedSinceRef.current === null) degradedSinceRef.current = now;
+      const elapsed = now - (degradedSinceRef.current ?? now);
+      if (elapsed >= BANNER_DEBOUNCE_MS) {
+        setShowBanner(true);
+      } else {
+        const t = setTimeout(() => setShowBanner(true), BANNER_DEBOUNCE_MS - elapsed);
+        return () => clearTimeout(t);
+      }
+    } else {
+      degradedSinceRef.current = null;
+      setShowBanner(false);
+    }
+  }, [degraded]);
 
   // When circuit is no longer degraded, clear dismiss so the banner can show again next time
   useEffect(() => {
@@ -50,7 +72,7 @@ export function Layout() {
     setDismissed(true);
   };
 
-  const showDegradedBanner = degraded && !dismissed;
+  const showDegradedBanner = showBanner && degraded && !dismissed;
   const showSyncingBar = isSyncingCriticalData;
 
   return (
