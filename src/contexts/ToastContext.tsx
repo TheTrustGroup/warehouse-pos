@@ -22,6 +22,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
+      {/* Toasts: transient feedback only (z-index 60). Critical/blocking errors must use in-flow banners that reserve layout space. */}
       <div className="fixed bottom-[max(1rem,var(--safe-bottom))] right-[max(1rem,var(--safe-right))] z-[60] flex flex-col items-end gap-2 max-h-[min(50vh,320px)] overflow-y-auto pointer-events-none [&>*]:pointer-events-auto">
         {toasts.map(toast => (
           <Toast

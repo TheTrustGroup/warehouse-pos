@@ -45,6 +45,12 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+  /* Z-index scale: 10=header, 40=mobile menu overlay, 50=modals, 60=toasts (transient only). Errors use in-flow layout, not stacking. */
+  --z-header: 10;
+  --z-banner: 9;
+  --z-mobile-menu: 40;
+  --z-modal: 50;
+  --z-toast: 60;
 }
 
 @layer base {

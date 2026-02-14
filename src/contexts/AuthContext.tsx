@@ -14,19 +14,26 @@ const INACTIVITY_TIMEOUT_MS = (() => {
 /** Throttle activity updates to at most once per 30 seconds */
 const ACTIVITY_THROTTLE_MS = 30 * 1000;
 
+/** Role is authoritative from server only. Never derive or upgrade on client. */
+const KNOWN_ROLE_IDS = ['super_admin', 'admin', 'manager', 'cashier', 'warehouse', 'driver', 'viewer'] as const;
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** Blocking error when role could not be resolved (e.g. invalid role from API). User must log out. */
+  authError: string | null;
   /** True when user was signed out due to inactivity (show message on login page) */
   sessionExpired: boolean;
   /** Clear the session-expired message (call from Login on mount) */
   clearSessionExpired: () => void;
+  /** Clear blocking auth error (e.g. after logout). */
+  clearAuthError: () => void;
   login: (email: string, password: string) => Promise<void>;
   /** Sign in with local data only when the server is unreachable. No API call. */
   loginOffline: (email: string) => void;
   logout: () => Promise<void>;
-  /** Switch role for demo/testing so you can see all inventory and POS features */
+  /** Switch role for demo/testing only (admins). Never used for initial role resolution. */
   switchRole: (roleId: string) => void;
   hasPermission: (permission: Permission) => boolean;
   hasAnyPermission: (permissions: Permission[]) => boolean;
@@ -47,26 +54,13 @@ function getSuperAdminEmails(): Set<string> {
 /** Backend role values that should be treated as cashier (POS access, no admin). */
 const CASHIER_ROLE_ALIASES = ['cashier', 'sales_person', 'salesperson', 'sales'];
 
-const KNOWN_ROLE_IDS = ['super_admin', 'admin', 'manager', 'cashier', 'warehouse', 'driver', 'viewer'] as const;
-
-/** Derive role from email local part (same logic as backend): role, role_place, or place_role. */
-function roleFromEmailLocalPart(email: string): typeof KNOWN_ROLE_IDS[number] | null {
-  const local = (email || '').trim().toLowerCase().split('@')[0] ?? '';
-  if (KNOWN_ROLE_IDS.includes(local as any)) return local as typeof KNOWN_ROLE_IDS[number];
-  const parts = local.split('_').filter(Boolean);
-  if (parts.length >= 2) {
-    if (KNOWN_ROLE_IDS.includes(parts[0] as any)) return parts[0] as typeof KNOWN_ROLE_IDS[number];
-    if (KNOWN_ROLE_IDS.includes(parts[parts.length - 1] as any)) return parts[parts.length - 1] as typeof KNOWN_ROLE_IDS[number];
-  }
-  return null;
-}
-
 /**
- * Normalize user data from API response.
- * If user email is in VITE_SUPER_ADMIN_EMAILS, role is forced to super_admin.
- * If backend returns viewer but email suggests another role (e.g. maintown_cashier@), use that so POS logins work regardless of auth backend.
+ * Normalize user data from API response. Role is SERVER-AUTHORITATIVE only.
+ * - No client-side role derivation from email. No fallback to viewer.
+ * - If server returns a role not in KNOWN_ROLE_IDS, returns null (caller must show blocking error).
+ * - Only exception: VITE_SUPER_ADMIN_EMAILS forces super_admin for that email (env-specific override).
  */
-function normalizeUserData(userData: any): User {
+function normalizeUserData(userData: any): User | null {
   const rawRole = (userData.role ?? '').toString().trim().toLowerCase();
   const roleKey = rawRole.toUpperCase().replace(/\s+/g, '_');
   let role = ROLES[roleKey] ?? (rawRole === 'super_admin' ? ROLES.SUPER_ADMIN : null);
@@ -74,18 +68,16 @@ function normalizeUserData(userData: any): User {
   const email = (userData.email ?? '').trim().toLowerCase();
   const superAdminEmails = getSuperAdminEmails();
   const isSuperAdmin = superAdminEmails.has(email);
-  if (!isSuperAdmin && (!role || role.id === 'viewer')) {
-    const fromEmail = roleFromEmailLocalPart(email);
-    if (fromEmail && fromEmail !== 'viewer') role = ROLES[fromEmail.toUpperCase() as keyof typeof ROLES] ?? ROLES.CASHIER;
-  }
-  role = role ?? ROLES.VIEWER;
-  const effectiveRole = isSuperAdmin ? ROLES.SUPER_ADMIN : role;
-  
+  if (!role && !isSuperAdmin) return null;
+  const effectiveRole = isSuperAdmin ? ROLES.SUPER_ADMIN : role!;
+  const roleId = (isSuperAdmin ? 'super_admin' : role!.id) as User['role'];
+  if (!KNOWN_ROLE_IDS.includes(roleId)) return null;
+
   return {
     id: userData.id,
     username: userData.username || userData.email?.split('@')[0] || 'user',
     email: userData.email,
-    role: (isSuperAdmin ? 'super_admin' : role.id) as User['role'],
+    role: roleId,
     fullName: userData.fullName || userData.name || userData.email,
     avatar: userData.avatar,
     permissions: userData.permissions ?? effectiveRole.permissions,
@@ -102,11 +94,13 @@ function normalizeUserData(userData: any): User {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const lastActivityRef = useRef<number>(Date.now());
   const lastThrottleRef = useRef<number>(0);
 
   const clearSessionExpired = useCallback(() => setSessionExpired(false), []);
+  const clearAuthError = useCallback(() => setAuthError(null), []);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -181,27 +175,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const userData = await handleApiResponse<User>(response);
         const normalizedUser = normalizeUserData(userData);
-        // Do not apply persisted demo role: use backend role so cashier sees cashier features only.
+        if (!normalizedUser) {
+          setAuthError('Your role could not be verified. Please log out and log in again.');
+          setUser(null);
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('current_user');
+            localStorage.removeItem('auth_token');
+          }
+          return;
+        }
+        setAuthError(null);
         if (typeof localStorage !== 'undefined') localStorage.removeItem(DEMO_ROLE_KEY);
         lastActivityRef.current = Date.now();
         setUser(normalizedUser);
         localStorage.setItem('current_user', JSON.stringify(normalizedUser));
       } else {
-        // Not authenticated or session expired - this is expected when not logged in
+        setAuthError(null);
         setUser(null);
         localStorage.removeItem('current_user');
         localStorage.removeItem('auth_token');
       }
     } catch (error) {
-      // Silently handle network errors - user is simply not authenticated
-      // Only log if it's not a network error (CORS, fetch failure, etc.)
+      setAuthError(null);
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        // Network/CORS error - silently fail, user is not authenticated
         setUser(null);
         localStorage.removeItem('current_user');
         localStorage.removeItem('auth_token');
       } else {
-        // Other errors - log but don't show to user
         console.error('Auth check failed:', error);
         setUser(null);
         localStorage.removeItem('current_user');
@@ -265,21 +265,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     const baseOpts = { method: 'POST' as const, headers, credentials: 'include' as const };
 
-    // Log request details for debugging (without exposing password)
-    console.log('Login request:', {
-      url: `${API_BASE_URL}/admin/api/login`,
-      email: trimmedEmail,
-      emailLength: trimmedEmail.length,
-      passwordLength: trimmedPassword.length,
-      passwordFirstChar: trimmedPassword.charAt(0),
-      passwordLastChar: trimmedPassword.charAt(trimmedPassword.length - 1),
-      passwordHasSpecialChars: /[!@#$%^&*(),.?":{}|<>]/.test(trimmedPassword),
-      body: { email: trimmedEmail, password: '[REDACTED]' }
-    });
-    
-    // Log the actual JSON being sent (for debugging - remove in production)
-    console.log('Request payload:', JSON.stringify(loginBody));
-
     try {
       // Try /admin/api/login first (same origin as admin panel)
       let response = await fetch(`${API_BASE_URL}/admin/api/login`, { ...baseOpts, body: JSON.stringify(loginBody) });
@@ -288,29 +273,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!response.ok) {
-        // Read response as text first so we can log it and parse it
         const responseText = await response.text();
-        console.error('Raw error response text:', responseText);
-        
         let errorData: any;
         try {
           errorData = JSON.parse(responseText);
-        } catch (e) {
+        } catch {
           errorData = { message: responseText || 'Invalid email or password' };
         }
-        
-        // Log full error response for debugging
-        console.error('Login error response:', {
-          status: response.status,
-          statusText: response.statusText,
-          url: response.url,
-          errorData,
-          requestEmail: trimmedEmail,
-          requestPasswordLength: trimmedPassword.length,
-          // Show password hints without exposing it
-          passwordHint: `Length: ${trimmedPassword.length}, First char: ${trimmedPassword.charAt(0)}, Last char: ${trimmedPassword.charAt(trimmedPassword.length - 1)}`
-        });
-        
+
         // Handle validation errors (400, 422) with detailed field messages
         if ((response.status === 400 || response.status === 422) && errorData?.errors) {
           const validationErrors: string[] = [];
@@ -363,7 +333,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Invalid login response');
       }
       const normalizedUser = normalizeUserData(userPayload);
-      // Use backend role only on login so cashier gets cashier permissions, not a previously stored demo role.
+      if (!normalizedUser) {
+        throw new Error('The server did not return a valid role. Please contact your administrator.');
+      }
+      setAuthError(null);
       if (typeof localStorage !== 'undefined') localStorage.removeItem(DEMO_ROLE_KEY);
       lastActivityRef.current = Date.now();
       setUser(normalizedUser);
@@ -394,13 +367,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Clear local state regardless of API call result
+      setAuthError(null);
       setUser(null);
       localStorage.removeItem('current_user');
       localStorage.removeItem('auth_token');
       localStorage.removeItem(DEMO_ROLE_KEY);
-      // No full page redirect: re-render lets ProtectedRoutes return <Navigate to="/login" />,
-      // avoiding "Importing a module script failed" from cached index/chunks after deploy.
     }
   };
 
@@ -483,8 +454,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: !!user,
         isLoading,
+        authError,
         sessionExpired,
         clearSessionExpired,
+        clearAuthError,
         login,
         loginOffline,
         logout,

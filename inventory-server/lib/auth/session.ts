@@ -121,7 +121,8 @@ export function setSessionCookie(
     payload.device_id = options.device_id.trim();
   const value = setCookiePayload(payload);
   const isProduction = process.env.NODE_ENV === 'production';
-  // Production: SameSite=None so the cookie is sent when frontend (e.g. warehouse.extremedeptkidz.com) calls API on another origin. Requires Secure.
+  // Cross-browser: SameSite=None + Secure in production so cookie is sent cross-origin. Path=/ so cookie is sent to all API routes.
+  // Client MUST send Authorization: Bearer <token> (from login response) so auth works when cookies are blocked (e.g. some Chrome/Edge cross-site cases).
   response.cookies.set(COOKIE_NAME, value, {
     httpOnly: true,
     secure: isProduction,

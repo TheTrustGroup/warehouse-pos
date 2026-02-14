@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../lib/api';
-import { Lock, Mail, WifiOff, Clock } from 'lucide-react';
+import { Lock, Mail, WifiOff, Clock, ShieldAlert } from 'lucide-react';
 
 const SERVER_UNREACHABLE = 'Cannot reach the server. Check your connection and try again.';
 
@@ -12,7 +12,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showOfflineOption, setShowOfflineOption] = useState(false);
-  const { login, loginOffline, sessionExpired, clearSessionExpired } = useAuth();
+  const { login, loginOffline, sessionExpired, clearSessionExpired, authError, clearAuthError } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -78,6 +78,23 @@ export function Login() {
             <div>
               <p className="text-sm font-medium text-amber-800">Session expired</p>
               <p className="text-sm text-amber-700 mt-0.5">You were signed out due to inactivity. Please sign in again.</p>
+            </div>
+          </div>
+        )}
+
+        {authError && (
+          <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3" role="alert">
+            <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" aria-hidden />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-red-800">Role could not be verified</p>
+              <p className="text-sm text-red-700 mt-0.5">{authError}</p>
+              <button
+                type="button"
+                onClick={clearAuthError}
+                className="mt-2 text-sm font-semibold text-red-700 hover:text-red-800 underline focus:outline-none focus:ring-2 focus:ring-red-500 rounded"
+              >
+                Dismiss and try again
+              </button>
             </div>
           </div>
         )}
