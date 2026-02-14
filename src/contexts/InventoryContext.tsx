@@ -126,7 +126,9 @@ interface InventoryContextType {
   getProduct: (id: string) => Product | undefined;
   searchProducts: (query: string) => Product[];
   filterProducts: (filters: ProductFilters) => Product[];
-  refreshProducts: (options?: { silent?: boolean; bypassCache?: boolean }) => Promise<void>;
+  refreshProducts: (options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => Promise<void>;
+  /** True when a background (silent) refresh is in progress — show "Updating..." indicator. */
+  isBackgroundRefreshing: boolean;
   /** Push products that exist only in this browser's storage to the API so they appear everywhere. */
   syncLocalInventoryToApi: () => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>;
   /** Number of products that exist only on this device (not yet on server). Always 0 when API is source of truth. */
@@ -174,6 +176,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [storagePersistFailed, setStoragePersistFailed] = useState(false);
   /** Save phase for product form so button can show Saving… / Verifying… */
   const [savePhase, setSavePhase] = useState<'idle' | 'saving' | 'verifying'>('idle');
+  /** True while a silent (background) refresh is in progress — for "Updating..." indicator. */
+  const [isBackgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const syncRef = useRef<(() => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>) | null>(null);
 
   const PRODUCTS_CACHE_TTL_MS = 60_000; // 60s per-warehouse cache
@@ -251,9 +255,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    * @param options.silent - If true, do not show full-page loading (for background refresh). Default false.
    * @param options.bypassCache - If true, always fetch from server (e.g. when opening Inventory page for fresh data).
    */
-  const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean }) => {
+  const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => {
     const silent = options?.silent === true;
     const bypassCache = options?.bypassCache === true;
+    const timeoutMs = options?.timeoutMs;
     const wid = effectiveWarehouseId;
     const cached = cacheRef.current[wid];
     const now = Date.now();
@@ -264,6 +269,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setError(null);
     }
     try {
+      if (silent) setBackgroundRefreshing(true);
       if (!silent && !cacheValid) {
         setIsLoading(true);
         setError(null);
@@ -273,12 +279,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const path = productsPath('/api/products', { limit: 1000 });
         let raw: { data?: Product[]; total?: number } | Product[] | null = null;
         try {
-          raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, { signal });
+          raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, { signal, timeoutMs });
         } catch (e) {
           const status = (e as { status?: number })?.status;
           // Only fall back to admin endpoint when /api/products is not found (404). Never on 403 — cashiers must use /api/products only.
           if (status === 404) {
-            raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: 1000 }), { signal });
+            raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: 1000 }), { signal, timeoutMs });
           } else {
             throw e;
           }
@@ -408,6 +414,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       setProducts(localProducts);
     } finally {
+      if (silent) setBackgroundRefreshing(false);
       setIsLoading(false);
     }
   };
@@ -987,6 +994,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       searchProducts,
       filterProducts,
       refreshProducts: (opts) => loadProducts(undefined, opts),
+      isBackgroundRefreshing,
       syncLocalInventoryToApi,
       unsyncedCount: localOnlyIds.size,
       lastSyncAt,

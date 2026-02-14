@@ -165,22 +165,23 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
       await delay(backoff(attempt));
     } catch (e) {
       clearTimeout(timeoutId);
-      if (e instanceof Error && e.name === 'AbortError') {
-        throw new Error(
-          'Request timed out. Check that the backend is reachable and VITE_API_BASE_URL is set correctly (then redeploy the frontend).'
-        );
+      const isTimeout = e instanceof Error && e.name === 'AbortError';
+      const timeoutMessage =
+        'Request timed out. Check that the backend is reachable and VITE_API_BASE_URL is set correctly (then redeploy the frontend).';
+      if (isTimeout) {
+        lastError = new Error(timeoutMessage);
+      } else {
+        lastError = e instanceof Error ? e : new Error(String(e));
       }
-      lastError = e instanceof Error ? e : new Error(String(e));
       // Don't open circuit when the browser blocks due to CORS (no response from our server); only for real 5xx or timeouts.
       const isCorsBlock =
         /access-control|allowed by Access-Control|CORS|cannot load.*due to access control/i.test(lastError?.message ?? '');
       if (!isCorsBlock) circuit.recordFailure();
 
+      const retryableNetwork =
+        lastError?.message?.includes('fetch') || /network|timeout|failed to fetch/i.test(lastError?.message || '');
       const shouldRetry =
-        maxRetries > 0 &&
-        attempt < maxRetries &&
-        (lastError?.message?.includes('fetch') ||
-          /network|timeout|failed to fetch/i.test(lastError?.message || ''));
+        maxRetries > 0 && attempt < maxRetries && (isTimeout || retryableNetwork);
 
       if (!shouldRetry) {
         throw lastError;
@@ -191,8 +192,12 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
   }
 }
 
-/** GET with optional signal and retries. */
-export function apiGet<T>(baseUrl: string, path: string, options?: { signal?: AbortSignal | null }): Promise<T> {
+/** GET with optional signal, timeout, and retries. */
+export function apiGet<T>(
+  baseUrl: string,
+  path: string,
+  options?: { signal?: AbortSignal | null; timeoutMs?: number }
+): Promise<T> {
   return apiRequest<T>({ ...options, baseUrl, path, method: 'GET' });
 }
 

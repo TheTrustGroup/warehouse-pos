@@ -20,7 +20,7 @@ import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, Refre
 type ViewMode = 'table' | 'grid';
 
 export function Inventory() {
-  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, syncLocalInventoryToApi, unsyncedCount, lastSyncAt, isUnsynced, verifyProductSaved } = useInventory();
+  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, isBackgroundRefreshing, syncLocalInventoryToApi, unsyncedCount, lastSyncAt, isUnsynced, verifyProductSaved } = useInventory();
   const { hasPermission } = useAuth();
   const { currentWarehouse, currentWarehouseId } = useWarehouse();
   const { showToast } = useToast();
@@ -257,6 +257,12 @@ export function Inventory() {
   /* Vertical rhythm: space-y-6 (section spacing); one primary CTA per screen = Add Product */
   return (
     <div className="space-y-6">
+      {isBackgroundRefreshing && (
+        <div className="flex items-center gap-2 rounded-lg bg-slate-100/90 px-3 py-2 text-slate-600 text-sm" role="status" aria-live="polite">
+          <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" aria-hidden />
+          <span>Updating…</span>
+        </div>
+      )}
       {unsyncedCount > 0 && (
         <div className="rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <p className="text-amber-900 text-sm font-medium flex-1">

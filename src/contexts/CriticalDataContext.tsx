@@ -1,6 +1,10 @@
 /**
  * Critical data load after login: parallel fetch of stores, warehouses, products, orders
  * with retry (max 3) and a global loading state that blocks UI until complete.
+ *
+ * All these requests go through apiClient (apiGet / apiRequest), which retries on timeout
+ * and network errors, so "Error loading products" after login is avoided across every
+ * route (Dashboard, Inventory, Orders, POS, etc.).
  */
 
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
@@ -12,6 +16,8 @@ import { useOrders } from './OrderContext';
 import { withRetry } from '../lib/retry';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { reportError } from '../lib/errorReporting';
+import { apiRequest } from '../lib/apiClient';
+import { API_BASE_URL } from '../lib/api';
 
 const is401 = (e: unknown) => (e as { status?: number })?.status === 401;
 
@@ -37,6 +43,22 @@ interface CriticalDataInternalType extends CriticalDataContextType {
 const CriticalDataInternalContext = createContext<CriticalDataInternalType | undefined>(undefined);
 
 const MAX_RETRIES = 3;
+/** Longer timeout for first load after login to absorb serverless cold start. */
+const INITIAL_LOAD_TIMEOUT_MS = 35_000;
+
+/** Lightweight health check to wake serverless before the main load. No auth; failures ignored. */
+function apiWarmup(): Promise<void> {
+  return apiRequest({
+    baseUrl: API_BASE_URL,
+    path: '/api/health',
+    method: 'GET',
+    timeoutMs: 10_000,
+    maxRetries: 0,
+    skipCircuit: true,
+  })
+    .then(() => {})
+    .catch(() => {});
+}
 
 /**
  * Gate component: use inside CriticalDataProvider and inside Store/Warehouse/Inventory/Order providers.
@@ -50,25 +72,35 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
   const { refreshOrders } = useOrders();
   const internal = useContext(CriticalDataInternalContext);
 
+  const initialOpts = { timeoutMs: INITIAL_LOAD_TIMEOUT_MS };
+
   const load = useCallback(async () => {
     if (!internal) return;
     internal.setCriticalDataLoading(true);
     internal.setCriticalDataError(null);
     try {
+      // Phase 1: warmup + scope (stores, warehouses) so shell/selectors can rely on them
       await Promise.all([
-        withRetry(() => refreshStores(), MAX_RETRIES),
-        withRetry(() => refreshWarehouses(), MAX_RETRIES),
-        withRetry(() => refreshProducts({ bypassCache: true }), MAX_RETRIES),
-        withRetry(() => refreshOrders(), MAX_RETRIES),
+        apiWarmup(),
+        withRetry(() => refreshStores(initialOpts), MAX_RETRIES),
+        withRetry(() => refreshWarehouses(initialOpts), MAX_RETRIES),
+      ]);
+      // Phase 2: inventory + orders (heavier; server more likely warm after phase 1)
+      await Promise.all([
+        withRetry(() => refreshProducts({ bypassCache: true, timeoutMs: INITIAL_LOAD_TIMEOUT_MS }), MAX_RETRIES),
+        withRetry(() => refreshOrders(initialOpts), MAX_RETRIES),
       ]);
     } catch (err) {
       if (is401(err) && (await tryRefreshSession())) {
         try {
           await Promise.all([
-            withRetry(() => refreshStores(), MAX_RETRIES),
-            withRetry(() => refreshWarehouses(), MAX_RETRIES),
-            withRetry(() => refreshProducts({ bypassCache: true }), MAX_RETRIES),
-            withRetry(() => refreshOrders(), MAX_RETRIES),
+            apiWarmup(),
+            withRetry(() => refreshStores(initialOpts), MAX_RETRIES),
+            withRetry(() => refreshWarehouses(initialOpts), MAX_RETRIES),
+          ]);
+          await Promise.all([
+            withRetry(() => refreshProducts({ bypassCache: true, timeoutMs: INITIAL_LOAD_TIMEOUT_MS }), MAX_RETRIES),
+            withRetry(() => refreshOrders(initialOpts), MAX_RETRIES),
           ]);
         } catch (retryErr) {
           const msg = getUserFriendlyMessage(retryErr);

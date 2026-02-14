@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../lib/api';
+import { apiRequest } from '../lib/apiClient';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { validateLoginForm } from '../lib/validationSchemas';
 import { Button } from '../components/ui/Button';
@@ -40,6 +41,15 @@ export function Login() {
       setIsLoading(true);
       const redirectPath = await login(result.data.email, result.data.password);
       showToast('success', 'Login successful');
+      // Prefetch: wake serverless while user is still on login so first screen load is faster
+      apiRequest({
+        baseUrl: API_BASE_URL,
+        path: '/api/health',
+        method: 'GET',
+        timeoutMs: 8_000,
+        maxRetries: 0,
+        skipCircuit: true,
+      }).catch(() => {});
       navigate(redirectPath, { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : '';

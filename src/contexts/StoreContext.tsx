@@ -17,7 +17,7 @@ interface StoreContextType {
   setCurrentStoreId: (id: string | null) => void;
   currentStore: Store | null;
   isLoading: boolean;
-  refreshStores: () => Promise<void>;
+  refreshStores: (options?: { timeoutMs?: number }) => Promise<void>;
   /** True when user has only one store (API returned one) — selector can be hidden. */
   isSingleStore: boolean;
 }
@@ -38,9 +38,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  const refreshStores = useCallback(async () => {
+  const refreshStores = useCallback(async (options?: { timeoutMs?: number }) => {
     try {
-      const list = await apiGet<Store[]>(API_BASE_URL, '/api/stores');
+      const list = await apiGet<Store[]>(API_BASE_URL, '/api/stores', {
+        timeoutMs: options?.timeoutMs,
+      });
       const arr = Array.isArray(list) ? list : [];
       setStores(arr);
       if (arr.length === 1) {

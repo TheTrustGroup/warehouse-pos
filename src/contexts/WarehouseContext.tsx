@@ -23,7 +23,7 @@ interface WarehouseContextType {
   setCurrentWarehouseId: (id: string) => void;
   currentWarehouse: Warehouse | null;
   isLoading: boolean;
-  refreshWarehouses: () => Promise<void>;
+  refreshWarehouses: (options?: { timeoutMs?: number }) => Promise<void>;
   /** True when POS can sell (single warehouse auto-selected, or user selected when multiple). No silent default. */
   isWarehouseSelectedForPOS: boolean;
   /** When true, session is bound to a warehouse; selector should be hidden/disabled in POS. */
@@ -47,9 +47,11 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  const refreshWarehouses = useCallback(async () => {
+  const refreshWarehouses = useCallback(async (options?: { timeoutMs?: number }) => {
     try {
-      const list = await apiGet<Warehouse[]>(API_BASE_URL, '/api/warehouses');
+      const list = await apiGet<Warehouse[]>(API_BASE_URL, '/api/warehouses', {
+        timeoutMs: options?.timeoutMs,
+      });
       const arr = Array.isArray(list) ? list : [];
       setWarehouses(arr);
       if (arr.length > 0) {

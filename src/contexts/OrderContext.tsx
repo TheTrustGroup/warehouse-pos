@@ -15,7 +15,7 @@ interface OrderContextType {
   /** Order id currently being updated (assign driver, deliver, fail, cancel, or status update). Use to show loading on buttons. */
   busyOrderId: string | null;
   /** Reload orders from API (used by critical data load after login). */
-  refreshOrders: () => Promise<void>;
+  refreshOrders: (options?: { timeoutMs?: number }) => Promise<void>;
   createOrder: (orderData: Partial<Order>) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus, notes?: string) => Promise<void>;
   assignDriver: (orderId: string, driverName: string, driverPhone: string) => Promise<void>;
@@ -70,10 +70,12 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   /**
    * Load orders from API (resilient client). Only when authenticated to avoid 405 on login page.
    */
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async (options?: { timeoutMs?: number }) => {
     try {
       setIsLoading(true);
-      const data = await apiGet<Order[] | { data: Order[] }>(API_BASE_URL, '/api/orders');
+      const data = await apiGet<Order[] | { data: Order[] }>(API_BASE_URL, '/api/orders', {
+        timeoutMs: options?.timeoutMs,
+      });
       const list = Array.isArray(data) ? data : (data && (data as any).data && Array.isArray((data as any).data) ? (data as any).data : []);
       setOrders(list.map((o: any) => normalizeOrder(o)));
     } catch (error) {
