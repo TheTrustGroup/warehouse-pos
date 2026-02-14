@@ -240,6 +240,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /** Throttle "Showing cached data" toast to once per 15s so multiple failed loads don't stack. */
   const lastCachedToastAtRef = useRef<number>(0);
   const CACHED_TOAST_COOLDOWN_MS = 15_000;
+  /** Pin recently added product to top when a refresh runs so the list doesn't jitter (product jumping to end). */
+  const lastAddedIdRef = useRef<{ id: string; at: number } | null>(null);
+  const RECENT_ADD_WINDOW_MS = 15_000;
 
   const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
     const params = new URLSearchParams();
@@ -419,21 +422,27 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             return;
           }
         }
-        setProducts(merged);
+        let listToSet = merged;
+        const recent = lastAddedIdRef.current;
+        if (recent && Date.now() - recent.at < RECENT_ADD_WINDOW_MS) {
+          const pin = merged.find((p) => p.id === recent.id);
+          if (pin) listToSet = [pin, ...merged.filter((p) => p.id !== recent.id)];
+        }
+        setProducts(listToSet);
         if (!silent) setError(null);
         setLastSyncAt(new Date());
-        cacheRef.current[wid] = { data: merged, ts: Date.now() };
+        cacheRef.current[wid] = { data: listToSet, ts: Date.now() };
         if (isIndexedDBAvailable()) {
-          saveProductsToDb(merged).catch((e) => {
-            reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: merged.length });
+          saveProductsToDb(listToSet).catch((e) => {
+            reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: listToSet.length });
           });
         }
         if (offlineEnabled) {
           mirrorProductsFromApi(merged).catch(() => {});
         }
-        logInventoryRead({ listLength: merged.length, environment: import.meta.env.PROD ? 'production' : 'development' });
-        if (isStorageAvailable() && merged.length > 0) {
-          setStoredData(productsCacheKey(wid), merged);
+        logInventoryRead({ listLength: listToSet.length, environment: import.meta.env.PROD ? 'production' : 'development' });
+        if (isStorageAvailable() && listToSet.length > 0) {
+          setStoredData(productsCacheKey(wid), listToSet);
         }
       } catch (apiErr) {
         if (apiErr instanceof Error && apiErr.name === 'AbortError') return;
@@ -705,6 +714,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     try {
       if (offlineEnabled) {
         const id = await offline.addProduct(productData);
+        lastAddedIdRef.current = { id, at: Date.now() };
         logInventoryCreate({ productId: id, sku: productData.sku ?? '', listLength: products.length + 1 });
         showToast('success', 'Product saved. Syncing to server when online.');
         return id;
@@ -757,13 +767,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         });
       }
       setLastSyncAt(new Date());
+      lastAddedIdRef.current = { id: resolvedId, at: Date.now() };
       logInventoryCreate({ productId: resolvedId, sku: productData.sku ?? '', listLength: newList.length });
       showToast('success', 'Product saved.');
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update');
         console.timeEnd('Total Save Time');
       }
-      loadProducts(undefined, { silent: true }).catch(() => {});
       return resolvedId;
     } catch (err) {
       const status = (err as { status?: number })?.status;
