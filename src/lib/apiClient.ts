@@ -81,15 +81,21 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
   if (idempotencyKey) {
     headers.set('Idempotency-Key', idempotencyKey);
   }
-  // Only send x-request-id when same-origin (or same host). Cross-origin APIs (e.g. extremedeptkidz.com from warehouse.extremedeptkidz.com) may not allow it in CORS, causing preflight to fail and dashboard to show zeros.
+  // Only send x-request-id when same-origin. Cross-origin APIs often do not allow it in Access-Control-Allow-Headers, causing Chrome to block preflight and the dashboard to fail (Safari may still work).
   try {
     const apiOrigin = new URL(url).origin;
     const pageOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-    if (apiOrigin === pageOrigin && !headers.has('x-request-id')) {
-      headers.set('x-request-id', crypto.randomUUID());
+    const isSameOrigin = apiOrigin === pageOrigin;
+    if (isSameOrigin) {
+      if (!headers.has('x-request-id')) headers.set('x-request-id', crypto.randomUUID());
+    } else {
+      headers.delete('x-request-id');
+      headers.delete('x-correlation-id');
     }
   } catch {
-    if (!headers.has('x-request-id')) headers.set('x-request-id', crypto.randomUUID());
+    // SSR or invalid URL: avoid adding custom headers so cross-origin preflight is not required
+    headers.delete('x-request-id');
+    headers.delete('x-correlation-id');
   }
 
   let lastError: Error | null = null;
