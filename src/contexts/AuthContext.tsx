@@ -169,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearSessionExpired = useCallback(() => setSessionExpired(false), []);
   const clearAuthError = useCallback(() => setAuthError(null), []);
 
-  // Check authentication status on mount
+  // Session verification: call /admin/api/me (then /api/auth/user on 404/403). Block rendering until role confirmed; no role from localStorage.
   useEffect(() => {
     checkAuthStatus();
   }, []);
@@ -399,7 +399,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!userPayload || typeof userPayload !== 'object') {
         throw new Error('Invalid login response');
       }
-      const normalizedUser = normalizeUserData(userPayload);
+      // Merge login email so role fallback works when server omits email/role (cross-browser, backward-compatible).
+      const payloadWithEmail = { ...userPayload, email: userPayload.email ?? trimmedEmail };
+      const normalizedUser = normalizeUserData(payloadWithEmail);
       if (!normalizedUser) {
         throw new Error('The server did not return a valid role. Please contact your administrator.');
       }

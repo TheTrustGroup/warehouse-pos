@@ -63,9 +63,9 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   });
 
   /**
-   * Load orders from API (resilient client).
+   * Load orders from API (resilient client). Only when authenticated to avoid 405 on login page.
    */
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await apiGet<Order[] | { data: Order[] }>(API_BASE_URL, '/api/orders');
@@ -77,13 +77,19 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadOrders();
   }, []);
 
-  useRealtimeSync({ onSync: loadOrders, intervalMs: 60_000 });
+  // Only fetch orders when authenticated. Prevents GET /api/orders 405 on login page (external API may not support GET or may require auth).
+  useEffect(() => {
+    if (user) {
+      loadOrders();
+    } else {
+      setOrders([]);
+      setIsLoading(false);
+    }
+  }, [user, loadOrders]);
+
+  useRealtimeSync({ onSync: loadOrders, intervalMs: 60_000, disabled: !user });
 
   // Save orders to localStorage for offline support (only real API data)
   useEffect(() => {
