@@ -1,6 +1,6 @@
 /**
  * Central error reporting and dev logging.
- * - reportError: sends to external service when configured (e.g. Sentry) and logs in development.
+ * - reportError: sends to external service when configured (e.g. Sentry) and logs to IndexedDB logger.
  * - logErrorForDev: logs to console only in development (for catch blocks that also show toast).
  *
  * Integration: In main.tsx, initObservability({ reportError: (err, ctx) => { Sentry?.captureException(err, { extra: ctx }); } })
@@ -8,9 +8,10 @@
  */
 
 import { reportError as observabilityReportError } from './observability';
+import { logError } from '../utils/logger';
 
 /**
- * Report an error to the configured service (e.g. Sentry) and log in development.
+ * Report an error to the configured service (e.g. Sentry) and log to IndexedDB for debugging.
  * Use in Error Boundaries and in catch blocks where you want errors tracked.
  */
 export function reportError(error: unknown, context?: Record<string, unknown>): void {
@@ -19,6 +20,7 @@ export function reportError(error: unknown, context?: Record<string, unknown>): 
     // eslint-disable-next-line no-console
     console.error('[Error]', err, context);
   }
+  logError(err, context);
   observabilityReportError(err, context);
 }
 

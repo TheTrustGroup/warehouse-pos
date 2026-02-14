@@ -1,9 +1,12 @@
 /**
  * Single source of truth for modal overlay. Handles backdrop, close on Escape/backdrop, scroll lock, and aria.
- * Use for any dialog (e.g. ProductFormModal, Receipt) so behavior and a11y are consistent.
+ * Slide-up + backdrop fade with spring physics when animations enabled.
  */
 import { ReactNode, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useAnimations } from '../../hooks/useAnimations';
+import { modalOverlayVariants, modalContentVariants } from '../../animations/liquidGlass';
 
 export interface ModalProps {
   isOpen: boolean;
@@ -17,6 +20,10 @@ export interface ModalProps {
 }
 
 export function Modal({ isOpen, onClose, titleId, children, overlayClassName = '' }: ModalProps) {
+  const { reduced } = useAnimations();
+  const overlayVariants = modalOverlayVariants(reduced);
+  const contentVariants = modalContentVariants(reduced);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -34,21 +41,36 @@ export function Modal({ isOpen, onClose, titleId, children, overlayClassName = '
     };
   }, [isOpen, handleKeyDown]);
 
-  if (!isOpen) return null;
-
   const overlay = (
-    <div
-      className={`fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[var(--z-modal,50)] ${overlayClassName}`}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      onClick={onClose}
-    >
-      <div className="w-full max-h-[90vh] overflow-y-auto flex items-center justify-center p-2 sm:p-4" onClick={(e) => e.stopPropagation()}>
-        {children}
-      </div>
-    </div>
+    <AnimatePresence mode="wait">
+      {isOpen && (
+        <motion.div
+          key="modal-overlay"
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          variants={overlayVariants}
+          className={`fixed inset-0 glass-overlay flex items-center justify-center z-[var(--z-modal,50)] ${overlayClassName}`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          onClick={onClose}
+        >
+          <motion.div
+            key="modal-content"
+            variants={contentVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="w-full max-h-[90vh] overflow-y-auto flex items-center justify-center p-2 sm:p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {children}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 
-  return typeof document !== 'undefined' ? createPortal(overlay, document.body) : overlay;
+  return typeof document !== 'undefined' ? createPortal(overlay, document.body) : null;
 }

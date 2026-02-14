@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: false,
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    include: ['src/**/*.{test,spec}.{ts,tsx,js}'],
     coverage: { reporter: ['text'], include: ['src/lib/**/*.ts'], exclude: ['**/*.test.ts', '**/*.spec.ts'] },
   },
 });

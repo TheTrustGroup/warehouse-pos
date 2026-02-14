@@ -4,19 +4,27 @@ import App from './App.tsx';
 import './index.css';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { initObservability, startHealthPings } from './lib/observability';
+import { initErrorHandlers } from './lib/initErrorHandlers';
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+import { isOfflineEnabled } from './lib/offlineFeatureFlag';
 
-// Error reporting: set VITE_SENTRY_DSN and wire Sentry.captureException(err, { extra: ctx }) here
+// Error reporting: set VITE_SENTRY_DSN and wire Sentry.captureException(err, { extra: ctx }) here.
+// Only send to Sentry when getErrorReportingConsent() is true (user consent in Settings/Admin).
 initObservability({
   healthUrl: import.meta.env.VITE_HEALTH_URL || undefined,
   reportError:
     import.meta.env.VITE_SENTRY_DSN && typeof window !== 'undefined'
       ? (err, ctx) => {
           if (import.meta.env.DEV) console.error('[Report]', err, ctx);
-          // Sentry: import * as Sentry from '@sentry/react'; Sentry.captureException(err, { extra: ctx });
+          // Sentry: if (getErrorReportingConsent()) Sentry.captureException(err, { extra: ctx });
         }
       : undefined,
 });
 if (import.meta.env.VITE_HEALTH_URL) startHealthPings();
+
+if (typeof window !== 'undefined') {
+  initErrorHandlers();
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -26,11 +34,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 );
 
-// Register service worker for PWA (app shell + static assets)
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // Service worker registration failed, but app still works
-    });
+// Register service worker only when offline mode is enabled (INTEGRATION_PLAN Phase 9)
+if (typeof window !== 'undefined' && isOfflineEnabled()) {
+  serviceWorkerRegistration.register({
+    onUpdate: () => {
+      window.dispatchEvent(new CustomEvent('sw-update'));
+    },
   });
 }

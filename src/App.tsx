@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useRef } from 'react';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -9,13 +9,18 @@ import { InventoryProvider } from './contexts/InventoryContext';
 import { POSProvider } from './contexts/POSContext';
 import { OrderProvider } from './contexts/OrderContext';
 import { CriticalDataProvider, CriticalDataGate } from './contexts/CriticalDataContext';
-import { ToastProvider } from './contexts/ToastContext';
+import { ToastProvider, useToast } from './contexts/ToastContext';
+import { NetworkStatusProvider } from './contexts/NetworkStatusContext';
+import { QUOTA_EVENT } from './lib/offlineQuota';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
 import { Button } from './components/ui/Button';
 import { Layout } from './components/layout/Layout';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { KeyboardShortcuts } from './components/ui/KeyboardShortcuts';
+import { DebugPanel } from './components/debug/DebugPanel';
+import { BrowserCheck } from './components/BrowserCheck';
+import { OnboardingModal } from './components/OnboardingModal';
 import { PERMISSIONS } from './types/permissions';
 
 /** Default landing: Dashboard if user has permission; otherwise redirect to first allowed route (e.g. POS for cashiers). */
@@ -74,6 +79,41 @@ const Users = () => {
 };
 
 const NotFound = lazyWithRetry(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
+const LiquidGlassShowcase = lazyWithRetry(() => import('./pages/demo/LiquidGlassShowcase').then(m => ({ default: m.LiquidGlassShowcase })));
+
+/** Listens for service worker update event and shows toast. Must be inside ToastProvider. */
+function ServiceWorkerUpdateListener() {
+  const { showToast } = useToast();
+  const handlerRef = useRef(() => {
+    showToast('warning', 'App updated - Refresh to see changes');
+  });
+  handlerRef.current = () => showToast('warning', 'App updated - Refresh to see changes');
+  useEffect(() => {
+    const handler = () => handlerRef.current();
+    window.addEventListener('sw-update', handler);
+    return () => window.removeEventListener('sw-update', handler);
+  }, []);
+  return null;
+}
+
+/** Listens for offline storage quota exceeded and shows toast once (INTEGRATION_PLAN). */
+function OfflineQuotaToastListener() {
+  const { showToast } = useToast();
+  const shownRef = useRef(false);
+  useEffect(() => {
+    const handler = () => {
+      if (shownRef.current) return;
+      shownRef.current = true;
+      showToast(
+        'warning',
+        'Local storage is full. Some offline features are disabled. Clear local data in Settings → Admin & logs if needed.'
+      );
+    };
+    window.addEventListener(QUOTA_EVENT, handler);
+    return () => window.removeEventListener(QUOTA_EVENT, handler);
+  }, [showToast]);
+  return null;
+}
 
 /**
  * Protected Routes Wrapper
@@ -130,10 +170,15 @@ function ProtectedRoutes() {
 
 function App() {
   return (
+    <BrowserCheck>
     <ToastProvider>
-      <SettingsProvider>
-        <AuthProvider>
-          <BrowserRouter>
+      <ServiceWorkerUpdateListener />
+      <OfflineQuotaToastListener />
+      <NetworkStatusProvider>
+        <SettingsProvider>
+          <AuthProvider>
+            <BrowserRouter>
+            <OnboardingModal />
             <Suspense fallback={<LoadingSpinner />}>
               <Routes>
                 <Route path="/login" element={<Login />} />
@@ -227,16 +272,27 @@ function App() {
                             </ProtectedRoute>
                           }
                         />
+                        <Route
+                          path="demo/liquid-glass-showcase"
+                          element={
+                            <RouteErrorBoundary routeName="Liquid Glass Demo">
+                              <LiquidGlassShowcase />
+                            </RouteErrorBoundary>
+                          }
+                        />
                       </Route>
 
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
             <KeyboardShortcuts />
-          </BrowserRouter>
-        </AuthProvider>
-      </SettingsProvider>
+            <DebugPanel />
+            </BrowserRouter>
+          </AuthProvider>
+        </SettingsProvider>
+      </NetworkStatusProvider>
     </ToastProvider>
+    </BrowserCheck>
   );
 }
 

@@ -106,6 +106,8 @@ export const systemPreferencesSchema = z.object({
   emailNotifications: z.boolean(),
   receiptFooter: z.string().max(500).default(''),
   defaultWarehouse: z.string().max(100).default(''),
+  animationsEnabled: z.boolean().default(true),
+  soundEffects: z.boolean().default(false),
 });
 
 export type SystemPreferencesFormData = z.infer<typeof systemPreferencesSchema>;

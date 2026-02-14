@@ -8,6 +8,7 @@ import {
   BarChart3,
   Settings,
   Users,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { PERMISSIONS, ROLES } from '../../types/permissions';
@@ -29,6 +30,7 @@ const baseNavigation = [
   },
   { name: 'Users', to: '/users', icon: Users, permission: PERMISSIONS.USERS.VIEW },
   { name: 'Settings', to: '/settings', icon: Settings, permission: PERMISSIONS.SETTINGS.VIEW },
+  { name: 'Liquid Glass Demo', to: '/demo/liquid-glass-showcase', icon: Sparkles, permission: undefined },
 ];
 
 function getRoleDisplayName(roleId: string | undefined): string {
@@ -44,12 +46,13 @@ export function Sidebar() {
 
   const navigation = baseNavigation.filter(
     (item) =>
+      (item.permission == null && 'to' in item) ||
       ('permission' in item && item.permission && hasPermission(item.permission)) ||
       ('anyPermissions' in item && item.anyPermissions && hasAnyPermission(item.anyPermissions))
   );
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[280px] bg-glass border-r border-white/40 flex flex-col shadow-glass backdrop-blur-xl">
+    <aside className="fixed left-0 top-0 h-screen w-[280px] glass border-r border-white/40 flex flex-col shadow-glass">
       {/* Logo: hierarchy via size, not weight overload */}
       <div className="p-5 border-b border-slate-200/30">
         <div className="flex flex-col gap-0.5">

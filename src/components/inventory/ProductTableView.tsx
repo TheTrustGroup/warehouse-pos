@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Product } from '../../types';
 import { formatCurrency, getCategoryDisplay, getLocationDisplay } from '../../lib/utils';
 import { Button } from '../ui/Button';
+import { SyncStatusBadge } from './SyncStatusBadge';
+import { ProductSyncBadge } from '../ProductSyncBadge';
 import { Pencil, Trash2, Eye, Package, CloudOff, RefreshCw } from 'lucide-react';
 
 interface ProductTableViewProps {
@@ -18,6 +20,7 @@ interface ProductTableViewProps {
   /** If provided, show "Local only" badge and "Check if saved" for unsynced products */
   isUnsynced?: (productId: string) => boolean;
   onVerifySaved?: (productId: string) => Promise<{ saved: boolean; product?: Product }>;
+  onRetrySync?: () => void;
 }
 
 export function ProductTableView({
@@ -33,6 +36,7 @@ export function ProductTableView({
   showCostPrice = true,
   isUnsynced,
   onVerifySaved,
+  onRetrySync,
 }: ProductTableViewProps) {
   const [sortField, setSortField] = useState<keyof Product>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -159,11 +163,11 @@ export function ProductTableView({
                     <div>
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         <p className="font-semibold text-slate-900">{product.name}</p>
-                        {isUnsynced?.(product.id) && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-medium" title="Saved on this device only. Sync to see everywhere.">
-                            <CloudOff className="w-3.5 h-3.5" />
-                            Local only
-                          </span>
+                        {(product as Product & { syncStatus?: string }).syncStatus && (
+                          <ProductSyncBadge
+                            status={(product as Product & { syncStatus?: string }).syncStatus as 'synced' | 'pending' | 'syncing' | 'error'}
+                            onRetry={onRetrySync}
+                          />
                         )}
                         {isUnsynced?.(product.id) && onVerifySaved && (
                           <Button

@@ -31,7 +31,7 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
   /* Receipt modal: backdrop click + Escape close; scroll lock. Primary = Print; Close secondary. */
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm modal-overlay-padding"
+      className="fixed inset-0 z-50 flex items-center justify-center glass-overlay modal-overlay-padding"
       role="dialog"
       aria-modal="true"
       aria-labelledby="receipt-title"

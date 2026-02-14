@@ -10,21 +10,28 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "ci:inventory": "node scripts/ci-inventory-invariants.mjs",
     "ci": "npm run ci:inventory && npm run test && npm run build"
   },
   "dependencies": {
     "@ericblade/quagga2": "^1.8.1",
     "date-fns": "^2.30.0",
+    "dexie": "^4.3.0",
+    "dexie-react-hooks": "^4.2.0",
+    "framer-motion": "^12.34.0",
+    "idb": "^8.0.3",
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
     "recharts": "^2.10.3",
     "uuid": "^9.0.1",
+    "workbox-window": "^7.4.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@testing-library/react": "^14.0.0",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",

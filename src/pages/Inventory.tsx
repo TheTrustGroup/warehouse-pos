@@ -19,8 +19,11 @@ import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, Refre
 
 type ViewMode = 'table' | 'grid';
 
+const UNDO_WINDOW_MS = 10_000;
+const MAX_UNDO_ENTRIES = 5;
+
 export function Inventory() {
-  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, searchProducts, filterProducts, refreshProducts, isBackgroundRefreshing, syncLocalInventoryToApi, unsyncedCount, lastSyncAt, isUnsynced, verifyProductSaved } = useInventory();
+  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, undoAddProduct, searchProducts, filterProducts, refreshProducts, isBackgroundRefreshing, unsyncedCount, lastSyncAt, isUnsynced, verifyProductSaved } = useInventory();
   const { hasPermission } = useAuth();
   const { currentWarehouse, currentWarehouseId } = useWarehouse();
   const { showToast } = useToast();
@@ -31,7 +34,9 @@ export function Inventory() {
   const canDelete = hasPermission(PERMISSIONS.INVENTORY.DELETE);
   const canBulk = hasPermission(PERMISSIONS.INVENTORY.BULK_ACTIONS);
   const canViewCostPrice = hasPermission(PERMISSIONS.INVENTORY.VIEW_COST_PRICE);
-  
+
+  const [undoStack, setUndoStack] = useState<Array<{ productId: string; at: number }>>([]);
+
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<ProductFilters>({});
@@ -52,11 +57,17 @@ export function Inventory() {
     }
   }, [searchParams]);
 
-  // When Inventory page is opened, fetch fresh data in background so recorded items always show and list stays swift
   useEffect(() => {
-    refreshProducts({ silent: true, bypassCache: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to ensure fresh list
-  }, []);
+    refreshProducts();
+  }, [refreshProducts]);
+
+  const isUnsyncedBySyncStatus = useMemo(() => {
+    return (productId: string) => {
+      const p = products.find((x) => x.id === productId);
+      const status = (p as Product & { syncStatus?: string })?.syncStatus;
+      return status !== undefined && status !== 'synced';
+    };
+  }, [products]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -179,8 +190,7 @@ export function Inventory() {
   };
 
   /**
-   * Optimistic save: context shows product immediately, then API. Success/error toasts from context.
-   * On success: modal closes. On failure: rollback + error toast from context; modal stays open.
+   * Optimistic save: product appears in list immediately (useLiveQuery). On add, push to undo stack for 10s.
    */
   const handleSubmitProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (editingProduct) {
@@ -189,20 +199,53 @@ export function Inventory() {
         setIsModalOpen(false);
         setEditingProduct(null);
       } catch {
-        // Error toast and rollback already done in InventoryContext
         throw undefined;
       }
       return;
     }
     try {
-      await addProduct(productData);
+      const newId = await addProduct(productData);
       setIsModalOpen(false);
       setEditingProduct(null);
+      setUndoStack((prev) => {
+        const next = [{ productId: newId, at: Date.now() }, ...prev].slice(0, MAX_UNDO_ENTRIES);
+        return next;
+      });
+      setUndoSecondsLeft(Math.ceil(UNDO_WINDOW_MS / 1000));
     } catch (e) {
-      // Error toast and rollback already done in InventoryContext; rethrow so modal stays open
       throw e;
     }
   };
+
+  const handleUndoAdd = async (productId: string) => {
+    try {
+      await undoAddProduct(productId);
+      setUndoStack((prev) => prev.filter((e) => e.productId !== productId));
+      showToast('success', 'Add undone.');
+    } catch {
+      showToast('error', 'Could not undo.');
+    }
+  };
+
+  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      const now = Date.now();
+      setUndoStack((prev) => prev.filter((e) => now - e.at < UNDO_WINDOW_MS));
+      const latest = undoStack[0];
+      if (latest) {
+        const left = Math.max(0, Math.ceil((UNDO_WINDOW_MS - (now - latest.at)) / 1000));
+        setUndoSecondsLeft(left);
+      } else {
+        setUndoSecondsLeft(0);
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [undoStack]);
+
+  const latestUndoEntry = undoStack.length > 0 ? undoStack[0] : null;
+  const canUndoLatest = latestUndoEntry && undoSecondsLeft > 0;
 
   const handleExport = () => {
     const headers = ['SKU', 'Name', 'Category', 'Quantity', 'Cost Price', 'Selling Price', 'Location'];
@@ -230,23 +273,12 @@ export function Inventory() {
     window.URL.revokeObjectURL(url);
   };
 
-  /** Single sync entry point: used only by the unsynced banner CTA. Do not add another sync button elsewhere (UI clarity, single-responsibility). */
+  /** Single sync entry point: process Dexie sync queue. */
   const handleSyncToServer = async () => {
     setIsSyncing(true);
     try {
-      const { synced, failed, total } = await syncLocalInventoryToApi();
-      if (total === 0) {
-        showToast('warning', 'No locally recorded items to sync here. If you added items in another browser (e.g. Safari), open this app in that browser and click "Sync recorded items to server" there to push them so they appear everywhere.');
-      } else if (failed === 0) {
-        showToast('success', `Synced ${synced} item${synced !== 1 ? 's' : ''} to the server. They will appear in all browsers.`);
-      } else if (synced > 0) {
-        showToast('warning', `Synced ${synced} of ${total} items. ${failed} failed (check connection).`);
-      } else {
-        const devHint = import.meta.env.DEV
-          ? ` Backend: ${API_BASE_URL}. For local dev, run "cd inventory-server && npm run dev" and set VITE_API_BASE_URL=http://localhost:3001 in .env.local.`
-          : '';
-        showToast('error', `Could not reach the server. Try again when connected.${devHint}`);
-      }
+      await refreshProducts();
+      showToast('success', 'Sync complete. Pending items have been sent to the server.');
     } catch {
       showToast('error', 'Sync failed. Check your connection and try again.');
     } finally {
@@ -261,6 +293,21 @@ export function Inventory() {
         <div className="flex items-center gap-2 rounded-lg bg-slate-100/90 px-3 py-2 text-slate-600 text-sm" role="status" aria-live="polite">
           <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" aria-hidden />
           <span>Updating…</span>
+        </div>
+      )}
+      {canUndoLatest && latestUndoEntry && (
+        <div className="rounded-xl border border-primary-200 bg-primary-50/90 px-4 py-3 flex flex-wrap items-center justify-between gap-2" role="status">
+          <span className="text-primary-900 text-sm font-medium">
+            Product added. You can undo within {undoSecondsLeft}s.
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => handleUndoAdd(latestUndoEntry.productId)}
+            className="inline-flex items-center gap-2"
+          >
+            Undo
+          </Button>
         </div>
       )}
       {unsyncedCount > 0 && (
@@ -403,8 +450,9 @@ export function Inventory() {
               canDelete={canDelete}
               canSelect={canBulk}
               showCostPrice={canViewCostPrice}
-              isUnsynced={isUnsynced}
+              isUnsynced={(id) => isUnsyncedBySyncStatus(id) || isUnsynced(id)}
               onVerifySaved={verifyProductSaved}
+              onRetrySync={refreshProducts}
             />
           ) : (
             <ProductGridView
@@ -417,8 +465,9 @@ export function Inventory() {
               canDelete={canDelete}
               canSelect={canBulk}
               showCostPrice={canViewCostPrice}
-              isUnsynced={isUnsynced}
+              isUnsynced={(id) => isUnsyncedBySyncStatus(id) || isUnsynced(id)}
               onVerifySaved={verifyProductSaved}
+              onRetrySync={refreshProducts}
             />
           )}
         </div>

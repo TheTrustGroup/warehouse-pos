@@ -17,6 +17,10 @@ export interface SystemSettings {
   emailNotifications: boolean;
   receiptFooter: string;
   defaultWarehouse: string;
+  /** UI animations (liquid glass, transitions). Respects prefers-reduced-motion when false. */
+  animationsEnabled: boolean;
+  /** Sound effects on sync complete / success (optional). */
+  soundEffects: boolean;
 }
 
 interface SettingsContextType {
@@ -42,6 +46,8 @@ const defaultSystemSettings: SystemSettings = {
   emailNotifications: true,
   receiptFooter: 'Thank you for shopping with us!',
   defaultWarehouse: 'Main Store',
+  animationsEnabled: true,
+  soundEffects: false,
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);

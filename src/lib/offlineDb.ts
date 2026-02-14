@@ -1,7 +1,9 @@
 /**
  * IndexedDB layer for offline product cache and transaction queue.
  * Use for scale and long offline periods; falls back to localStorage if IDB unavailable.
+ * On QuotaExceededError we set offline_storage_quota_exceeded and dispatch event for toast (INTEGRATION_PLAN).
  */
+import { isQuotaExceededError, setOfflineQuotaExceeded } from './offlineQuota';
 
 const DB_NAME = 'warehouse-pos';
 const DB_VERSION = 2;
@@ -73,9 +75,18 @@ export async function saveProductsToDb(products: unknown[]): Promise<void> {
     }
     return new Promise((resolve, reject) => {
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      tx.onerror = () => {
+        const err = tx.error;
+        if (err && isQuotaExceededError(err)) {
+          setOfflineQuotaExceeded();
+        }
+        reject(err);
+      };
     });
   } catch (e) {
+    if (isQuotaExceededError(e)) {
+      setOfflineQuotaExceeded();
+    }
     if (import.meta.env.DEV) console.warn('IndexedDB save products failed:', e);
   }
 }

@@ -11,7 +11,9 @@
 
 const DEFAULT_API_BASE = 'https://extremedeptkidz.com';
 const _rawApiBase = import.meta.env.VITE_API_BASE_URL;
-const _resolved = (_rawApiBase && String(_rawApiBase).trim() ? _rawApiBase : DEFAULT_API_BASE).replace(/\/$/, '');
+const _trimmed = (_rawApiBase && String(_rawApiBase).trim() ? _rawApiBase : DEFAULT_API_BASE).replace(/\/$/, '');
+// Must be a full URL (https://...) so fetch() hits the API host, not the frontend host. If set without protocol, prepend https://.
+const _resolved = _trimmed.startsWith('http://') || _trimmed.startsWith('https://') ? _trimmed : `https://${_trimmed}`;
 export const API_BASE_URL = _resolved;
 
 // Warn at runtime when default URL is used (dev only; production build fails if unset).

@@ -3,6 +3,8 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { MobileMenu } from './MobileMenu';
+import { SyncStatusBar } from '../SyncStatusBar';
+import { ConflictModalContainer } from '../ConflictModalContainer';
 import { getApiCircuitBreaker } from '../../lib/observability';
 import { useCriticalData } from '../../contexts/CriticalDataContext';
 import { Button } from '../ui/Button';
@@ -100,6 +102,8 @@ export function Layout() {
       >
         <Outlet />
       </main>
+      <SyncStatusBar />
+      <ConflictModalContainer />
     </div>
   );
 }

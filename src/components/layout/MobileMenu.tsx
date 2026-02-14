@@ -76,7 +76,7 @@ export function MobileMenu() {
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsOpen(false)}></div>
+        <div className="absolute inset-0 glass-overlay" onClick={() => setIsOpen(false)} aria-hidden></div>
         <aside className="relative w-[280px] max-w-[85vw] h-full flex flex-col glass shadow-large border-r border-slate-200/50">
           <div className="px-5 py-5 border-b border-slate-200/30">
             <div className="flex flex-col gap-0.5">

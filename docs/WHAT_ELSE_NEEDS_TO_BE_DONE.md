@@ -17,7 +17,8 @@ A concise checklist so the warehouse app, API, and extremedeptkidz flow work end
 - In **warehouse-pos** (Vercel), set **`VITE_API_BASE_URL`** to the **exact URL** of **warehouse-pos-api-v2**:
   - If the API has a custom domain (e.g. `https://api.extremedeptkidz.com`), use that.
   - Otherwise use the Vercel deployment URL (e.g. `https://warehouse-pos-api-v2-xxxx.vercel.app`).
-- **No trailing slash.** Example: `https://warehouse-pos-api-v2-xxxx.vercel.app`
+- **Full URL with `https://`** (e.g. `https://warehouse-pos-api-v2-xxxx.vercel.app`). Without the protocol, login and API calls go to the wrong host and fail (405 / invalid credentials).
+- **No trailing slash.**
 - After changing, **redeploy** the warehouse-pos project so the new value is baked into the build.
 
 ---

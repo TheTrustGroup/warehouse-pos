@@ -33,17 +33,31 @@ export default defineConfig(({ mode: _mode }) => ({
     }),
   ],
   build: {
+    target: 'es2020',
+    minify: true,
+    cssMinify: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'chart-vendor': ['recharts'],
-          'ui-vendor': ['lucide-react'],
+        manualChunks: (id) => {
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router')) return 'react-vendor';
+          if (id.includes('node_modules/recharts')) return 'chart-vendor';
+          if (id.includes('node_modules/lucide-react')) return 'ui-vendor';
+          if (id.includes('node_modules/dexie') || id.includes('node_modules/idb')) return 'db-vendor';
+          if (id.includes('node_modules/framer-motion')) return 'motion-vendor';
+          if (id.includes('/pages/Dashboard')) return 'page-dashboard';
+          if (id.includes('/pages/Inventory') || id.includes('/pages/Reports')) return 'page-inventory-reports';
+          if (id.includes('/pages/POS')) return 'page-pos';
+          if (id.includes('/pages/Orders')) return 'page-orders';
+          if (id.includes('/pages/Settings')) return 'page-settings';
         },
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
       },
     },
     chunkSizeWarningLimit: 1000,
-    sourcemap: false, // Disable in production
+    sourcemap: false,
+    reportCompressedSize: true,
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom'],

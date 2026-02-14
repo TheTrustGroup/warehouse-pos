@@ -13,7 +13,7 @@
  * HIGH RISK: When API fails, addProduct currently saves to local state + localStorage + IndexedDB and throws ADD_PRODUCT_SAVED_LOCALLY.
  * That creates "fake persistence": user sees "saved locally" but other devices see nothing. We never show "Saved" for server without confirmed write + read-back.
  */
-import { createContext, useContext, useState, useRef, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, useRef, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL } from '../lib/api';
@@ -22,6 +22,7 @@ import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
 import { useToast } from './ToastContext';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
 import { parseProductsResponse } from '../lib/apiSchemas';
+import { useInventory as useOfflineInventory } from '../hooks/useInventory';
 
 /** Per-warehouse cache key so we can show the right list immediately on login/refresh. */
 function productsCacheKey(warehouseId: string): string {
@@ -107,6 +108,8 @@ function getCachedProductsForWarehouse(warehouseId: string): Product[] {
 import { loadProductsFromDb, saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
 import { reportError } from '../lib/errorReporting';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { isOfflineEnabled } from '../lib/offlineFeatureFlag';
+import { mirrorProductsFromApi } from '../db/inventoryDB';
 import {
   logInventoryCreate,
   logInventoryUpdate,
@@ -119,10 +122,11 @@ interface InventoryContextType {
   products: Product[];
   isLoading: boolean;
   error: string | null;
-  addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => Promise<void>;
+  addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => Promise<string>;
   updateProduct: (id: string, updates: Partial<Product> & { warehouseId?: string }) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   deleteProducts: (ids: string[]) => Promise<void>;
+  undoAddProduct: (productId: string) => Promise<void>;
   getProduct: (id: string) => Product | undefined;
   searchProducts: (query: string) => Product[];
   filterProducts: (filters: ProductFilters) => Product[];
@@ -164,13 +168,41 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const { currentWarehouseId } = useWarehouse();
   const { showToast } = useToast();
   const effectiveWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : DEFAULT_WAREHOUSE_ID;
-  const initialCache = getCachedProductsForWarehouse(effectiveWarehouseId);
-  const [products, setProducts] = useState<Product[]>(() => initialCache);
-  const [isLoading, setIsLoading] = useState(() => initialCache.length === 0);
+
+  // Feature flag: when off, use API-only (state); when on, use offline hook (Dexie). INTEGRATION_PLAN Phase 5/7.
+  const offlineEnabled = isOfflineEnabled();
+  const [apiOnlyProducts, setApiOnlyProductsState] = useState<Product[]>([]);
+  const [apiOnlyLoading, setApiOnlyLoadingState] = useState(true);
+
+  const offline = useOfflineInventory();
+  const products = useMemo(
+    () => (offlineEnabled ? (offline.products ?? []) : apiOnlyProducts),
+    [offlineEnabled, offline.products, apiOnlyProducts]
+  );
+  const isLoading = offlineEnabled ? offline.isLoading : apiOnlyLoading;
+  const unsyncedCountFromHook = offline.unsyncedCount ?? 0;
+
+  /** When offline disabled: update API-only state. When enabled: no-op (list from Dexie). */
+  const setProducts = useCallback(
+    (arg: Product[] | ((prev: Product[]) => Product[])) => {
+      if (!offlineEnabled) {
+        setApiOnlyProductsState(typeof arg === 'function' ? (arg as (prev: Product[]) => Product[])(apiOnlyProducts) : arg);
+      }
+    },
+    [offlineEnabled, apiOnlyProducts]
+  );
+  /** When offline disabled: update loading state for loadProducts. When enabled: no-op. */
+  const setIsLoading = useCallback(
+    (value: boolean) => {
+      if (!offlineEnabled) setApiOnlyLoadingState(value);
+    },
+    [offlineEnabled]
+  );
+
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
   const mountedRef = useRef(true);
-  /** Ids of products saved only locally (API failed). Cleared when sync succeeds. Used for unsyncedCount and background sync. */
+  /** Ids of products saved only locally (API failed). Kept for backward compat; unsyncedCount now from hook. */
   const [localOnlyIds, setLocalOnlyIds] = useState<Set<string>>(() => new Set());
   /** Set when setStoredData returns false so UI can warn that local storage may not have been updated. */
   const [storagePersistFailed, setStoragePersistFailed] = useState(false);
@@ -179,6 +211,23 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /** True while a silent (background) refresh is in progress — for "Updating..." indicator. */
   const [isBackgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const syncRef = useRef<(() => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>) | null>(null);
+
+  // Persist current products to localStorage for legacy/fallback (products now from Dexie via hook)
+  const persistProducts = useCallback(
+    (next: Product[]) => {
+      if (!isStorageAvailable() || !next?.length) return;
+      try {
+        const ok = setStoredData(productsCacheKey(effectiveWarehouseId), next);
+        if (!ok) setStoragePersistFailed(true);
+      } catch (e) {
+        reportError(e instanceof Error ? e : new Error(String(e)), { context: 'persistProducts', listLength: next.length });
+      }
+    },
+    [effectiveWarehouseId]
+  );
+  useEffect(() => {
+    if (products.length > 0) persistProducts(products);
+  }, [products, persistProducts]);
 
   const PRODUCTS_CACHE_TTL_MS = 60_000; // 60s per-warehouse cache
   const cacheRef = useRef<Record<string, { data: Product[]; ts: number }>>({});
@@ -367,6 +416,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           saveProductsToDb(merged).catch((e) => {
             reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: merged.length });
           });
+        }
+        if (offlineEnabled) {
+          mirrorProductsFromApi(merged).catch(() => {});
         }
         logInventoryRead({ listLength: merged.length, environment: import.meta.env.PROD ? 'production' : 'development' });
         if (isStorageAvailable() && merged.length > 0) {
@@ -653,91 +705,43 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [localOnlyIds.size]);
 
-  /** Persist current list to localStorage (per-warehouse) and IndexedDB (best-effort cache only; server is source of truth). */
-  const persistProducts = (next: Product[]) => {
-    if (isStorageAvailable() && next.length >= 0) {
-      const ok = setStoredData(productsCacheKey(effectiveWarehouseId), next);
-      setStoragePersistFailed(!ok);
-      if (!ok) reportError(new Error('Failed to save inventory to local storage (e.g. private mode or quota).'), { context: 'persistProducts' });
-    }
-    if (isIndexedDBAvailable()) {
-      saveProductsToDb(next).catch((e) => {
-        reportError(e instanceof Error ? e : new Error(String(e)), { context: 'persistProducts', listLength: next.length });
-      });
-    }
-  };
-
   /** Response body is treated as verified when it has id and core fields (server only returns after commit). */
   const responseIsFullProduct = (raw: any): boolean =>
     raw && typeof raw === 'object' && raw.id && (raw.name != null || raw.sku != null);
 
   /**
-   * Add product: optimistic UI update, then POST. On success: update state from server response, force fresh GET, toast.
-   * On failure: rollback and error toast. No debouncing.
+   * Add product: offline-first when enabled; API-only when flag off (INTEGRATION_PLAN).
+   * @returns The new product id (for undo when offline).
    */
-  const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => {
+  const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }): Promise<string> => {
     if (!productData?.name?.trim?.()) throw new Error('Product name is required');
-    const stableId = crypto.randomUUID();
-    const payload = productToPayload({
-      ...productData,
-      id: stableId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    const bodyWithWarehouse = { ...payload, warehouseId: productData.warehouseId ?? currentWarehouseId };
-    const optimisticProduct: Product = normalizeProduct(payload);
-
-    const previousProducts = [...products];
-    setProducts((prev) => [...prev, optimisticProduct]);
-    persistProducts([...previousProducts, optimisticProduct]);
     setSavePhase('saving');
     setError(null);
-
     try {
-      if (import.meta.env.DEV && typeof performance !== 'undefined' && performance.mark) {
-        performance.mark('inventory-addProduct-start');
+      if (offlineEnabled) {
+        const id = await offline.addProduct(productData);
+        logInventoryCreate({ productId: id, sku: productData.sku ?? '', listLength: products.length + 1 });
+        showToast('success', 'Product saved. Syncing to server when online.');
+        return id;
       }
-      let savedRaw: any = null;
+      const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const newProduct: Product = {
+        ...productData,
+        id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as Product;
+      const payload = productToPayload(newProduct);
       try {
-        savedRaw = await apiPost<any>(API_BASE_URL, '/admin/api/products', bodyWithWarehouse, {
-          idempotencyKey: stableId,
-        });
+        await apiPost(API_BASE_URL, productsPath('/admin/api/products'), payload);
       } catch {
-        savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', bodyWithWarehouse, {
-          idempotencyKey: stableId,
-        });
+        await apiPost(API_BASE_URL, productsPath('/api/products'), payload);
       }
-      if (import.meta.env.DEV && typeof performance !== 'undefined' && performance.measure) {
-        performance.measure('inventory-addProduct-api', 'inventory-addProduct-start');
-      }
-
-      const saved: Product = normalizeProduct(savedRaw);
-      logInventoryCreate({ productId: saved.id, sku: saved.sku, listLength: previousProducts.length + 1 });
-      let verified: Product;
-      if (responseIsFullProduct(savedRaw)) {
-        verified = saved;
-      } else {
-        setSavePhase('verifying');
-        try {
-          verified = await readAfterWriteVerify(saved.id);
-        } catch (e) {
-          reportError(e instanceof Error ? e : new Error('Read-after-write verify failed after add'), { productId: saved.id });
-          await loadProducts(undefined, { silent: true, bypassCache: true });
-          throw new Error('Save succeeded but verification failed. Please refresh the list or try again.');
-        }
-      }
-      if (!mountedRef.current) return;
-      setProducts((prev) => {
-        const next = [...prev].some((p) => p.id === verified.id)
-          ? prev.map((p) => (p.id === verified.id ? verified : p))
-          : [...prev.filter((p) => p.id !== optimisticProduct.id), verified];
-        persistProducts(next);
-        return next;
-      });
-      showToast('success', 'Product saved');
+      logInventoryCreate({ productId: id, sku: productData.sku ?? '', listLength: products.length + 1 });
+      showToast('success', 'Product saved.');
+      await loadProducts(undefined, { bypassCache: true });
+      return id;
     } catch (err) {
-      setProducts(previousProducts);
-      persistProducts(previousProducts);
       const msg = err instanceof Error ? err.message : 'Failed to save product';
       showToast('error', msg);
       throw err;
@@ -747,88 +751,33 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Update product: optimistic UI update, then PUT. On success: update state from server response, force fresh GET, toast.
-   * On failure: rollback and error toast. 409 triggers full refresh. No debouncing.
+   * Update product: offline-first when enabled; API-only when flag off.
    */
   const updateProduct = async (id: string, updates: Partial<Product> & { warehouseId?: string }) => {
     const product = products.find(p => p.id === id);
     if (!product) throw new Error('Product not found');
-
-    const updatedProduct = { ...product, ...updates, updatedAt: new Date() };
-    const payload = productToPayload(updatedProduct);
-    const bodyWithWarehouse = { ...payload, warehouseId: updates.warehouseId ?? currentWarehouseId };
-    const optimisticProduct: Product = normalizeProduct(updatedProduct);
-
-    const previousProducts = [...products];
-    setProducts((prev) => prev.map((p) => (p.id === id ? optimisticProduct : p)));
-    persistProducts(previousProducts.map((p) => (p.id === id ? optimisticProduct : p)));
     setSavePhase('saving');
     setError(null);
-
     try {
-      if (import.meta.env.DEV && typeof performance !== 'undefined' && performance.mark) {
-        performance.mark('inventory-updateProduct-start');
+      if (offlineEnabled) {
+        await offline.updateProduct(id, updates);
+        logInventoryUpdate({ productId: id, sku: product.sku });
+        showToast('success', 'Product updated. Syncing to server when online.');
+        return;
       }
-      const doPut = async (): Promise<any> => {
-        try {
-          return await apiPut<any>(API_BASE_URL, `/admin/api/products/${id}`, bodyWithWarehouse);
-        } catch (err: any) {
-          if (err?.status === 409) {
-            await loadProducts(undefined, { bypassCache: true });
-            showToast('error', 'Someone else updated this product. The list has been refreshed.');
-            throw new Error('Someone else updated this product. The list has been refreshed — please try your change again.');
-          }
-          throw err;
-        }
-      };
-
-      let putResult: any;
+      const updated = { ...product, ...updates, updatedAt: new Date() };
+      const payload = productToPayload(updated);
       try {
-        putResult = await doPut();
-      } catch (e) {
-        try {
-          putResult = await apiPut<any>(API_BASE_URL, `/api/products/${id}`, bodyWithWarehouse);
-        } catch (err: any) {
-          if (err?.status === 409) {
-            await loadProducts(undefined, { bypassCache: true });
-            showToast('error', 'Someone else updated this product. The list has been refreshed.');
-            throw new Error('Someone else updated this product. The list has been refreshed — please try your change again.');
-          }
-          throw err;
-        }
+        await apiPut(API_BASE_URL, productByIdPath('/admin/api/products', id), payload);
+      } catch {
+        await apiPut(API_BASE_URL, productByIdPath('/api/products', id), payload);
       }
-      if (import.meta.env.DEV && typeof performance !== 'undefined' && performance.measure) {
-        performance.measure('inventory-updateProduct-api', 'inventory-updateProduct-start');
-      }
-
       logInventoryUpdate({ productId: id, sku: product.sku });
-      let verified: Product;
-      if (responseIsFullProduct(putResult)) {
-        verified = normalizeProduct(putResult);
-      } else {
-        setSavePhase('verifying');
-        try {
-          verified = await readAfterWriteVerify(id);
-        } catch (e) {
-          reportError(e instanceof Error ? e : new Error('Read-after-write verify failed after update'), { productId: id });
-          await loadProducts(undefined, { silent: true, bypassCache: true });
-          throw new Error('Save succeeded but verification failed. Please refresh the list or try again.');
-        }
-      }
-      if (!mountedRef.current) return;
-      setProducts((prev) => {
-        const next = prev.map((p) => (p.id === id ? verified : p));
-        persistProducts(next);
-        return next;
-      });
-      showToast('success', 'Product updated');
+      showToast('success', 'Product updated.');
+      await loadProducts(undefined, { bypassCache: true });
     } catch (err) {
-      setProducts(previousProducts);
-      persistProducts(previousProducts);
-      if ((err as { status?: number })?.status !== 409) {
-        const msg = err instanceof Error ? err.message : 'Failed to update product';
-        showToast('error', msg);
-      }
+      const msg = err instanceof Error ? err.message : 'Failed to update product';
+      showToast('error', msg);
       throw err;
     } finally {
       setSavePhase('idle');
@@ -836,59 +785,40 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Delete product: WRITE PATH. Read-after-delete verification — no "Deleted" without confirmed absence.
+   * Delete product: offline-first when enabled; API-only when flag off.
    */
   const deleteProduct = async (id: string) => {
     try {
-      await apiDelete(API_BASE_URL, `/admin/api/products/${id}`);
-    } catch {
-      await apiDelete(API_BASE_URL, `/api/products/${id}`);
+      if (offlineEnabled) {
+        await offline.deleteProduct(id);
+        logInventoryDelete({ productId: id });
+        return;
+      }
+      try {
+        await apiDelete(API_BASE_URL, productByIdPath('/admin/api/products', id));
+      } catch {
+        await apiDelete(API_BASE_URL, productByIdPath('/api/products', id));
+      }
+      logInventoryDelete({ productId: id });
+      await loadProducts(undefined, { bypassCache: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete product';
+      showToast('error', msg);
+      throw err;
     }
-    await readAfterDeleteVerify([id]);
-    logInventoryDelete({ productId: id });
-    const next = products.filter(p => p.id !== id);
-    setProducts(next);
-    persistProducts(next);
   };
 
   /**
-   * Delete multiple products: WRITE PATH. Tries bulk then individual deletes.
+   * Delete multiple products: offline-first when enabled; API-only when flag off.
    */
   const deleteProducts = async (ids: string[]) => {
     if (ids.length === 0) return;
-
-    let bulkSuccess = false;
-    try {
-      await apiRequest({
-        baseUrl: API_BASE_URL,
-        path: '/admin/api/products/bulk',
-        method: 'DELETE',
-        body: JSON.stringify({ ids }),
-      });
-      bulkSuccess = true;
-    } catch {
-      try {
-        await apiRequest({
-          baseUrl: API_BASE_URL,
-          path: '/api/products/bulk',
-          method: 'DELETE',
-          body: JSON.stringify({ ids }),
-        });
-        bulkSuccess = true;
-      } catch {
-        // both bulk endpoints failed
-      }
-    }
-
-    if (!bulkSuccess) {
+    if (offlineEnabled) {
       const errors: string[] = [];
       for (const id of ids) {
         try {
-          try {
-            await apiDelete(API_BASE_URL, `/admin/api/products/${id}`);
-          } catch {
-            await apiDelete(API_BASE_URL, `/api/products/${id}`);
-          }
+          await offline.deleteProduct(id);
+          logInventoryDelete({ productId: id });
         } catch (err) {
           errors.push(err instanceof Error ? err.message : 'Delete failed');
         }
@@ -896,13 +826,22 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (errors.length > 0) {
         throw new Error(`Failed to delete ${errors.length} product(s): ${errors[0]}`);
       }
+      return;
     }
-
-    await readAfterDeleteVerify(ids);
-    ids.forEach((id) => logInventoryDelete({ productId: id }));
-    const next = products.filter(p => !ids.includes(p.id));
-    setProducts(next);
-    persistProducts(next);
+    for (const id of ids) {
+      try {
+        try {
+          await apiDelete(API_BASE_URL, productByIdPath('/admin/api/products', id));
+        } catch {
+          await apiDelete(API_BASE_URL, productByIdPath('/api/products', id));
+        }
+        logInventoryDelete({ productId: id });
+      } catch (err) {
+        showToast('error', err instanceof Error ? err.message : 'Delete failed');
+        throw err;
+      }
+    }
+    await loadProducts(undefined, { bypassCache: true });
   };
 
   const getProduct = (id: string) => {
@@ -990,13 +929,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       updateProduct,
       deleteProduct,
       deleteProducts,
+      undoAddProduct: offlineEnabled ? offline.undoAddProduct : async () => {},
       getProduct,
       searchProducts,
       filterProducts,
-      refreshProducts: (opts) => loadProducts(undefined, opts),
-      isBackgroundRefreshing,
+      refreshProducts: () => (offlineEnabled ? offline.forceSync() : loadProducts(undefined, { bypassCache: true })),
+      isBackgroundRefreshing: offlineEnabled ? offline.isSyncing : isBackgroundRefreshing,
       syncLocalInventoryToApi,
-      unsyncedCount: localOnlyIds.size,
+      unsyncedCount: offlineEnabled ? unsyncedCountFromHook + localOnlyIds.size : 0,
       lastSyncAt,
       isUnsynced,
       verifyProductSaved,

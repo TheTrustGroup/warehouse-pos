@@ -90,9 +90,10 @@ describe('InventoryContext reliability', () => {
     const newId = 'new-product-id-123';
     const saved = { id: newId, ...minimalProduct, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     vi.mocked(apiPost).mockResolvedValue(saved);
-    // Initial load returns []; by-id verify (path includes product id) returns single product so background verify does not overwrite state
+    // Initial load returns []. After addProduct, loadProducts(bypassCache) fetches list: return [saved] so product appears in state (API-only path).
     vi.mocked(apiGet).mockImplementation(async (_base: string, path: string) => {
       if (typeof path === 'string' && path.includes(newId)) return saved;
+      if (typeof path === 'string' && path.includes('products') && vi.mocked(apiPost).mock.calls.length > 0) return [saved];
       return [];
     });
 

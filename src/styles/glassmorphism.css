@@ -1,0 +1,223 @@
+/**
+ * Centralized glassmorphism styles.
+ * Performance: use max 3 blur layers per viewport; avoid on large scrolling containers.
+ * Use .glass-surface for fixed/small surfaces; avoid stacking on long scroll lists.
+ */
+
+@layer components {
+  /* ---- Tokens (for theming and color-mix) ---- */
+  :root {
+    --glass-bg-primary: rgba(255, 255, 255, 0.72);
+    --glass-bg-secondary: rgba(255, 255, 255, 0.55);
+    --glass-border: rgba(255, 255, 255, 0.18);
+    --glass-border-strong: rgba(255, 255, 255, 0.35);
+    --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.12);
+    --glass-blur: 10px;
+    --glass-blur-mobile: 6px;
+    --glass-saturate: 180%;
+  }
+
+  .dark {
+    --glass-bg-primary: rgba(30, 41, 59, 0.72);
+    --glass-bg-secondary: rgba(30, 41, 59, 0.55);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-strong: rgba(255, 255, 255, 0.15);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+  }
+
+  /* ---- Base glass (with @supports fallback) ---- */
+  @supports (backdrop-filter: blur(var(--glass-blur))) or (-webkit-backdrop-filter: blur(var(--glass-blur))) {
+    .glass-primary {
+      background: var(--glass-bg-primary);
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      color: inherit;
+      transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+    }
+
+    .glass-secondary {
+      background: color-mix(in srgb, var(--glass-bg-primary) 85%, transparent);
+      backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+      border: 1px solid color-mix(in srgb, var(--glass-border) 90%, transparent);
+      box-shadow: 0 4px 24px 0 rgba(31, 38, 135, 0.08);
+      color: inherit;
+      transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+    }
+
+    .glass-dark {
+      background: rgba(30, 41, 59, 0.75);
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+      color: rgba(248, 250, 252, 0.95);
+      transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+
+    .dark .glass-primary {
+      background: var(--glass-bg-primary);
+      border-color: var(--glass-border);
+      box-shadow: var(--glass-shadow);
+    }
+
+    .dark .glass-secondary {
+      background: color-mix(in srgb, var(--glass-bg-secondary) 90%, transparent);
+      border-color: var(--glass-border);
+    }
+  }
+
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass-primary {
+      background: rgba(255, 255, 255, 0.97);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      box-shadow: var(--glass-shadow);
+    }
+    .glass-secondary {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(226, 232, 240, 0.7);
+    }
+    .glass-dark,
+    .dark .glass-primary,
+    .dark .glass-secondary {
+      background: rgba(30, 41, 59, 0.97);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+  }
+
+  /* ---- Hover: smooth morph (use sparingly; will-change only on hover) ---- */
+  .glass-hover {
+    transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .glass-hover:hover {
+    background: color-mix(in srgb, var(--glass-bg-primary) 105%, white);
+    box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.15);
+    border-color: var(--glass-border-strong);
+    transform: translateY(-1px) scale(1.005);
+  }
+  .glass-hover:hover {
+    will-change: transform;
+  }
+  .glass-hover:not(:hover) {
+    will-change: auto;
+  }
+
+  .dark .glass-hover:hover {
+    background: color-mix(in srgb, var(--glass-bg-primary) 110%, white);
+    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4);
+  }
+
+  /* ---- Gradient border (pseudo-element) ---- */
+  .glass-border-gradient {
+    position: relative;
+    border: none;
+  }
+  .glass-border-gradient::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.4), rgba(255,255,255,0.1), rgba(255,255,255,0.25));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  .dark .glass-border-gradient::before {
+    background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05), rgba(255,255,255,0.15));
+  }
+
+  /* ---- Shimmer (loading state) ---- */
+  @keyframes glass-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .glass-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.4) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: glass-shimmer 1.8s ease-in-out infinite;
+  }
+  .dark .glass-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
+
+  /* ---- Legacy names (backward compat): .glass and .glass-card ---- */
+  .glass {
+    background: var(--glass-bg-primary);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border-strong);
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass { background: rgba(255, 255, 255, 0.98); }
+  }
+
+  .glass-card {
+    border-radius: 1rem; /* 16px / rounded-2xl */
+    background: var(--glass-bg-primary);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .glass-card:hover {
+    background: color-mix(in srgb, var(--glass-bg-primary) 110%, white);
+    box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.12);
+    border-color: var(--glass-border-strong);
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass-card { background: rgba(255, 255, 255, 0.95); }
+  }
+  .dark .glass-card {
+    background: var(--glass-bg-primary);
+    border-color: var(--glass-border);
+  }
+  .dark .glass-card:hover {
+    background: color-mix(in srgb, var(--glass-bg-primary) 115%, white);
+    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.35);
+  }
+
+  /* ---- Overlay (modal backdrop): blur only, no heavy shadow ---- */
+  .glass-overlay {
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: opacity 0.2s ease;
+  }
+  @supports not (backdrop-filter: blur(4px)) {
+    .glass-overlay { background: rgba(0, 0, 0, 0.55); }
+  }
+
+  /* ---- Mobile: reduce blur for performance ---- */
+  @media (max-width: 768px) {
+    :root {
+      --glass-blur: 6px;
+    }
+  }
+
+  /* Optional: reduce motion / low-end (no blur intensity change by RAM in CSS; we only do viewport) */
+  @media (prefers-reduced-motion: reduce) {
+    .glass-hover:hover {
+      transform: none;
+    }
+    .glass-shimmer {
+      animation-duration: 2.5s;
+    }
+  }
+}

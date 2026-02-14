@@ -16,7 +16,7 @@ export function KeyboardShortcuts() {
       <Button
         variant="action"
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 left-4 p-3 bg-white rounded-full shadow-lg hover:shadow-xl transition-shadow z-40 min-w-[44px] min-h-[44px] flex items-center justify-center"
+        className="fixed bottom-4 left-4 p-3 glass-primary rounded-full shadow-lg hover:shadow-xl transition-shadow z-40 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-700 border border-white/20"
         title="Keyboard Shortcuts"
         aria-label="Open keyboard shortcuts"
       >
@@ -24,13 +24,13 @@ export function KeyboardShortcuts() {
       </Button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay-padding p-4" onClick={() => setIsOpen(false)}>
-          <div className="bg-white rounded-xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto modal-content-fit" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Keyboard Shortcuts</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center glass-overlay modal-overlay-padding p-4" onClick={() => setIsOpen(false)}>
+          <div className="glass-primary glass-border-gradient rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto modal-content-fit text-slate-900 dark:text-slate-100" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-4">Keyboard Shortcuts</h3>
             <div className="space-y-2">
               {shortcuts.map((shortcut, idx) => (
                 <div key={idx} className="flex justify-between items-center">
-                  <span className="text-slate-600">{shortcut.description}</span>
+                  <span className="text-slate-600 dark:text-slate-400">{shortcut.description}</span>
                   <kbd className="px-2 py-1 bg-slate-100 rounded text-sm font-mono">
                     {shortcut.key}
                   </kbd>

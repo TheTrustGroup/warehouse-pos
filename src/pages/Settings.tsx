@@ -1,25 +1,30 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Building2, Settings as SettingsIcon, Users, Tag, RotateCcw, Database } from 'lucide-react';
+import { Building2, Settings as SettingsIcon, Users, Tag, RotateCcw, Database, Shield } from 'lucide-react';
 import { BusinessProfile } from '../components/settings/BusinessProfile';
 import { SystemPreferences } from '../components/settings/SystemPreferences';
 import { UserManagement } from '../components/settings/UserManagement';
 import { CategoryManagement } from '../components/settings/CategoryManagement';
 import { LocalStorageCacheView } from '../components/settings/LocalStorageCacheView';
+import { AdminDashboard } from '../components/settings/AdminDashboard';
 import { useSettings } from '../contexts/SettingsContext';
 import { Button } from '../components/ui/Button';
 
-type SettingsTab = 'business' | 'system' | 'users' | 'categories' | 'cache';
+type SettingsTab = 'business' | 'system' | 'users' | 'categories' | 'cache' | 'admin';
+
+const TAB_IDS: SettingsTab[] = ['business', 'system', 'users', 'categories', 'cache', 'admin'];
 
 export function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') as SettingsTab | null;
-  const [activeTab, setActiveTab] = useState<SettingsTab>(tabParam && ['business', 'system', 'users', 'categories', 'cache'].includes(tabParam) ? tabParam : 'business');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    tabParam && TAB_IDS.includes(tabParam) ? tabParam : 'business'
+  );
   const { resetToDefaults } = useSettings();
 
   // Update tab when URL param changes
   useEffect(() => {
-    if (tabParam && ['business', 'system', 'users', 'categories', 'cache'].includes(tabParam)) {
+    if (tabParam && TAB_IDS.includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -36,6 +41,7 @@ export function Settings() {
     { id: 'users' as SettingsTab, label: 'Users', icon: Users },
     { id: 'categories' as SettingsTab, label: 'Categories', icon: Tag },
     { id: 'cache' as SettingsTab, label: 'Data & cache', icon: Database },
+    { id: 'admin' as SettingsTab, label: 'Admin & logs', icon: Shield },
   ];
 
   const handleReset = () => {
@@ -90,6 +96,7 @@ export function Settings() {
           {activeTab === 'users' && <UserManagement />}
           {activeTab === 'categories' && <CategoryManagement />}
           {activeTab === 'cache' && <LocalStorageCacheView />}
+          {activeTab === 'admin' && <AdminDashboard />}
         </div>
       </div>
     </div>

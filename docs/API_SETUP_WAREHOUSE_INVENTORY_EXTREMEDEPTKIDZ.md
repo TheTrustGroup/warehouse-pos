@@ -79,7 +79,7 @@ Result: warehouse app calls the API subdomain; CORS must allow `https://warehous
 
 ### Warehouse POS project (frontend)
 
-- [ ] **`VITE_API_BASE_URL`** = exact base URL of the **inventory-server** (no trailing slash).  
+- [ ] **`VITE_API_BASE_URL`** = full URL of the **inventory-server** including **`https://`** (e.g. `https://warehouse-pos-api-v2-xxxx.vercel.app`). No trailing slash. Without the protocol, login requests go to the wrong host (405 / invalid credentials).  
   Examples: `https://extremedeptkidz.com` or `https://api.extremedeptkidz.com`.
 - [ ] **`VITE_SUPER_ADMIN_EMAILS`** (optional) = your admin email(s), comma-separated, so your login gets the Admin Control Panel.
 - [ ] Redeploy after changing env vars (Vite bakes them into the build).

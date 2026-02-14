@@ -1,8 +1,13 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Product } from '../../types';
 import { formatCurrency } from '../../lib/utils';
+import { ProductSyncBadge } from '../ProductSyncBadge';
 import { Package, Edit, Trash2, AlertTriangle, CloudOff, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { useAnimations } from '../../hooks/useAnimations';
+import { glassReveal, glassHover, liquidMorph, rippleVariants } from '../../animations/liquidGlass';
+import { hapticFeedback } from '../../lib/haptics';
 
 interface ProductGridViewProps {
   products: Product[];
@@ -16,6 +21,7 @@ interface ProductGridViewProps {
   showCostPrice?: boolean;
   isUnsynced?: (productId: string) => boolean;
   onVerifySaved?: (productId: string) => Promise<{ saved: boolean; product?: Product }>;
+  onRetrySync?: () => void;
 }
 
 export function ProductGridView({
@@ -30,8 +36,25 @@ export function ProductGridView({
   showCostPrice: _showCostPrice = true,
   isUnsynced,
   onVerifySaved,
+  onRetrySync,
 }: ProductGridViewProps) {
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [ripple, setRipple] = useState<{ productId: string; x: number; y: number; id: number } | null>(null);
+  const { reduced } = useAnimations();
+  const reveal = glassReveal(reduced);
+  const hover = glassHover(reduced);
+  const morph = liquidMorph(reduced);
+  const rippleV = rippleVariants(reduced);
+
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>, productId: string) => {
+    const target = e.currentTarget;
+    const rect = target.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setRipple({ productId, x, y, id: Date.now() });
+    hapticFeedback(8);
+    setTimeout(() => setRipple((prev) => (prev?.productId === productId ? null : prev)), 400);
+  };
 
   const handleSelectOne = (id: string, checked: boolean) => {
     onSelectChange(
@@ -55,12 +78,36 @@ export function ProductGridView({
         const isSelected = selectedIds.includes(product.id);
 
         return (
-          <div
+          <motion.div
             key={product.id}
-            className={`glass-card group cursor-pointer relative ${
+            {...reveal}
+            {...hover}
+            {...morph}
+            onClick={(e) => handleCardClick(e, product.id)}
+            className={`glass-card group cursor-pointer relative overflow-hidden ${
               canSelect && isSelected ? 'ring-2 ring-primary-500 ring-offset-2' : ''
             }`}
           >
+            <AnimatePresence>
+              {ripple?.productId === product.id && (
+                <motion.span
+                  key={ripple.id}
+                  className="absolute rounded-full bg-white/40 pointer-events-none"
+                  style={{
+                    left: ripple.x,
+                    top: ripple.y,
+                    width: 20,
+                    height: 20,
+                    marginLeft: -10,
+                    marginTop: -10,
+                  }}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  variants={rippleV}
+                />
+              )}
+            </AnimatePresence>
             {canSelect && (
               <div className="absolute top-4 left-4 z-10">
                 <input
@@ -72,13 +119,23 @@ export function ProductGridView({
                 />
               </div>
             )}
-            {isUnsynced?.(product.id) && (
-              <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-100 text-amber-800 text-xs font-medium" title="Saved on this device only">
-                  <CloudOff className="w-3.5 h-3.5" />
-                  Local only
-                </span>
-                {onVerifySaved && (
+            {(product as Product & { syncStatus?: string }).syncStatus && (
+              <div className="absolute top-3 right-3 z-10">
+                <ProductSyncBadge
+                  status={(product as Product & { syncStatus?: string }).syncStatus as 'synced' | 'pending' | 'syncing' | 'error'}
+                  onRetry={onRetrySync}
+                />
+              </div>
+            )}
+            {((product as Product & { syncStatus?: string }).syncStatus || isUnsynced?.(product.id)) && !(product as Product & { syncStatus?: string }).syncStatus && (
+              <div className="absolute top-4 right-4 z-10 flex flex-wrap items-center gap-1.5">
+                {isUnsynced?.(product.id) && !(product as Product & { syncStatus?: string }).syncStatus && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-100 text-amber-800 text-xs font-medium" title="Saved on this device only">
+                    <CloudOff className="w-3.5 h-3.5" />
+                    Local only
+                  </span>
+                )}
+                {isUnsynced?.(product.id) && onVerifySaved && (
                   <Button
                     type="button"
                     variant="action"
@@ -185,7 +242,7 @@ export function ProductGridView({
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
         );
       })}
 

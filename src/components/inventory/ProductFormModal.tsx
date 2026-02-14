@@ -5,10 +5,11 @@ import { safeValidateProductForm } from '../../lib/validationSchemas';
 import { useWarehouse } from '../../contexts/WarehouseContext';
 import { useInventory } from '../../contexts/InventoryContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useNetworkStatusContext } from '../../contexts/NetworkStatusContext';
 import { API_BASE_URL } from '../../lib/api';
 import { apiGet } from '../../lib/apiClient';
 import { Button } from '../ui/Button';
-import { X, Upload, Plus, Trash2 } from 'lucide-react';
+import { X, Upload, Plus, Trash2, CloudOff } from 'lucide-react';
 
 export type SizeKind = 'na' | 'one_size' | 'sized';
 
@@ -29,6 +30,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
   const { warehouses, currentWarehouseId } = useWarehouse();
   const { savePhase } = useInventory();
   const { showToast } = useToast();
+  const { isOnline } = useNetworkStatusContext();
   const [formData, setFormData] = useState({
     sku: '',
     barcode: '',
@@ -122,13 +124,13 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
   }, [product, isOpen, currentWarehouseId]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !isOnline) return;
     setSizeCodesLoading(true);
     apiGet<{ data: SizeCodeOption[] }>(API_BASE_URL, '/api/size-codes')
       .then((res) => setSizeCodes(Array.isArray(res?.data) ? res.data : []))
       .catch(() => setSizeCodes([]))
       .finally(() => setSizeCodesLoading(false));
-  }, [isOpen]);
+  }, [isOpen, isOnline]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -224,7 +226,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
   /* Modal: one primary action = Save/Update; Cancel secondary. Backdrop click + Escape close. Scroll lock when open. */
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 modal-overlay-padding"
+      className="fixed inset-0 glass-overlay flex items-center justify-center z-50 modal-overlay-padding"
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-form-title"
@@ -244,6 +246,12 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto flex-1 min-h-0">
+          {!isOnline && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-center gap-2 text-amber-900 text-sm font-medium" role="status">
+              <CloudOff className="w-5 h-5 flex-shrink-0" aria-hidden />
+              <span>You&apos;re offline. Product will be saved locally and synced when online.</span>
+            </div>
+          )}
           {/* Basic info: labels calm (font-medium), inputs min-h-touch */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
@@ -648,6 +656,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             <label className="block text-sm font-medium text-slate-600 mb-1.5">
               Product images
             </label>
+            {!isOnline && (
+              <p className="text-amber-700 text-xs mb-2">Images are stored locally only when offline. Cloud upload when back online.</p>
+            )}
             <div className="flex flex-wrap gap-4 mb-4">
               {imagePreview.map((img, index) => (
                 <div key={index} className="relative">
@@ -662,15 +673,16 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
                 </div>
               ))}
             </div>
-            <label className="flex items-center gap-2 min-h-touch px-4 py-2.5 border border-slate-200/80 rounded-xl cursor-pointer hover:bg-slate-50 w-fit transition-colors text-sm font-medium text-slate-700">
+            <label className={`flex items-center gap-2 min-h-touch px-4 py-2.5 border border-slate-200/80 rounded-xl w-fit transition-colors text-sm font-medium text-slate-700 ${isOnline ? 'cursor-pointer hover:bg-slate-50' : 'cursor-not-allowed opacity-60'}`}>
               <Upload className="w-5 h-5 text-slate-600" />
-              <span>Upload images</span>
+              <span>{isOnline ? 'Upload images' : 'Upload (local only when offline)'}</span>
               <input
                 type="file"
                 accept="image/*"
                 multiple
                 onChange={handleImageUpload}
                 className="hidden"
+                disabled={!isOnline}
               />
             </label>
           </div>

@@ -101,6 +101,32 @@ export function SystemPreferences() {
               <p className="text-sm text-slate-500">Receive alerts for low stock and daily reports</p>
             </div>
           </label>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.animationsEnabled}
+              onChange={e => setFormData({ ...formData, animationsEnabled: e.target.checked })}
+              className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+            />
+            <div>
+              <p className="font-medium text-slate-900">Enable animations</p>
+              <p className="text-sm text-slate-500">Liquid glass transitions, hover effects. Respects system reduce-motion.</p>
+            </div>
+          </label>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.soundEffects}
+              onChange={e => setFormData({ ...formData, soundEffects: e.target.checked })}
+              className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+            />
+            <div>
+              <p className="font-medium text-slate-900">Sound effects</p>
+              <p className="text-sm text-slate-500">Optional sounds on sync complete (when enabled).</p>
+            </div>
+          </label>
         </div>
 
         <div className="flex justify-end">
