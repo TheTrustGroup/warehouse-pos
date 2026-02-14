@@ -167,21 +167,24 @@
     .glass { background: rgba(255, 255, 255, 0.98); }
   }
 
-  /* Opaque glass for side panels / mobile menu: keeps glass look but blocks background text */
+  /* Opaque glass for side panels / side menu: blur + border keep liquid glass, high opacity blocks background text */
   .glass-panel {
-    background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
     border: 1px solid var(--glass-border-strong);
     box-shadow: var(--glass-shadow);
     transition: background 0.2s ease, box-shadow 0.2s ease;
   }
   @supports not (backdrop-filter: blur(16px)) {
-    .glass-panel { background: rgba(255, 255, 255, 0.98); }
+    .glass-panel { background: rgba(255, 255, 255, 1); }
   }
   .dark .glass-panel {
-    background: rgba(30, 41, 59, 0.96);
+    background: rgba(30, 41, 59, 0.98);
     border-color: rgba(255, 255, 255, 0.12);
+  }
+  @supports not (backdrop-filter: blur(16px)) {
+    .dark .glass-panel { background: rgba(30, 41, 59, 1); }
   }
 
   .glass-card {

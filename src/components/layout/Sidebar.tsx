@@ -61,7 +61,7 @@ export function Sidebar() {
   );
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[280px] glass border-r border-white/40 flex flex-col shadow-glass">
+    <aside className="fixed left-0 top-0 h-screen w-[280px] glass-panel border-r border-white/40 flex flex-col shadow-glass">
       {/* Logo: hierarchy via size, not weight overload */}
       <div className="p-5 border-b border-slate-200/30">
         <div className="flex flex-col gap-0.5">
