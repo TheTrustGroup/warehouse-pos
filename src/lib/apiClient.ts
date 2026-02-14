@@ -201,12 +201,12 @@ export function apiGet<T>(
   return apiRequest<T>({ ...options, baseUrl, path, method: 'GET' });
 }
 
-/** POST with optional idempotency key and signal. Sends Content-Type: application/json. */
+/** POST with optional idempotency key, signal, and timeout. Sends Content-Type: application/json. */
 export function apiPost<T>(
   baseUrl: string,
   path: string,
   body: unknown,
-  options?: { idempotencyKey?: string; signal?: AbortSignal | null }
+  options?: { idempotencyKey?: string; signal?: AbortSignal | null; timeoutMs?: number }
 ): Promise<T> {
   const headers = new Headers(getApiHeaders());
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
@@ -220,12 +220,12 @@ export function apiPost<T>(
   });
 }
 
-/** PUT with optional signal. Sends Content-Type: application/json. */
+/** PUT with optional signal and timeout. Sends Content-Type: application/json. */
 export function apiPut<T>(
   baseUrl: string,
   path: string,
   body: unknown,
-  options?: { signal?: AbortSignal | null }
+  options?: { signal?: AbortSignal | null; timeoutMs?: number }
 ): Promise<T> {
   const headers = new Headers(getApiHeaders());
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');

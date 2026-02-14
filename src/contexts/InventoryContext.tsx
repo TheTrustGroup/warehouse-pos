@@ -656,10 +656,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   /**
    * Add product: offline-first when enabled; API-only when flag off (INTEGRATION_PLAN).
+   * Uses API response to update state immediately (no full refetch) so "Saving..." disappears quickly.
    * @returns The new product id (for undo when offline).
    */
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }): Promise<string> => {
     if (!productData?.name?.trim?.()) throw new Error('Product name is required');
+    const SAVE_TIMEOUT_MS = 10_000;
+    if (import.meta.env?.DEV) {
+      console.time('Total Save Time');
+      console.time('Data Preparation');
+    }
     setSavePhase('saving');
     setError(null);
     try {
@@ -677,15 +683,42 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         updatedAt: new Date(),
       } as Product;
       const payload = productToPayload(newProduct);
-      try {
-        await apiPost(API_BASE_URL, productsPath('/admin/api/products'), payload);
-      } catch {
-        await apiPost(API_BASE_URL, productsPath('/api/products'), payload);
+      if (import.meta.env?.DEV) {
+        console.timeEnd('Data Preparation');
+        console.time('API Request');
       }
-      logInventoryCreate({ productId: id, sku: productData.sku ?? '', listLength: products.length + 1 });
+      let created: Record<string, unknown> | null = null;
+      try {
+        created = (await apiPost<Record<string, unknown>>(API_BASE_URL, productsPath('/admin/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+      } catch {
+        created = (await apiPost<Record<string, unknown>>(API_BASE_URL, productsPath('/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+      }
+      if (import.meta.env?.DEV) {
+        console.timeEnd('API Request');
+        console.time('State Update');
+      }
+      const normalized = created && (created as { id?: string }).id
+        ? normalizeProduct(created as any)
+        : (newProduct as Product);
+      const resolvedId = (normalized as Product).id ?? id;
+      const newList = [normalized, ...products];
+      setApiOnlyProductsState(newList);
+      cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
+      if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), newList);
+      if (isIndexedDBAvailable()) {
+        saveProductsToDb(newList).catch((e) => {
+          reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: newList.length });
+        });
+      }
+      setLastSyncAt(new Date());
+      logInventoryCreate({ productId: resolvedId, sku: productData.sku ?? '', listLength: newList.length });
       showToast('success', 'Product saved.');
-      await loadProducts(undefined, { bypassCache: true });
-      return id;
+      if (import.meta.env?.DEV) {
+        console.timeEnd('State Update');
+        console.timeEnd('Total Save Time');
+      }
+      loadProducts(undefined, { silent: true }).catch(() => {});
+      return resolvedId;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to save product';
       showToast('error', msg);
@@ -697,10 +730,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   /**
    * Update product: offline-first when enabled; API-only when flag off.
+   * Uses PUT response to update state immediately (no full refetch) so "Saving..." disappears quickly.
    */
   const updateProduct = async (id: string, updates: Partial<Product> & { warehouseId?: string }) => {
     const product = products.find((p: Product) => p.id === id);
     if (!product) throw new Error('Product not found');
+    const SAVE_TIMEOUT_MS = 10_000;
+    if (import.meta.env?.DEV) {
+      console.time('Total Update Time');
+      console.time('API Request (update)');
+    }
     setSavePhase('saving');
     setError(null);
     try {
@@ -712,14 +751,36 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
       const payload = productToPayload(updated);
+      let fromApi: Record<string, unknown> | null = null;
       try {
-        await apiPut(API_BASE_URL, productByIdPath('/admin/api/products', id), payload);
+        fromApi = (await apiPut<Record<string, unknown>>(API_BASE_URL, productByIdPath('/admin/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
       } catch {
-        await apiPut(API_BASE_URL, productByIdPath('/api/products', id), payload);
+        fromApi = (await apiPut<Record<string, unknown>>(API_BASE_URL, productByIdPath('/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
       }
+      if (import.meta.env?.DEV) {
+        console.timeEnd('API Request (update)');
+        console.time('State Update (update)');
+      }
+      const normalized = fromApi && (fromApi as { id?: string }).id
+        ? normalizeProduct(fromApi as any)
+        : updated;
+      const newList = products.map((p) => (p.id === id ? normalized : p));
+      setApiOnlyProductsState(newList);
+      cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
+      if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), newList);
+      if (isIndexedDBAvailable()) {
+        saveProductsToDb(newList).catch((e) => {
+          reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: newList.length });
+        });
+      }
+      setLastSyncAt(new Date());
       logInventoryUpdate({ productId: id, sku: product.sku });
       showToast('success', 'Product updated.');
-      await loadProducts(undefined, { bypassCache: true });
+      if (import.meta.env?.DEV) {
+        console.timeEnd('State Update (update)');
+        console.timeEnd('Total Update Time');
+      }
+      loadProducts(undefined, { silent: true }).catch(() => {});
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to update product';
       showToast('error', msg);

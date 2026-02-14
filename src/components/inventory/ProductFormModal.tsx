@@ -166,6 +166,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+    if (import.meta.env?.DEV) console.time('ProductForm Submit (total)');
     const validSizeRows = (formData.quantityBySize ?? []).filter((r) => (r.sizeCode ?? '').trim() !== '');
     if (formData.sizeKind === 'sized' && validSizeRows.length === 0) {
       showToast('error', 'Add at least one size row to save.');
@@ -203,6 +204,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
       // Parent shows toast; keep modal open
     } finally {
       setIsSubmitting(false);
+      if (import.meta.env?.DEV) console.timeEnd('ProductForm Submit (total)');
     }
   };
 
