@@ -117,7 +117,7 @@ export function Inventory() {
           <p className="text-slate-500 text-xs mb-6 break-all font-mono">
             Backend: {API_BASE_URL}
           </p>
-          <Button variant="primary" onClick={() => refreshProducts()} className="inline-flex items-center gap-2" aria-label="Retry loading products">
+          <Button variant="primary" onClick={() => refreshProducts({ bypassCache: true, timeoutMs: 60_000 })} className="inline-flex items-center gap-2" aria-label="Retry loading products">
             <RefreshCw className="w-4 h-4" />
             Retry
           </Button>

@@ -454,6 +454,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const fromDb = await loadProductsFromDb<any>();
         if (fromDb.length > 0) {
           setProducts(fromDb.map((p: any) => normalizeProduct(p)));
+          if (!silent) {
+            setError(null);
+            showToast('warning', 'Showing cached data. Tap Retry to refresh.');
+          }
           return;
         }
       }
@@ -464,6 +468,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         localProducts = getAllCachedProducts();
       }
       setProducts(localProducts);
+      if (localProducts.length > 0 && !silent) {
+        setError(null);
+        showToast('warning', 'Showing cached data. Tap Retry to refresh.');
+      }
     } finally {
       if (silent) setBackgroundRefreshing(false);
       setIsLoading(false);
@@ -939,7 +947,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       getProduct,
       searchProducts,
       filterProducts,
-      refreshProducts: () => (offlineEnabled ? offline.forceSync() : loadProducts(undefined, { bypassCache: true })),
+      refreshProducts: (options) => (offlineEnabled ? offline.forceSync() : loadProducts(undefined, { bypassCache: true, ...options })),
       isBackgroundRefreshing: offlineEnabled ? offline.isSyncing : isBackgroundRefreshing,
       syncLocalInventoryToApi,
       unsyncedCount: offlineEnabled ? unsyncedCountFromHook + localOnlyIds.size : 0,

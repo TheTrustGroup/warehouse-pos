@@ -16,8 +16,8 @@ const RETRYABLE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 /** Status codes that are worth retrying (transient). */
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
-/** Default request timeout so saves/loads don't hang forever when server is unreachable. */
-const DEFAULT_TIMEOUT_MS = 25_000;
+/** Default request timeout. Kept high (45s) for serverless cold start + slow networks. */
+const DEFAULT_TIMEOUT_MS = 45_000;
 
 export interface ApiRequestOptions extends RequestInit {
   /** Base URL (no trailing slash). */
