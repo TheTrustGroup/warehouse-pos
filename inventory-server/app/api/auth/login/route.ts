@@ -5,16 +5,24 @@ import {
   sessionUserToJson,
   createSessionToken,
 } from '@/lib/auth/session';
+import { isPosRestrictedEmail, verifyPosPassword } from '@/lib/auth/posPasswords';
 
 export const dynamic = 'force-dynamic';
 
-/** Login: derive role from email (server-side). Optional binding: warehouse_id, store_id, device_id (not required). */
+/** Login: validate email (and POS password when applicable). Derive role from email (server-side). */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const email = (body.email || body.username || '').trim().toLowerCase();
+    const password = typeof body.password === 'string' ? body.password : '';
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    }
+
+    if (isPosRestrictedEmail(email)) {
+      if (!verifyPosPassword(email, password)) {
+        return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+      }
     }
 
     const role = getRoleFromEmail(email);

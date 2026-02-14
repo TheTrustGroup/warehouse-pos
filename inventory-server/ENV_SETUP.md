@@ -25,10 +25,24 @@ cp .env.local.example .env.local
 Example:
 
 ```env
-ALLOWED_ADMIN_EMAILS=you@extremedeptkidz.com,admin@extremedeptkidz.com
+ALLOWED_ADMIN_EMAILS=info@extremedeptkidz.com
 ```
 
-If you don’t set this, **no one** gets admin from the backend.
+If you don’t set this, **`info@extremedeptkidz.com`** is still treated as admin by default so admin credentials remain unchanged.
+
+### POS passwords (required for POS login)
+
+Only the configured passwords work for the two POS accounts; any other password is rejected.
+
+```env
+POS_PASSWORD_CASHIER_MAIN_STORE=MEDk-1!@#
+POS_PASSWORD_MAIN_TOWN=TEDk-2!@#
+```
+
+- **Main Store/DC:** `cashier@extremedeptkidz.com` → password must match `POS_PASSWORD_CASHIER_MAIN_STORE`.
+- **Main Town:** `maintown_cashier@extremedeptkidz.com` → password must match `POS_PASSWORD_MAIN_TOWN`.
+
+If either is unset, login for that POS account will fail with “Invalid email or password”.
 
 ## 3. Set Supabase (and optional CORS)
 
@@ -38,9 +52,11 @@ Fill in `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`. Optional
 
 In the project’s environment variables, add:
 
-| Name                  | Value                                      | Notes                    |
-|-----------------------|--------------------------------------------|--------------------------|
-| `SESSION_SECRET`      | Output of `openssl rand -hex 24`           | Required in production   |
-| `ALLOWED_ADMIN_EMAILS`| Your admin email(s), comma-separated        | Required for admin role |
+| Name                             | Value                                      | Notes                    |
+|----------------------------------|--------------------------------------------|--------------------------|
+| `SESSION_SECRET`                 | Output of `openssl rand -hex 24`           | Required in production  |
+| `ALLOWED_ADMIN_EMAILS`           | Your admin email(s), comma-separated       | Required for admin role |
+| `POS_PASSWORD_CASHIER_MAIN_STORE`| Password for cashier@… (Main Store/DC)     | Required for POS login  |
+| `POS_PASSWORD_MAIN_TOWN`         | Password for maintown_cashier@… (Main Town)| Required for POS login  |
 
 Redeploy after changing env vars.

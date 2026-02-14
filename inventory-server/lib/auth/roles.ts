@@ -60,15 +60,17 @@ export function getRoleFromEmail(email: string): BackendRole {
   return 'viewer';
 }
 
+/** Default admin email so admin login works even when env is not set. Keep admin credentials unchanged. */
+const DEFAULT_ADMIN_EMAIL = 'info@extremedeptkidz.com';
+
 function getAdminEmails(): Set<string> {
   const raw = process.env.ALLOWED_ADMIN_EMAILS ?? process.env.VITE_SUPER_ADMIN_EMAILS ?? '';
-  if (!raw || typeof raw !== 'string') return new Set();
-  return new Set(
-    raw
-      .split(',')
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean)
-  );
+  const fromEnv = raw && typeof raw === 'string'
+    ? raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)
+    : [];
+  const set = new Set(fromEnv);
+  if (set.size === 0) set.add(DEFAULT_ADMIN_EMAIL);
+  return set;
 }
 
 export function isAdmin(role: string): boolean {

@@ -1,5 +1,7 @@
 -- Seed: Main Store (store) + DC (its warehouse); Main town (store + warehouse).
--- One POS uses DC + Main Store; a different POS uses Main town only.
+-- POS logins (see POS_CREDENTIALS.md):
+--   Main Store/DC: cashier@extremedeptkidz.com
+--   Main Town:     maintown_cashier@extremedeptkidz.com
 -- Run in Supabase SQL Editor. Safe to run multiple times.
 
 -- 1. Ensure store "Main Store" exists (may already exist from phase3)
@@ -33,8 +35,7 @@ UPDATE warehouses
 SET store_id = (SELECT id FROM stores WHERE name = 'Main town' LIMIT 1)
 WHERE code = 'MAINTOWN';
 
--- 5. User scope: POS that uses DC + Main Store (same POS for both)
---    Replace the email with the login used on that device.
+-- 5. User scope: Main Store/DC POS — cashier@extremedeptkidz.com (password MEDk-1!@#)
 INSERT INTO user_scopes (user_email, store_id, warehouse_id, created_at)
 SELECT
   'cashier@extremedeptkidz.com',
@@ -50,24 +51,7 @@ WHERE s.name = 'Main Store'
       AND us.warehouse_id = w.id
   );
 
--- 6. User scope: POS that uses only Main town (different POS)
---    Replace the email with the login used on the Main town device.
-INSERT INTO user_scopes (user_email, store_id, warehouse_id, created_at)
-SELECT
-  'maintown@extremedeptkidz.com',
-  s.id,
-  w.id,
-  now()
-FROM stores s
-JOIN warehouses w ON w.code = 'MAINTOWN' AND w.store_id = s.id
-WHERE s.name = 'Main town'
-  AND NOT EXISTS (
-    SELECT 1 FROM user_scopes us
-    WHERE us.user_email = 'maintown@extremedeptkidz.com'
-      AND us.warehouse_id = w.id
-  );
-
--- 7. Same Main town scope for maintown_cashier@ (common login for Main town POS)
+-- 6. User scope: Main Town POS — maintown_cashier@extremedeptkidz.com (password TEDk-2!@#)
 INSERT INTO user_scopes (user_email, store_id, warehouse_id, created_at)
 SELECT
   'maintown_cashier@extremedeptkidz.com',
