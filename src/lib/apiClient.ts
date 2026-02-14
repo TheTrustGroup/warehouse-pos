@@ -192,11 +192,11 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
   }
 }
 
-/** GET with optional signal, timeout, and retries. */
+/** GET with optional signal, timeout, and retries. Use maxRetries: 0 to fail fast (e.g. product list so cache shows on 500). */
 export function apiGet<T>(
   baseUrl: string,
   path: string,
-  options?: { signal?: AbortSignal | null; timeoutMs?: number }
+  options?: { signal?: AbortSignal | null; timeoutMs?: number; maxRetries?: number }
 ): Promise<T> {
   return apiRequest<T>({ ...options, baseUrl, path, method: 'GET' });
 }

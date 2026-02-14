@@ -10,7 +10,7 @@ const HEALTH_CHECK_INTERVAL_MS = 60_000;
 const HEALTH_CHECK_TIMEOUT_MS = 5_000;
 
 /**
- * Perform a single health check: GET /api/health or /api/ping with timeout.
+ * Perform a single health check: GET /api/health with timeout.
  * Uses credentials: 'omit' to avoid CORS preflight where possible.
  * @param {string} [baseUrl] - API base URL (defaults to API_BASE_URL)
  * @returns {Promise<boolean>} True if server responded with 2xx
@@ -29,21 +29,7 @@ export async function checkServerReachable(baseUrl = API_BASE_URL) {
     clearTimeout(timeoutId);
     return res.ok;
   } catch {
-    try {
-      const pingUrl = `${baseUrl.replace(/\/$/, '')}/api/ping`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
-      const res = await fetch(pingUrl, {
-        method: 'GET',
-        credentials: 'omit',
-        cache: 'no-store',
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      return res.ok;
-    } catch {
-      return false;
-    }
+    return false;
   }
 }
 

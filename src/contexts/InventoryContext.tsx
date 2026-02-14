@@ -325,14 +325,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       try {
         const path = productsPath('/api/products', { limit: 1000 });
+        // Fail fast on server/network errors so we show cached products instead of spinning (maxRetries: 0).
+        const getOpts = { signal, timeoutMs, maxRetries: 0 };
         let raw: { data?: Product[]; total?: number } | Product[] | null = null;
         try {
-          raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, { signal, timeoutMs });
+          raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
         } catch (e) {
           const status = (e as { status?: number })?.status;
           // Only fall back to admin endpoint when /api/products is not found (404). Never on 403 — cashiers must use /api/products only.
           if (status === 404) {
-            raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: 1000 }), { signal, timeoutMs });
+            raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: 1000 }), getOpts);
           } else {
             throw e;
           }
@@ -443,7 +445,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       } else if (status === 401) {
         message = 'Please log in again. Session may have expired.';
       } else if (status != null && status >= 500) {
-        message = `Server error (${status}). Try again in a moment or check backend logs.`;
+        message = `Server error (${status}) loading products. Showing cached data if available—check backend (e.g. Supabase env) and try Retry.`;
       } else if (isNetwork) {
         message = 'Cannot reach the server. Check your connection and that the backend URL is correct.';
       } else {
