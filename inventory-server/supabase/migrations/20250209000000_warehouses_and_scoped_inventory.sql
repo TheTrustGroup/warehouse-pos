@@ -40,18 +40,24 @@ values (
 )
 on conflict (code) do nothing;
 
--- 4. Backfill: copy current quantity from warehouse_products into warehouse_inventory for default warehouse (by code so id is correct even if MAIN already existed)
-insert into warehouse_inventory (warehouse_id, product_id, quantity, updated_at)
-select
-  (select id from warehouses where code = 'MAIN' limit 1),
-  wp.id,
-  wp.quantity,
-  now()
-from warehouse_products wp
-where exists (select 1 from warehouses where code = 'MAIN')
-on conflict (warehouse_id, product_id) do update set
-  quantity = excluded.quantity,
-  updated_at = excluded.updated_at;
-
--- 5. Drop global quantity from warehouse_products (quantity now only in warehouse_inventory)
-alter table warehouse_products drop column if exists quantity;
+-- 4. Backfill: copy current quantity from warehouse_products into warehouse_inventory for default warehouse (only if quantity column still exists; safe on re-run or if table was created without it)
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'warehouse_products' and column_name = 'quantity'
+  ) then
+    insert into warehouse_inventory (warehouse_id, product_id, quantity, updated_at)
+    select
+      (select id from warehouses where code = 'MAIN' limit 1),
+      wp.id,
+      wp.quantity,
+      now()
+    from warehouse_products wp
+    where exists (select 1 from warehouses where code = 'MAIN')
+    on conflict (warehouse_id, product_id) do update set
+      quantity = excluded.quantity,
+      updated_at = excluded.updated_at;
+    alter table warehouse_products drop column quantity;
+  end if;
+end $$;

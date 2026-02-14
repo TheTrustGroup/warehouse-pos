@@ -88,15 +88,15 @@ export function Header() {
             ))}
           </select>
         )}
-        {warehouses.length === 0 && !isLoading && (
+        {warehouses.length === 0 && !isLoading && !currentWarehouseId && (
           <Button
             type="button"
             variant="ghost"
             onClick={() => refreshWarehouses()}
-            className="text-xs font-medium text-primary-600 hover:text-primary-700 min-h-0 py-1"
-            aria-label="Reload warehouses"
+            className="text-xs text-slate-500 hover:text-slate-700 min-h-0 py-1 font-normal"
+            aria-label="Retry loading warehouses"
           >
-            Reload
+            Retry
           </Button>
         )}
         </div>

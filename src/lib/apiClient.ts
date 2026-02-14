@@ -145,6 +145,7 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
       err.response = res;
       lastError = err;
 
+      // Only open circuit for server errors (5xx). 4xx (e.g. 404 wrong endpoint, 401/403) and CORS are client/config issues.
       if (res.status >= 500) circuit.recordFailure();
 
       const shouldRetry =
@@ -164,7 +165,10 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
         );
       }
       lastError = e instanceof Error ? e : new Error(String(e));
-      circuit.recordFailure();
+      // Don't open circuit when the browser blocks due to CORS (no response from our server); only for real 5xx or timeouts.
+      const isCorsBlock =
+        /access-control|allowed by Access-Control|CORS|cannot load.*due to access control/i.test(lastError?.message ?? '');
+      if (!isCorsBlock) circuit.recordFailure();
 
       const shouldRetry =
         maxRetries > 0 &&

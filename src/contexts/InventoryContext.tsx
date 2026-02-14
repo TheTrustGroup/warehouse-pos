@@ -38,7 +38,46 @@ function normalizeProductFromRaw(p: any): Product {
   });
 }
 
-/** Read cached product list for a warehouse (per-warehouse key + legacy fallback). Enables instant list on login/refresh. */
+/** Collect product lists from all warehouse_products_* and legacy warehouse_products keys, dedupe by id, return normalized list. Used when API fails so previous products still show. */
+function getAllCachedProducts(): Product[] {
+  if (typeof window === 'undefined' || !isStorageAvailable()) return [];
+  try {
+    const storage = window.localStorage;
+    const seen = new Set<string>();
+    const rawList: any[] = [];
+    const legacy = getStoredData<any[]>('warehouse_products', []);
+    if (Array.isArray(legacy)) rawList.push(...legacy);
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      if (key && key.startsWith('warehouse_products_')) {
+        try {
+          const item = storage.getItem(key);
+          if (item) {
+            const parsed = JSON.parse(item);
+            if (Array.isArray(parsed)) rawList.push(...parsed);
+          }
+        } catch {
+          /* skip */
+        }
+      }
+    }
+    const out: Product[] = [];
+    for (const p of rawList) {
+      if (p == null || typeof p !== 'object' || !p.id || seen.has(p.id)) continue;
+      seen.add(p.id);
+      try {
+        out.push(normalizeProductFromRaw(p));
+      } catch {
+        /* skip malformed */
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** Read cached product list for a warehouse (per-warehouse key + legacy fallback). If still empty, use all caches so previous products show when API is down. */
 function getCachedProductsForWarehouse(warehouseId: string): Product[] {
   if (typeof window === 'undefined' || !isStorageAvailable()) return [];
   try {
@@ -47,6 +86,9 @@ function getCachedProductsForWarehouse(warehouseId: string): Product[] {
     if (list.length === 0) {
       const legacy = getStoredData<any[]>('warehouse_products', []);
       list = Array.isArray(legacy) ? legacy : [];
+    }
+    if (list.length === 0) {
+      return getAllCachedProducts();
     }
     const out: Product[] = [];
     for (const p of list) {
@@ -301,6 +343,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
               /* ignore */
             }
           }
+          if (fallback.length === 0) {
+            fallback = getAllCachedProducts();
+          }
           if (fallback.length > 0) {
             setProducts(fallback);
             if (!silent) setError('Server returned no products for this warehouse. Showing last saved list.');
@@ -357,7 +402,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       let localRaw = getStoredData<any[]>(productsCacheKey(effectiveWarehouseId), []);
       if (!Array.isArray(localRaw) || localRaw.length === 0) localRaw = getStoredData<any[]>('warehouse_products', []);
-      const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
+      let localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
+      if (localProducts.length === 0) {
+        localProducts = getAllCachedProducts();
+      }
       setProducts(localProducts);
     } finally {
       setIsLoading(false);

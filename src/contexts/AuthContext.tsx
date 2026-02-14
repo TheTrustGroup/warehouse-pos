@@ -74,6 +74,9 @@ const KNOWN_POS_EMAILS = new Set([
 /** Backend role values that should be treated as cashier (POS access, no admin). */
 const CASHIER_ROLE_ALIASES = ['cashier', 'sales_person', 'salesperson', 'sales'];
 
+/** Backend may return these as admin; map to our admin role. */
+const ADMIN_ROLE_ALIASES = ['admin', 'administrator', 'super_admin', 'superadmin', 'super admin'];
+
 /**
  * Build a fallback admin User when server returns 200 but role is missing/invalid.
  * Used only for KNOWN_ADMIN_EMAIL so admin login never shows "Role could not be verified".
@@ -199,6 +202,7 @@ function normalizeUserData(userData: any): User | null {
   const roleKey = rawRole.toUpperCase().replace(/\s+/g, '_');
   let role = ROLES[roleKey] ?? (rawRole === 'super_admin' ? ROLES.SUPER_ADMIN : null);
   if (!role && CASHIER_ROLE_ALIASES.includes(rawRole)) role = ROLES.CASHIER;
+  if (!role && ADMIN_ROLE_ALIASES.some((alias) => rawRole === alias || rawRole === alias.replace(/\s+/g, '_'))) role = rawRole.includes('super') ? ROLES.SUPER_ADMIN : ROLES.ADMIN;
   const email = (userData.email ?? '').trim().toLowerCase();
   const superAdminEmails = getSuperAdminEmails();
   const isSuperAdmin = superAdminEmails.has(email);

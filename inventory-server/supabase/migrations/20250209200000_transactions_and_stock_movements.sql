@@ -125,4 +125,4 @@ begin
 end;
 $$;
 
-comment on function process_sale is 'Persist sale transaction + items + deduct inventory + stock_movements in one atomic transaction.';
+comment on function process_sale(uuid, jsonb, jsonb) is 'Persist sale transaction + items + deduct inventory + stock_movements in one atomic transaction.';
