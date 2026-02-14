@@ -42,8 +42,9 @@ export function useInventoryPageState() {
     else if (filterParam === 'outOfStock') setFilters({ outOfStock: true });
   }, [searchParams]);
 
+  // Silent refresh on mount so we don't show "Loading products..." again (CriticalDataContext already ran phase 2).
   useEffect(() => {
-    refreshProducts();
+    refreshProducts({ silent: true });
   }, [refreshProducts]);
 
   const isUnsyncedBySyncStatus = useMemo(() => {

@@ -230,6 +230,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const PRODUCTS_CACHE_TTL_MS = 60_000; // 60s per-warehouse cache
   const cacheRef = useRef<Record<string, { data: Product[]; ts: number }>>({});
+  /** Throttle "Showing cached data" toast to once per 15s so multiple failed loads don't stack. */
+  const lastCachedToastAtRef = useRef<number>(0);
+  const CACHED_TOAST_COOLDOWN_MS = 15_000;
 
   const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
     const params = new URLSearchParams();
@@ -458,7 +461,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           setProducts(fromDb.map((p: any) => normalizeProduct(p)));
           if (!silent) {
             setError(null);
-            showToast('warning', 'Showing cached data. Tap Retry to refresh.');
+            const now = Date.now();
+            if (now - lastCachedToastAtRef.current >= CACHED_TOAST_COOLDOWN_MS) {
+              lastCachedToastAtRef.current = now;
+              showToast('warning', 'Showing cached data. Tap Retry to refresh.');
+            }
           }
           return;
         }
@@ -472,7 +479,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setProducts(localProducts);
       if (localProducts.length > 0 && !silent) {
         setError(null);
-        showToast('warning', 'Showing cached data. Tap Retry to refresh.');
+        const now = Date.now();
+        if (now - lastCachedToastAtRef.current >= CACHED_TOAST_COOLDOWN_MS) {
+          lastCachedToastAtRef.current = now;
+          showToast('warning', 'Showing cached data. Tap Retry to refresh.');
+        }
       }
     } finally {
       if (silent) setBackgroundRefreshing(false);
