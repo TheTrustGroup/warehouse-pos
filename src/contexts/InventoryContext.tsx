@@ -240,8 +240,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /** Throttle "Showing cached data" toast to once per 15s so multiple failed loads don't stack. */
   const lastCachedToastAtRef = useRef<number>(0);
   const CACHED_TOAST_COOLDOWN_MS = 15_000;
-  /** Pin recently added product to top when a refresh runs so the list doesn't jitter (product jumping to end). */
-  const lastAddedIdRef = useRef<{ id: string; at: number } | null>(null);
+  /** Recently added product so loadProducts never overwrites and drops it; also used to pin to top to avoid jitter. */
+  const lastAddedProductRef = useRef<{ product: Product; at: number } | null>(null);
   const RECENT_ADD_WINDOW_MS = 15_000;
 
   const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
@@ -423,10 +423,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           }
         }
         let listToSet = merged;
-        const recent = lastAddedIdRef.current;
+        const recent = lastAddedProductRef.current;
         if (recent && Date.now() - recent.at < RECENT_ADD_WINDOW_MS) {
-          const pin = merged.find((p) => p.id === recent.id);
-          if (pin) listToSet = [pin, ...merged.filter((p) => p.id !== recent.id)];
+          const inMerged = merged.some((p) => p.id === recent.product.id);
+          if (!inMerged) listToSet = [recent.product, ...merged];
+          else {
+            const pin = merged.find((p) => p.id === recent.product.id);
+            if (pin) listToSet = [pin, ...merged.filter((p) => p.id !== recent.product.id)];
+          }
         }
         setProducts(listToSet);
         if (!silent) setError(null);
@@ -714,7 +718,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     try {
       if (offlineEnabled) {
         const id = await offline.addProduct(productData);
-        lastAddedIdRef.current = { id, at: Date.now() };
+        const addedProduct: Product = { ...productData, id, createdAt: new Date(), updatedAt: new Date() } as Product;
+        lastAddedProductRef.current = { product: addedProduct, at: Date.now() };
         logInventoryCreate({ productId: id, sku: productData.sku ?? '', listLength: products.length + 1 });
         showToast('success', 'Product saved. Syncing to server when online.');
         return id;
@@ -757,18 +762,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         ? normalizeProduct(created as any)
         : (newProduct as Product);
       const resolvedId = (normalized as Product).id ?? id;
-      const newList = [normalized, ...products];
-      setApiOnlyProductsState(newList);
-      cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
-      if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), newList);
-      if (isIndexedDBAvailable()) {
-        saveProductsToDb(newList).catch((e) => {
-          reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: newList.length });
-        });
-      }
+      lastAddedProductRef.current = { product: normalized as Product, at: Date.now() };
+      setApiOnlyProductsState((prev) => [normalized as Product, ...prev]);
+      cacheRef.current[effectiveWarehouseId] = { data: [normalized as Product, ...apiOnlyProducts], ts: Date.now() };
       setLastSyncAt(new Date());
-      lastAddedIdRef.current = { id: resolvedId, at: Date.now() };
-      logInventoryCreate({ productId: resolvedId, sku: productData.sku ?? '', listLength: newList.length });
+      logInventoryCreate({ productId: resolvedId, sku: productData.sku ?? '', listLength: apiOnlyProducts.length + 1 });
       showToast('success', 'Product saved.');
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update');
