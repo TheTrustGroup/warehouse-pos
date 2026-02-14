@@ -1,6 +1,9 @@
 import { Component, ReactNode } from 'react';
-import { AlertTriangle } from 'lucide-react';
-import { reportError } from '../../lib/observability';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { reportError } from '../../lib/errorReporting';
+import { getUserFriendlyMessage } from '../../lib/errorMessages';
+import { Button } from './Button';
+import { Card } from './Card';
 
 interface Props {
   children: ReactNode;
@@ -27,23 +30,24 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const friendlyMessage = this.state.error ? getUserFriendlyMessage(this.state.error) : 'Something went wrong. Please try again.';
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-          <div className="glass-card max-w-md text-center animate-fade-in-up">
+          <Card className="max-w-md text-center animate-fade-in-up p-8">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle className="w-8 h-8 text-red-600" />
             </div>
             <h2 className="text-2xl font-bold text-slate-900 mb-2">Something went wrong</h2>
-            <p className="text-slate-600 mb-6">
-              We're sorry for the inconvenience. Please try refreshing the page.
+            <p className="text-slate-600 mb-6 text-sm">
+              {friendlyMessage}
             </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="btn-primary"
-            >
-              Refresh Page
-            </button>
-          </div>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button variant="primary" onClick={() => window.location.reload()} className="inline-flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4" />
+                Refresh page
+              </Button>
+            </div>
+          </Card>
         </div>
       );
     }

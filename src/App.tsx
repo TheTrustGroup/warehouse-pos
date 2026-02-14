@@ -8,8 +8,11 @@ import { WarehouseProvider } from './contexts/WarehouseContext';
 import { InventoryProvider } from './contexts/InventoryContext';
 import { POSProvider } from './contexts/POSContext';
 import { OrderProvider } from './contexts/OrderContext';
+import { CriticalDataProvider, CriticalDataGate } from './contexts/CriticalDataContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
+import { Button } from './components/ui/Button';
 import { Layout } from './components/layout/Layout';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { KeyboardShortcuts } from './components/ui/KeyboardShortcuts';
@@ -62,12 +65,9 @@ const Users = () => {
         <p className="text-slate-600 mb-4">
           User Management is available in <strong>Settings → Users</strong> tab.
         </p>
-        <button
-          onClick={() => navigate('/settings?tab=users')}
-          className="btn-primary"
-        >
+        <Button variant="primary" onClick={() => navigate('/settings?tab=users')}>
           Go to User Management
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -80,7 +80,7 @@ const NotFound = lazyWithRetry(() => import('./pages/NotFound').then(m => ({ def
  * Checks authentication before rendering the Layout
  */
 function ProtectedRoutes() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -97,7 +97,35 @@ function ProtectedRoutes() {
     return <Navigate to="/login" replace />;
   }
 
-  return <Layout />;
+  // Only render app when user is fully loaded (role may be applied as fallback in AuthContext)
+  if (user == null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <CriticalDataProvider>
+      <StoreProvider>
+        <WarehouseProvider>
+          <InventoryProvider>
+            <POSProvider>
+              <OrderProvider>
+                <CriticalDataGate>
+                  <Layout />
+                </CriticalDataGate>
+              </OrderProvider>
+            </POSProvider>
+          </InventoryProvider>
+        </WarehouseProvider>
+      </StoreProvider>
+    </CriticalDataProvider>
+  );
 }
 
 function App() {
@@ -105,24 +133,21 @@ function App() {
     <ToastProvider>
       <SettingsProvider>
         <AuthProvider>
-          <StoreProvider>
-          <WarehouseProvider>
-            <InventoryProvider>
-            <POSProvider>
-              <OrderProvider>
-                <BrowserRouter>
-                  <Suspense fallback={<LoadingSpinner />}>
-                    <Routes>
-                      {/* Public Route */}
-                      <Route path="/login" element={<Login />} />
-                      
-                      {/* Protected Routes */}
-                      <Route path="/" element={<ProtectedRoutes />}>
+          <BrowserRouter>
+            <Suspense fallback={<LoadingSpinner />}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/" element={<ProtectedRoutes />}>
                         <Route
                           index
                           element={
-                            <ProtectedRoute>
-                              <DefaultRoute />
+                            <ProtectedRoute
+                              allowedRoles={['admin', 'super_admin', 'manager']}
+                              redirectPathIfForbidden="/pos"
+                            >
+                              <RouteErrorBoundary routeName="Dashboard">
+                                <DefaultRoute />
+                              </RouteErrorBoundary>
                             </ProtectedRoute>
                           }
                         />
@@ -130,7 +155,9 @@ function App() {
                           path="inventory"
                           element={
                             <ProtectedRoute permission={PERMISSIONS.INVENTORY.VIEW}>
-                              <Inventory />
+                              <RouteErrorBoundary routeName="Inventory">
+                                <Inventory />
+                              </RouteErrorBoundary>
                             </ProtectedRoute>
                           }
                         />
@@ -138,7 +165,9 @@ function App() {
                           path="orders"
                           element={
                             <ProtectedRoute permission={PERMISSIONS.ORDERS.VIEW}>
-                              <Orders />
+                              <RouteErrorBoundary routeName="Orders">
+                                <Orders />
+                              </RouteErrorBoundary>
                             </ProtectedRoute>
                           }
                         />
@@ -146,7 +175,9 @@ function App() {
                           path="pos"
                           element={
                             <ProtectedRoute permission={PERMISSIONS.POS.ACCESS}>
-                              <POS />
+                              <RouteErrorBoundary routeName="POS">
+                                <POS />
+                              </RouteErrorBoundary>
                             </ProtectedRoute>
                           }
                         />
@@ -154,45 +185,55 @@ function App() {
                           path="reports"
                           element={
                             <ProtectedRoute
+                              allowedRoles={['admin', 'super_admin', 'manager']}
+                              redirectPathIfForbidden="/pos"
                               anyPermissions={[
                                 PERMISSIONS.REPORTS.VIEW_SALES,
                                 PERMISSIONS.REPORTS.VIEW_INVENTORY,
                                 PERMISSIONS.REPORTS.VIEW_PROFIT,
                               ]}
                             >
-                              <Reports />
+                              <RouteErrorBoundary routeName="Reports">
+                                <Reports />
+                              </RouteErrorBoundary>
                             </ProtectedRoute>
                           }
                         />
                         <Route
                           path="users"
                           element={
-                            <ProtectedRoute permission={PERMISSIONS.USERS.VIEW}>
-                              <Users />
+                            <ProtectedRoute
+                              allowedRoles={['admin', 'super_admin', 'manager']}
+                              redirectPathIfForbidden="/pos"
+                              permission={PERMISSIONS.USERS.VIEW}
+                            >
+                              <RouteErrorBoundary routeName="User Management">
+                                <Users />
+                              </RouteErrorBoundary>
                             </ProtectedRoute>
                           }
                         />
                         <Route
                           path="settings"
                           element={
-                            <ProtectedRoute permission={PERMISSIONS.SETTINGS.VIEW}>
-                              <Settings />
+                            <ProtectedRoute
+                              allowedRoles={['admin', 'super_admin', 'manager']}
+                              redirectPathIfForbidden="/pos"
+                              permission={PERMISSIONS.SETTINGS.VIEW}
+                            >
+                              <RouteErrorBoundary routeName="Settings">
+                                <Settings />
+                              </RouteErrorBoundary>
                             </ProtectedRoute>
                           }
                         />
                       </Route>
 
-                      {/* Catch all - 404 page */}
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </Suspense>
-                  <KeyboardShortcuts />
-                </BrowserRouter>
-              </OrderProvider>
-            </POSProvider>
-          </InventoryProvider>
-          </WarehouseProvider>
-          </StoreProvider>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+            <KeyboardShortcuts />
+          </BrowserRouter>
         </AuthProvider>
       </SettingsProvider>
     </ToastProvider>

@@ -7,7 +7,9 @@ import { useToast } from '../../contexts/ToastContext';
 import { useStore } from '../../contexts/StoreContext';
 import { API_BASE_URL } from '../../lib/api';
 import { apiGet } from '../../lib/apiClient';
+import { getUserFriendlyMessage } from '../../lib/errorMessages';
 import { getUserScopes, setUserScopes } from '../../services/userScopesApi';
+import { Button } from '../ui/Button';
 
 interface ScopeEntry {
   storeId: string;
@@ -138,7 +140,7 @@ export function UserManagement() {
       await setUserScopes(e, scopeList.map((s) => ({ storeId: s.storeId, warehouseId: s.warehouseId })));
       showToast('success', 'Store & warehouse access saved. User will see only these locations in POS.');
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Failed to save.');
+      showToast('error', getUserFriendlyMessage(err));
     } finally {
       setSavingScopes(false);
     }
@@ -192,7 +194,7 @@ Create this user in your backend admin panel with these exact credentials.`;
         await setUserScopes(email, addUserPosList.map((s) => ({ storeId: s.storeId, warehouseId: s.warehouseId })));
         showToast('success', `User details copied. POS access saved: ${addUserPosList.map((s) => s.storeName ?? s.storeId).join(', ')}. Create this user in your backend with the copied credentials.`);
       } catch (err) {
-        showToast('error', err instanceof Error ? err.message : 'Failed to save POS access.');
+        showToast('error', getUserFriendlyMessage(err));
         setSavingScopes(false);
         return;
       } finally {
@@ -227,8 +229,8 @@ Create this user in your backend admin panel with these exact credentials.`;
           <p className="text-sm text-slate-600 mb-4">
             Keep admin credentials as you have them. For <strong>manager, cashier, warehouse, driver, viewer</strong> use: email <strong>role@extremedeptkidz.com</strong>, password <strong>{getDefaultUserPassword() || '(set in backend)'}</strong> (same for all).
           </p>
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-sm">
+          <div className="table-scroll-wrap rounded-lg border border-slate-200">
+            <table className="w-full text-sm min-w-[280px]">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-slate-700">Role</th>
@@ -250,14 +252,15 @@ Create this user in your backend admin panel with these exact credentials.`;
                       <td className="px-4 py-3 font-mono text-slate-800">{emailForRole(role.id)}</td>
                       <td className="px-4 py-3 font-mono text-slate-800">{getDefaultUserPassword() || '—'}</td>
                       <td className="px-4 py-3">
-                        <button
+                        <Button
                           type="button"
+                          variant="action"
                           onClick={() => copyToClipboard(`${emailForRole(role.id)}\t${getDefaultUserPassword()}`)}
-                          className="p-1.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
+                          className="p-2 rounded hover:bg-slate-200 active:bg-slate-300 text-slate-500 hover:text-slate-700 min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
                           title="Copy email and password"
                         >
                           <Copy className="w-4 h-4" />
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -273,13 +276,15 @@ Create this user in your backend admin panel with these exact credentials.`;
             <UsersIcon className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-bold text-slate-900">User Management</h2>
           </div>
-          <button
+          <Button
+            type="button"
             onClick={() => setShowAddUser(!showAddUser)}
-            className="btn-primary flex items-center gap-2"
+            variant="primary"
+            className="flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
             Add User
-          </button>
+          </Button>
         </div>
 
       {/* Empty State - Users are managed in backend */}
@@ -316,8 +321,8 @@ Create this user in your backend admin panel with these exact credentials.`;
 
       {/* Users Table - Only show if users exist (for future API integration) */}
       {users.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full">
+        <div className="table-scroll-wrap">
+          <table className="w-full min-w-[320px]">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">User</th>
@@ -493,14 +498,16 @@ Create this user in your backend admin panel with these exact credentials.`;
                   </select>
                 </div>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={addAddUserPosEntry}
                 disabled={!addUserStoreId || !addUserWarehouseId}
-                className="btn-secondary mt-2 text-sm"
+                size="sm"
+                className="mt-2"
               >
                 Add location
-              </button>
+              </Button>
               {addUserPosList.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {addUserPosList.map((entry, i) => (
@@ -509,14 +516,15 @@ Create this user in your backend admin panel with these exact credentials.`;
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm text-slate-800"
                     >
                       {entry.storeName ?? entry.storeId} → {entry.warehouseName ?? entry.warehouseId}
-                      <button
+                      <Button
                         type="button"
+                        variant="action"
                         onClick={() => removeAddUserPosEntry(i)}
-                        className="p-0.5 rounded hover:bg-slate-100 text-slate-500"
+                        className="p-0.5 rounded hover:bg-slate-100 text-slate-500 min-h-0"
                         aria-label="Remove"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </Button>
                     </span>
                   ))}
                 </div>
@@ -525,15 +533,15 @@ Create this user in your backend admin panel with these exact credentials.`;
           )}
 
           <div className="flex gap-3 mt-4">
-            <button
+            <Button
               type="button"
+              variant="primary"
               onClick={() => handleCreateUser()}
               disabled={savingScopes}
-              className="btn-primary"
             >
               {savingScopes ? 'Saving…' : 'Create User (set in backend)'}
-            </button>
-            <button type="button" onClick={() => setShowAddUser(false)} className="btn-secondary">Cancel</button>
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setShowAddUser(false)}>Cancel</Button>
           </div>
         </div>
       )}
@@ -568,22 +576,23 @@ Create this user in your backend admin panel with these exact credentials.`;
               aria-label="User email for scope assignment"
             />
             <div className="flex flex-wrap gap-2">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => loadScopesForEmail(scopeEmail)}
                 disabled={loadingScopes || !scopeEmail.trim()}
-                className="btn-secondary"
               >
                 {loadingScopes ? 'Loading…' : 'Load current'}
-              </button>
+              </Button>
               {showAddUser && suggestedScopeEmail && (
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => { setScopeEmail(suggestedScopeEmail); loadScopesForEmail(suggestedScopeEmail); }}
-                  className="btn-secondary text-sm"
                 >
                   Use suggested ({suggestedScopeEmail})
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -620,14 +629,14 @@ Create this user in your backend admin panel with these exact credentials.`;
               </select>
             </div>
           </div>
-          <button
+          <Button
             type="button"
+            variant="secondary"
             onClick={addScopeEntry}
             disabled={!selectedStoreId || !selectedWarehouseId}
-            className="btn-secondary"
           >
             Add location
-          </button>
+          </Button>
 
           {/* Assigned locations: card layout */}
           {scopeList.length > 0 && (
@@ -642,25 +651,27 @@ Create this user in your backend admin panel with these exact credentials.`;
                     <span className="text-sm font-medium text-slate-800 truncate">
                       {entry.storeName ?? entry.storeId} → {entry.warehouseName ?? entry.warehouseId}
                     </span>
-                    <button
+                    <Button
                       type="button"
+                      variant="danger"
                       onClick={() => removeScopeEntry(i)}
-                      className="btn-action btn-action-delete flex-shrink-0"
+                      className="flex-shrink-0"
                       aria-label="Remove location"
                     >
                       <Trash2 className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
-              <button
+              <Button
                 type="button"
+                variant="primary"
                 onClick={handleSaveScopes}
                 disabled={savingScopes}
-                className="btn-primary mt-2 w-full sm:w-auto min-w-[200px]"
+                className="mt-2 w-full sm:w-auto min-w-[200px]"
               >
                 {savingScopes ? 'Saving…' : 'Save store & warehouse access'}
-              </button>
+              </Button>
             </div>
           )}
         </div>

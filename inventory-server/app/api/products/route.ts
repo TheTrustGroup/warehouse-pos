@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       request_id: requestId,
       user_role: auth.role,
     });
+    // Return complete saved product so client can update UI without a follow-up GET
     return NextResponse.json(created, { status: 201 });
   } catch (e) {
     const entityId = (body?.id && typeof body.id === 'string' ? body.id : '') || 'unknown';

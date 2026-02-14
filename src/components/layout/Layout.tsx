@@ -4,10 +4,13 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { MobileMenu } from './MobileMenu';
 import { getApiCircuitBreaker } from '../../lib/observability';
+import { useCriticalData } from '../../contexts/CriticalDataContext';
+import { Button } from '../ui/Button';
 
 /** Layout: single vertical rhythm — section spacing (24px) and consistent main padding. Mobile-first. */
 export function Layout() {
   const [degraded, setDegraded] = useState(false);
+  const { criticalDataError, reloadCriticalData } = useCriticalData();
 
   useEffect(() => {
     const circuit = getApiCircuitBreaker();
@@ -32,19 +35,31 @@ export function Layout() {
       <MobileMenu />
       <Header />
       {/* In-flow banner: reserves layout space so content is never overlapped. Pushes main content down. */}
+      {criticalDataError && (
+        <div
+          className="lg:ml-[280px] mt-[calc(72px+var(--safe-top))] bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-amber-600/20"
+          role="alert"
+        >
+          <span>Initial load had issues: {criticalDataError}</span>
+          <Button type="button" variant="ghost" onClick={() => reloadCriticalData()} className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-amber-800 rounded">
+            Retry
+          </Button>
+        </div>
+      )}
       {degraded && (
         <div
           className="lg:ml-[280px] mt-[calc(72px+var(--safe-top))] bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-amber-600/20"
           role="status"
         >
           <span>Server temporarily unavailable. Showing last saved data. Changes will sync when the server is back.</span>
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={handleTryAgain}
-            className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-amber-800 rounded min-h-touch"
+            className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-amber-800 rounded"
           >
             Try again
-          </button>
+          </Button>
         </div>
       )}
       <main

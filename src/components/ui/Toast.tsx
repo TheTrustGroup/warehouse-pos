@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
+import { Button } from './Button';
 
 interface ToastProps {
   type: 'success' | 'error' | 'warning';
@@ -35,9 +36,9 @@ export function Toast({ type, message, onClose, duration = 3000 }: ToastProps) {
     >
       <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} aria-hidden />
       <p className="font-medium flex-1 text-sm">{message}</p>
-      <button type="button" onClick={onClose} className="btn-action flex-shrink-0" aria-label="Dismiss">
+      <Button type="button" variant="action" onClick={onClose} className="flex-shrink-0" aria-label="Dismiss">
         <X className="w-4 h-4" strokeWidth={2} />
-      </button>
+      </Button>
     </div>
   );
 }

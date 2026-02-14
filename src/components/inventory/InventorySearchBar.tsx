@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import { debounce } from '../../lib/utils';
+import { Button } from '../ui/Button';
 
 interface InventorySearchBarProps {
   value: string;
@@ -42,14 +43,15 @@ export function InventorySearchBar({ value, onChange, placeholder = 'Search prod
         aria-label="Search products"
       />
       {localValue && (
-        <button
+        <Button
           type="button"
+          variant="action"
           onClick={clearSearch}
           className="absolute right-2 top-1/2 -translate-y-1/2 min-w-touch min-h-touch flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700"
           aria-label="Clear search"
         >
           <X className="w-4 h-4" />
-        </button>
+        </Button>
       )}
     </div>
   );

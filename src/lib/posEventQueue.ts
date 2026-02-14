@@ -41,7 +41,7 @@ export async function enqueuePosEvent(event: Omit<PosEvent, 'status'> & { status
     const store = db.transaction(STORE_POS_EVENT_QUEUE, 'readwrite').objectStore(STORE_POS_EVENT_QUEUE);
     store.put(serializeEvent(record));
   } catch (e) {
-    console.warn('[posEventQueue] enqueue failed', e);
+    if (import.meta.env.DEV) console.warn('[posEventQueue] enqueue failed', e);
     throw e;
   }
 }
@@ -94,7 +94,7 @@ export async function updateEventStatus(
       getReq.onerror = () => reject(getReq.error);
     });
   } catch (e) {
-    console.warn('[posEventQueue] updateStatus failed', e);
+    if (import.meta.env.DEV) console.warn('[posEventQueue] updateStatus failed', e);
   }
 }
 
@@ -141,7 +141,7 @@ export async function pruneSyncedEvents(olderThanMs: number = 24 * 60 * 60 * 100
       req.onerror = () => reject(req.error);
     });
   } catch (e) {
-    console.warn('[posEventQueue] prune failed', e);
+    if (import.meta.env.DEV) console.warn('[posEventQueue] prune failed', e);
   }
 }
 

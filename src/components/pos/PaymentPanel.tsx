@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Payment } from '../../types';
 import { formatCurrency } from '../../lib/utils';
+import { Button } from '../ui/Button';
 
 interface PaymentPanelProps {
   onComplete: (payments: Payment[]) => void;
@@ -74,22 +75,23 @@ export function PaymentPanel({ onComplete }: PaymentPanelProps) {
         <div className="flex gap-2 flex-wrap">
           <input
             type="number"
+            inputMode="decimal"
             value={discountInput}
             onChange={(e) => setDiscountInput(e.target.value)}
             placeholder="Amount"
             className="input-field flex-1 min-w-0 min-h-touch"
             aria-label="Discount amount"
           />
-          <button type="button" onClick={handleDiscountApply} className="btn-secondary px-4 min-h-touch">
+          <Button type="button" variant="secondary" onClick={handleDiscountApply} className="px-4">
             Apply
-          </button>
+          </Button>
         </div>
         {discount > 0 && (
           <div className="mt-3 flex items-center justify-between text-sm p-3 bg-emerald-50 rounded-lg border border-emerald-200/50">
             <span className="text-emerald-700 font-medium">Discount: {formatCurrency(discount)}</span>
-            <button type="button" onClick={() => setDiscount(0)} className="btn-action btn-action-delete" aria-label="Remove discount">
+            <Button type="button" variant="danger" onClick={() => setDiscount(0)} aria-label="Remove discount">
               <X className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -106,10 +108,10 @@ export function PaymentPanel({ onComplete }: PaymentPanelProps) {
               key={id}
               type="button"
               onClick={() => setPaymentMethod(id)}
-              className={`min-h-touch flex flex-col items-center justify-center gap-1 rounded-xl border-2 transition-colors ${
+              className={`min-h-touch flex flex-col items-center justify-center gap-1 rounded-xl border-2 transition-colors touch-manipulation ${
                 paymentMethod === id
                   ? 'border-primary-500 bg-primary-50 text-primary-600'
-                  : 'border-slate-200 bg-white hover:border-slate-300 text-slate-600'
+                  : 'border-slate-200 bg-white hover:border-slate-300 active:bg-slate-50 text-slate-600'
               }`}
               aria-pressed={paymentMethod === id}
               aria-label={label}
@@ -126,6 +128,7 @@ export function PaymentPanel({ onComplete }: PaymentPanelProps) {
           <label className="block text-sm font-medium text-slate-600 mb-2">Cash received</label>
           <input
             type="number"
+            inputMode="decimal"
             value={cashReceived}
             onChange={(e) => setCashReceived(e.target.value)}
             placeholder="Amount"
@@ -138,7 +141,7 @@ export function PaymentPanel({ onComplete }: PaymentPanelProps) {
                 key={amount}
                 type="button"
                 onClick={() => handleQuickAmount(amount)}
-                className="min-h-touch py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 font-medium text-slate-800 transition-colors"
+                className="min-h-touch py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 font-medium text-slate-800 transition-colors touch-manipulation"
               >
                 ₵{amount}
               </button>
@@ -155,15 +158,16 @@ export function PaymentPanel({ onComplete }: PaymentPanelProps) {
         </div>
       )}
 
-      <button
+      <Button
         type="button"
+        variant="primary"
         onClick={handlePayment}
         disabled={paymentMethod === 'cash' && cashAmount < total}
-        className="btn-primary w-full py-3.5 text-base disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full py-3.5 text-base disabled:opacity-50 disabled:cursor-not-allowed"
         aria-label={`Complete payment ${formatCurrency(total)}`}
       >
         Complete sale — {formatCurrency(total)}
-      </button>
+      </Button>
     </div>
   );
 }

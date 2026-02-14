@@ -1,15 +1,29 @@
 import { useState } from 'react';
 import { Settings as SettingsIcon, Save } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useToast } from '../../contexts/ToastContext';
+import { validateSystemPreferences } from '../../lib/validationSchemas';
+import { Button } from '../ui/Button';
 
 export function SystemPreferences() {
   const { systemSettings, updateSystemSettings } = useSettings();
+  const { showToast } = useToast();
   const [formData, setFormData] = useState(systemSettings);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateSystemSettings(formData);
-    alert('System preferences updated successfully!');
+    if (isSubmitting) return;
+    try {
+      const validated = validateSystemPreferences(formData);
+      setIsSubmitting(true);
+      updateSystemSettings(validated);
+      showToast('success', 'System preferences updated successfully.');
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Invalid settings.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -90,10 +104,10 @@ export function SystemPreferences() {
         </div>
 
         <div className="flex justify-end">
-          <button type="submit" className="btn-primary flex items-center gap-2">
+          <Button type="submit" variant="primary" className="flex items-center gap-2" disabled={isSubmitting} aria-busy={isSubmitting}>
             <Save className="w-4 h-4" />
-            Save Preferences
-          </button>
+            {isSubmitting ? 'Saving…' : 'Save Preferences'}
+          </Button>
         </div>
       </form>
     </div>

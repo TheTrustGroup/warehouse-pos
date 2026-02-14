@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { PERMISSIONS, ROLES } from '../../types/permissions';
+import { Button } from '../ui/Button';
 
 const baseNavigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD.VIEW },
@@ -32,8 +33,9 @@ const baseNavigation = [
   { name: 'Settings', to: '/settings', icon: Settings, permission: PERMISSIONS.SETTINGS.VIEW },
 ];
 
-function getRoleDisplayName(roleId: string): string {
-  const key = roleId === 'super_admin' ? 'SUPER_ADMIN' : roleId.toUpperCase();
+function getRoleDisplayName(roleId: string | undefined): string {
+  if (roleId == null || roleId === '') return '—';
+  const key = roleId === 'super_admin' ? 'SUPER_ADMIN' : roleId.toUpperCase().replace(/\s+/g, '_');
   return ROLES[key]?.name ?? roleId;
 }
 
@@ -58,14 +60,15 @@ export function MobileMenu() {
   return (
     <>
       {/* Toggle: 44px touch target, thumb-friendly on mobile */}
-      <button
+      <Button
+        variant="action"
         onClick={() => setIsOpen(!isOpen)}
         className="lg:hidden fixed top-[88px] left-4 z-40 min-h-touch min-w-touch flex items-center justify-center glass rounded-xl shadow-medium"
         aria-label="Toggle menu"
         aria-expanded={isOpen}
       >
         {isOpen ? <X className="w-6 h-6 text-slate-700" /> : <Menu className="w-6 h-6 text-slate-700" />}
-      </button>
+      </Button>
 
       {/* Mobile Sidebar */}
       <div
@@ -103,7 +106,7 @@ export function MobileMenu() {
             {user && (
               <p className="text-xs text-slate-500">
                 <span className="font-medium text-slate-600">Role: </span>
-                {getRoleDisplayName(user.role)}
+                {getRoleDisplayName(user?.role)}
               </p>
             )}
             {canSeeSwitchRole && (

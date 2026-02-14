@@ -5,13 +5,14 @@ import './index.css';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { initObservability, startHealthPings } from './lib/observability';
 
+// Error reporting: set VITE_SENTRY_DSN and wire Sentry.captureException(err, { extra: ctx }) here
 initObservability({
   healthUrl: import.meta.env.VITE_HEALTH_URL || undefined,
   reportError:
     import.meta.env.VITE_SENTRY_DSN && typeof window !== 'undefined'
       ? (err, ctx) => {
-          console.error('[Report]', err, ctx);
-          // window.Sentry?.captureException?.(err, { extra: ctx });
+          if (import.meta.env.DEV) console.error('[Report]', err, ctx);
+          // Sentry: import * as Sentry from '@sentry/react'; Sentry.captureException(err, { extra: ctx });
         }
       : undefined,
 });

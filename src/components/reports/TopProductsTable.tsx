@@ -13,8 +13,8 @@ export function TopProductsTable({ report }: TopProductsTableProps) {
         <TrendingUp className="w-5 h-5 text-emerald-600" strokeWidth={2} />
         Top Selling Products
       </h3>
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="table-scroll-wrap">
+        <table className="w-full min-w-[280px]">
           <thead className="table-header">
             <tr>
               <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Rank</th>

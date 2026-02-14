@@ -1,6 +1,7 @@
 import { Trash2, Plus, Minus } from 'lucide-react';
 import { usePOS } from '../../contexts/POSContext';
 import { formatCurrency } from '../../lib/utils';
+import { Button } from '../ui/Button';
 
 /** Cart: line-item spacing, quantity controls ≥44px, totals always visible at bottom (sticky in column). */
 export function Cart() {
@@ -22,34 +23,37 @@ export function Cart() {
                   <h4 className="font-medium text-slate-900 truncate">{item.productName}</h4>
                   <p className="text-xs text-slate-500 mt-0.5">{item.sku}</p>
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="danger"
                   onClick={() => removeFromCart(item.productId)}
-                  className="btn-action btn-action-delete flex-shrink-0"
+                  className="flex-shrink-0"
                   aria-label={`Remove ${item.productName} from cart`}
                 >
                   <Trash2 className="w-4 h-4" />
-                </button>
+                </Button>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => updateCartItem(item.productId, item.quantity - 1)}
                     className="min-w-touch min-h-touch flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
                     aria-label="Decrease quantity"
                   >
                     <Minus className="w-4 h-4" strokeWidth={2} />
-                  </button>
+                  </Button>
                   <span className="w-10 text-center font-medium text-slate-900 text-sm" aria-live="polite">{item.quantity}</span>
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => updateCartItem(item.productId, item.quantity + 1)}
                     className="min-w-touch min-h-touch flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
                     aria-label="Increase quantity"
                   >
                     <Plus className="w-4 h-4" strokeWidth={2} />
-                  </button>
+                  </Button>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-slate-500">{formatCurrency(item.unitPrice)} × {item.quantity}</p>

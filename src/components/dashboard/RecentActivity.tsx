@@ -1,6 +1,7 @@
 import { InventoryActivity } from '../../types';
 import { formatDateTime } from '../../lib/utils';
 import { Package, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface RecentActivityProps {
   activities: InventoryActivity[];
@@ -64,9 +65,9 @@ export function RecentActivity({ activities }: RecentActivityProps) {
           );
         })}
       </div>
-      <button className="w-full mt-6 py-3 text-sm font-semibold text-primary-600 hover:bg-primary-50/80 rounded-lg transition-all duration-200 hover:shadow-sm border border-primary-200/30">
+      <Button variant="ghost" className="w-full mt-6 py-3 text-sm font-semibold">
         View All Activity
-      </button>
+      </Button>
     </div>
   );
 }

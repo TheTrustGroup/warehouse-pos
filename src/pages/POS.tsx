@@ -10,6 +10,8 @@ import { ProductSearch } from '../components/pos/ProductSearch';
 import { Cart } from '../components/pos/Cart';
 import { PaymentPanel } from '../components/pos/PaymentPanel';
 import { Receipt } from '../components/pos/Receipt';
+import { Button } from '../components/ui/Button';
+import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { Transaction, Payment } from '../types';
 
 const DELIVERY_FEE = 20;
@@ -102,7 +104,7 @@ export function POS() {
       setCompletedTransaction(transaction);
       setShowReceipt(true);
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Sale could not be completed. Please try again.');
+      showToast('error', getUserFriendlyMessage(err));
     }
   };
 
@@ -193,7 +195,7 @@ export function POS() {
               <select
                 value={currentStoreId ?? ''}
                 onChange={(e) => setCurrentStoreId(e.target.value || null)}
-                className="input-field text-sm bg-white max-w-[180px]"
+                className="input-field text-sm bg-white w-full sm:max-w-[180px] min-w-0"
                 aria-label="Select store"
               >
                 <option value="">— Select store —</option>
@@ -220,7 +222,7 @@ export function POS() {
             <select
               value={currentWarehouseId}
               onChange={(e) => setCurrentWarehouseId(e.target.value)}
-              className="input-field text-sm bg-white max-w-[180px]"
+              className="input-field text-sm bg-white w-full sm:max-w-[180px] min-w-0"
               aria-label="Change warehouse"
             >
               {warehouses.map((w) => (
@@ -253,15 +255,16 @@ export function POS() {
               <p className="text-sm text-amber-700 mt-0.5">Sync when online or tap Sync now. Failed items may need admin review.</p>
             </div>
             {isOnline && (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => syncNow()}
-                className="btn-secondary inline-flex items-center gap-2 self-start sm:self-center"
+                className="inline-flex items-center gap-2 self-start sm:self-center"
                 aria-label="Sync pending sales now"
               >
                 <RefreshCw className="w-4 h-4" aria-hidden />
                 Sync now
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -283,28 +286,29 @@ export function POS() {
                 Cart ({cart.length})
               </h2>
               {cart.length > 0 && (
-                <button
+                <Button
                   type="button"
+                  variant="danger"
                   onClick={clearCart}
-                  className="btn-action btn-action-delete"
                   title="Clear cart"
                   aria-label="Clear cart"
                 >
                   <Trash2 className="w-5 h-5" />
-                </button>
+                </Button>
               )}
             </div>
             <Cart />
           </div>
 
           {cart.length > 0 && (
-            <button
+            <Button
               type="button"
+              variant="secondary"
               onClick={handleCreateOrder}
-              className="btn-secondary w-full"
+              className="w-full"
             >
               Create delivery order
-            </button>
+            </Button>
           )}
 
           {cart.length > 0 && (

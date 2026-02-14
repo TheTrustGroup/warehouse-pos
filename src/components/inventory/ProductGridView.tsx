@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Product } from '../../types';
 import { formatCurrency } from '../../lib/utils';
 import { Package, Edit, Trash2, AlertTriangle, CloudOff, RefreshCw } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface ProductGridViewProps {
   products: Product[];
@@ -78,8 +79,10 @@ export function ProductGridView({
                   Local only
                 </span>
                 {onVerifySaved && (
-                  <button
+                  <Button
                     type="button"
+                    variant="action"
+                    size="sm"
                     onClick={async (e) => {
                       e.stopPropagation();
                       setVerifyingId(product.id);
@@ -90,11 +93,11 @@ export function ProductGridView({
                       }
                     }}
                     disabled={verifyingId === product.id}
-                    className="p-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60"
+                    className="p-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-60 min-h-0"
                     title="Check if saved to server"
                   >
                     <RefreshCw className={`w-4 h-4 ${verifyingId === product.id ? 'animate-spin' : ''}`} />
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -154,28 +157,30 @@ export function ProductGridView({
               {(canEdit || canDelete) && (
                 <div className="flex gap-2 pt-3 border-t border-slate-200/50">
                   {canEdit && (
-                    <button
+                    <Button
                       type="button"
+                      variant="actionEdit"
                       onClick={(e) => { e.stopPropagation(); onEdit(product); }}
-                      className="flex-1 min-h-touch py-2.5 px-3 rounded-xl bg-primary-50 text-primary-600 hover:bg-primary-100 font-medium text-sm inline-flex items-center justify-center gap-2 transition-colors"
+                      className="flex-1 py-2.5 px-3 rounded-xl bg-primary-50 text-primary-600 hover:bg-primary-100 font-medium text-sm inline-flex items-center justify-center gap-2"
                       aria-label={`Edit ${product.name}`}
                     >
                       <Edit className="w-4 h-4" />
                       Edit
-                    </button>
+                    </Button>
                   )}
                   {canDelete && (
-                    <button
+                    <Button
                       type="button"
+                      variant="danger"
                       onClick={(e) => {
                         e.stopPropagation();
                         if (confirm('Delete this product?')) onDelete(product.id);
                       }}
-                      className="min-h-touch min-w-touch py-2.5 px-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 inline-flex items-center justify-center transition-colors"
+                      className="py-2.5 px-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 inline-flex items-center justify-center min-w-touch"
                       aria-label={`Delete ${product.name}`}
                     >
                       <Trash2 className="w-4 h-4" />
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}

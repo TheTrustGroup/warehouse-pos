@@ -7,6 +7,7 @@ import { UserManagement } from '../components/settings/UserManagement';
 import { CategoryManagement } from '../components/settings/CategoryManagement';
 import { LocalStorageCacheView } from '../components/settings/LocalStorageCacheView';
 import { useSettings } from '../contexts/SettingsContext';
+import { Button } from '../components/ui/Button';
 
 type SettingsTab = 'business' | 'system' | 'users' | 'categories' | 'cache';
 
@@ -52,13 +53,15 @@ export function Settings() {
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">Settings</h1>
           <p className="text-slate-500 text-sm">Manage your store configuration</p>
         </div>
-        <button
+        <Button
+          type="button"
+          variant="secondary"
           onClick={handleReset}
-          className="btn-secondary flex items-center gap-2"
+          className="flex items-center gap-2"
         >
           <RotateCcw className="w-5 h-5" strokeWidth={2} />
           Reset to Defaults
-        </button>
+        </Button>
       </div>
 
       {/* Tabs */}

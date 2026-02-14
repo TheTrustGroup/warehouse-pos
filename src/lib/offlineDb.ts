@@ -76,7 +76,7 @@ export async function saveProductsToDb(products: unknown[]): Promise<void> {
       tx.onerror = () => reject(tx.error);
     });
   } catch (e) {
-    console.warn('IndexedDB save products failed:', e);
+    if (import.meta.env.DEV) console.warn('IndexedDB save products failed:', e);
   }
 }
 
@@ -108,7 +108,7 @@ export async function enqueueOfflineTransaction(tx: Record<string, unknown>): Pr
     const store = db.transaction(STORE_OFFLINE_TX, 'readwrite').objectStore(STORE_OFFLINE_TX);
     store.put(serializeForDb(tx));
   } catch (e) {
-    console.warn('IndexedDB enqueue transaction failed:', e);
+    if (import.meta.env.DEV) console.warn('IndexedDB enqueue transaction failed:', e);
   }
 }
 
@@ -139,7 +139,7 @@ export async function clearOfflineTransactionQueue(): Promise<void> {
     const store = db.transaction(STORE_OFFLINE_TX, 'readwrite').objectStore(STORE_OFFLINE_TX);
     store.clear();
   } catch (e) {
-    console.warn('IndexedDB clear offline queue failed:', e);
+    if (import.meta.env.DEV) console.warn('IndexedDB clear offline queue failed:', e);
   }
 }
 
@@ -150,7 +150,7 @@ export async function removeOfflineTransactionById(id: string): Promise<void> {
     const store = db.transaction(STORE_OFFLINE_TX, 'readwrite').objectStore(STORE_OFFLINE_TX);
     store.delete(id);
   } catch (e) {
-    console.warn('IndexedDB remove offline tx failed:', e);
+    if (import.meta.env.DEV) console.warn('IndexedDB remove offline tx failed:', e);
   }
 }
 

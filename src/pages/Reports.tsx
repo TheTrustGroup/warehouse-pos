@@ -14,6 +14,7 @@ import { formatCurrency, getCategoryDisplay } from '../lib/utils';
 import { getStoredData } from '../lib/storage';
 import { parseDate, validateDateRange } from '../lib/dateUtils';
 import { API_BASE_URL } from '../lib/api';
+import { Button } from '../components/ui/Button';
 
 type ReportType = 'sales' | 'inventory';
 type TransactionsSource = 'server' | 'local';
@@ -138,39 +139,37 @@ export function Reports() {
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">Reports & Analytics</h1>
           <p className="text-slate-500 text-sm">Comprehensive business insights</p>
         </div>
-        <button
+        <Button
+          type="button"
+          variant="primary"
           onClick={reportType === 'sales' ? handleExportSales : handleExportInventory}
-          className="btn-primary flex items-center gap-2"
+          className="flex items-center gap-2"
         >
           <Download className="w-5 h-5" strokeWidth={2} />
           Export CSV
-        </button>
+        </Button>
       </div>
 
       {/* Report Type Selector */}
       <div className="flex gap-3 animate-fade-in-up">
-        <button
+        <Button
+          type="button"
+          variant={reportType === 'sales' ? 'primary' : 'secondary'}
           onClick={() => setReportType('sales')}
-          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 ${
-            reportType === 'sales'
-              ? 'btn-primary'
-              : 'btn-secondary'
-          }`}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold"
         >
           <FileText className="w-5 h-5" strokeWidth={2} />
           Sales Report
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          variant={reportType === 'inventory' ? 'primary' : 'secondary'}
           onClick={() => setReportType('inventory')}
-          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 ${
-            reportType === 'inventory'
-              ? 'btn-primary'
-              : 'btn-secondary'
-          }`}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold"
         >
           <Table className="w-5 h-5" strokeWidth={2} />
           Inventory Report
-        </button>
+        </Button>
       </div>
 
       {/* Sales Report */}
@@ -199,8 +198,8 @@ export function Reports() {
               {/* Category Performance */}
               <div className="table-container">
                 <h3 className="text-lg font-semibold text-slate-900 mb-6 px-6 pt-6">Category Performance</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="table-scroll-wrap">
+              <table className="w-full min-w-[320px]">
                 <thead className="table-header">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Category</th>
@@ -239,8 +238,8 @@ export function Reports() {
           {/* Top Value Products */}
           <div className="table-container">
             <h3 className="text-lg font-semibold text-slate-900 mb-6 px-6 pt-6">Highest Value Inventory</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="table-scroll-wrap">
+              <table className="w-full min-w-[280px]">
                 <thead className="table-header">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Product</th>
@@ -266,8 +265,8 @@ export function Reports() {
           {/* Category Breakdown */}
           <div className="table-container">
             <h3 className="text-lg font-semibold text-slate-900 mb-6 px-6 pt-6">Inventory by Category</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="table-scroll-wrap">
+              <table className="w-full min-w-[320px]">
                 <thead className="table-header">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Category</th>

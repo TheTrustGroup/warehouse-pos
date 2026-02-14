@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Product } from '../../types';
 import { formatCurrency, getCategoryDisplay, getLocationDisplay } from '../../lib/utils';
+import { Button } from '../ui/Button';
 import { Pencil, Trash2, Eye, Package, CloudOff, RefreshCw } from 'lucide-react';
 
 interface ProductTableViewProps {
@@ -84,7 +85,7 @@ export function ProductTableView({
   /* Table: consistent cell padding; horizontal scroll on small screens; no clipped content */
   return (
     <div className="table-container">
-      <div className="overflow-x-auto -mx-1 overscroll-x-contain">
+      <div className="table-scroll-wrap -mx-1">
         <table className="w-full min-w-[800px]">
           <thead className="table-header sticky top-0 z-10">
             <tr>
@@ -165,8 +166,10 @@ export function ProductTableView({
                           </span>
                         )}
                         {isUnsynced?.(product.id) && onVerifySaved && (
-                          <button
+                          <Button
                             type="button"
+                            variant="secondary"
+                            size="sm"
                             onClick={async (e) => {
                               e.stopPropagation();
                               setVerifyingId(product.id);
@@ -178,12 +181,12 @@ export function ProductTableView({
                               }
                             }}
                             disabled={verifyingId === product.id}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-medium hover:bg-slate-200 disabled:opacity-60"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs min-h-0"
                             title="Check if this product was saved to the server"
                           >
                             {verifyingId === product.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                             {verifyingId === product.id ? 'Checking…' : 'Check if saved'}
-                          </button>
+                          </Button>
                         )}
                       </div>
                       <p className="text-xs text-slate-500">{product.tags.join(', ')}</p>
@@ -236,33 +239,18 @@ export function ProductTableView({
                   {(canEdit || canDelete) && (
                     <td className="px-4 py-3 align-middle">
                       <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => onView(product)}
-                          className="btn-action btn-action-view"
-                          title="View"
-                          aria-label={`View ${product.name}`}
-                        >
+                        <Button variant="actionView" onClick={() => onView(product)} title="View" aria-label={`View ${product.name}`}>
                           <Eye className="w-4 h-4" />
-                        </button>
+                        </Button>
                         {canEdit && (
-                          <button
-                            onClick={() => onEdit(product)}
-                            className="btn-action btn-action-edit"
-                            title="Edit"
-                            aria-label={`Edit ${product.name}`}
-                          >
+                          <Button variant="actionEdit" onClick={() => onEdit(product)} title="Edit" aria-label={`Edit ${product.name}`}>
                             <Pencil className="w-4 h-4" />
-                          </button>
+                          </Button>
                         )}
                         {canDelete && (
-                          <button
-                            onClick={() => onDelete(product.id)}
-                            className="btn-action btn-action-delete"
-                            title="Delete"
-                            aria-label={`Delete ${product.name}`}
-                          >
+                          <Button variant="danger" onClick={() => onDelete(product.id)} title="Delete" aria-label={`Delete ${product.name}`}>
                             <Trash2 className="w-4 h-4" />
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </td>

@@ -6,12 +6,16 @@ import { useWarehouse } from './WarehouseContext';
 import { useToast } from './ToastContext';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPost, apiPatch } from '../lib/apiClient';
-import { reportError } from '../lib/observability';
+import { reportError } from '../lib/errorReporting';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 interface OrderContextType {
   orders: Order[];
   isLoading: boolean;
+  /** Order id currently being updated (assign driver, deliver, fail, cancel, or status update). Use to show loading on buttons. */
+  busyOrderId: string | null;
+  /** Reload orders from API (used by critical data load after login). */
+  refreshOrders: () => Promise<void>;
   createOrder: (orderData: Partial<Order>) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus, notes?: string) => Promise<void>;
   assignDriver: (orderId: string, driverName: string, driverPhone: string) => Promise<void>;
@@ -29,6 +33,7 @@ const OrderContext = createContext<OrderContextType | undefined>(undefined);
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const { products, refreshProducts } = useInventory();
   const { user } = useAuth();
   const { currentWarehouseId } = useWarehouse();
@@ -142,48 +147,61 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     await refreshProducts();
   }, [currentWarehouseId, refreshProducts]);
 
-  // Create new order
+  // Create new order (resilient to 404 when backend does not implement POST /api/orders)
   const createOrder = async (orderData: Partial<Order>): Promise<Order> => {
+    // Validate stock availability
+    if (orderData.items && orderData.items.length > 0) {
+      reserveStock(orderData.items);
+    }
+
+    const orderPayload = {
+      orderNumber: generateOrderNumber(),
+      type: orderData.type || 'delivery',
+      customer: orderData.customer!,
+      items: orderData.items || [],
+      subtotal: orderData.subtotal ?? 0,
+      deliveryFee: orderData.deliveryFee ?? 0,
+      tax: orderData.tax ?? 0,
+      discount: orderData.discount ?? 0,
+      total: orderData.total ?? 0,
+      status: 'pending' as OrderStatus,
+      delivery: orderData.delivery,
+      payment: orderData.payment ?? {
+        method: 'cash_on_delivery',
+        status: 'pending',
+        paidAmount: 0,
+      },
+      notes: orderData.notes,
+      createdBy: user?.id || user?.email || 'system',
+    };
+
     try {
-      // Validate stock availability
-      if (orderData.items && orderData.items.length > 0) {
-        reserveStock(orderData.items);
-      }
-
-      const orderPayload = {
-        orderNumber: generateOrderNumber(),
-        type: orderData.type || 'delivery',
-        customer: orderData.customer!,
-        items: orderData.items || [],
-        subtotal: orderData.subtotal ?? 0,
-        deliveryFee: orderData.deliveryFee ?? 0,
-        tax: orderData.tax ?? 0,
-        discount: orderData.discount ?? 0,
-        total: orderData.total ?? 0,
-        status: 'pending' as OrderStatus,
-        delivery: orderData.delivery,
-        payment: orderData.payment ?? {
-          method: 'cash_on_delivery',
-          status: 'pending',
-          paidAmount: 0,
-        },
-        notes: orderData.notes,
-        createdBy: user?.id || user?.email || 'system',
-      };
-
       const savedRaw = await apiPost<Order>(API_BASE_URL, '/api/orders', orderPayload, {
         idempotencyKey: orderPayload.orderNumber,
       });
       const savedOrder = normalizeOrder(savedRaw);
-
       setOrders(prev => [...prev, savedOrder]);
       showToast('success', `Order ${savedOrder.orderNumber} created successfully`);
       return savedOrder;
     } catch (error) {
+      const is404 = (e: unknown) => (e as { status?: number })?.status === 404;
+      if (is404(error)) {
+        const localOrder: Order = normalizeOrder({
+          id: crypto.randomUUID(),
+          ...orderPayload,
+          statusHistory: [],
+          inventory: { reserved: false, deducted: false },
+        });
+        setOrders(prev => [...prev, localOrder]);
+        showToast('success', 'Order saved locally. Server order sync not available.');
+        return localOrder;
+      }
       showToast('error', error instanceof Error ? error.message : 'Failed to create order');
       throw error;
     }
   };
+
+  const is404 = (e: unknown) => (e as { status?: number })?.status === 404;
 
   // Update order status
   const updateOrderStatus = async (
@@ -197,36 +215,52 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Deduct stock when going out for delivery
-    if (status === 'out_for_delivery' && !order.inventory.deducted) {
-      await deductStock(order.items);
-      order.inventory.deducted = true;
-      order.inventory.deductedAt = new Date();
-    }
-
-    // Return stock if delivery failed
-    if (status === 'failed' && order.inventory.deducted) {
-      await returnStock(order.items);
-      order.inventory.deducted = false;
-    }
-
-    const updatePayload = {
-      status,
-      notes: notes ?? `Status updated to ${status}`,
-      updatedBy: user?.id || user?.email || 'system',
-    };
-
+    setBusyOrderId(orderId);
     try {
-      const savedRaw = await apiPatch<Order>(API_BASE_URL, `/api/orders/${orderId}`, updatePayload);
-      const updatedOrder: Order = {
-        ...normalizeOrder(savedRaw),
-        createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
+      // Deduct stock when going out for delivery
+      if (status === 'out_for_delivery' && !order.inventory.deducted) {
+        await deductStock(order.items);
+        order.inventory.deducted = true;
+        order.inventory.deductedAt = new Date();
+      }
+
+      // Return stock if delivery failed
+      if (status === 'failed' && order.inventory.deducted) {
+        await returnStock(order.items);
+        order.inventory.deducted = false;
+      }
+
+      const updatePayload = {
+        status,
+        notes: notes ?? `Status updated to ${status}`,
+        updatedBy: user?.id || user?.email || 'system',
       };
-      setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
-      showToast('success', `Order status updated to ${status}`);
-    } catch (error) {
-      showToast('error', error instanceof Error ? error.message : 'Failed to update order status');
-      throw error;
+
+      try {
+        const savedRaw = await apiPatch<Order>(API_BASE_URL, `/api/orders/${orderId}`, updatePayload);
+        const updatedOrder: Order = {
+          ...normalizeOrder(savedRaw),
+          createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
+        };
+        setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
+        showToast('success', `Order status updated to ${status}`);
+      } catch (error) {
+        if (is404(error)) {
+          const updatedOrder: Order = {
+            ...order,
+            status,
+            notes: notes ?? order.notes,
+            updatedAt: new Date(),
+          };
+          setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
+          showToast('success', 'Updated locally. Server order sync not available.');
+        } else {
+          showToast('error', error instanceof Error ? error.message : 'Failed to update order status');
+          throw error;
+        }
+      }
+    } finally {
+      setBusyOrderId(null);
     }
   };
 
@@ -242,24 +276,46 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // PATCH to API
-    const updatePayload = {
-      delivery: {
-        driverName,
-        driverPhone,
-        attempts: (order.delivery?.attempts ?? 0) + 1,
-      },
-      updatedBy: user?.id || user?.email || 'system',
-    };
+    setBusyOrderId(orderId);
+    try {
+      const updatePayload = {
+        delivery: {
+          driverName,
+          driverPhone,
+          attempts: (order.delivery?.attempts ?? 0) + 1,
+        },
+        updatedBy: user?.id || user?.email || 'system',
+      };
 
-    const savedRaw = await apiPatch<Order>(API_BASE_URL, `/api/orders/${orderId}/assign-driver`, updatePayload);
-    const updatedOrder: Order = {
-      ...normalizeOrder(savedRaw),
-      createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
-    };
-
-    setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
-    await updateOrderStatus(orderId, 'out_for_delivery', `Assigned to driver: ${driverName}`);
+      try {
+        const savedRaw = await apiPatch<Order>(API_BASE_URL, `/api/orders/${orderId}/assign-driver`, updatePayload);
+        const updatedOrder: Order = {
+          ...normalizeOrder(savedRaw),
+          createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
+        };
+        setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
+      } catch (error) {
+        if (is404(error)) {
+          const updatedOrder: Order = {
+            ...order,
+            delivery: {
+              ...order.delivery,
+              driverName,
+              driverPhone,
+              attempts: (order.delivery?.attempts ?? 0) + 1,
+            } as Order['delivery'],
+            updatedAt: new Date(),
+          };
+          setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
+          showToast('success', 'Saved locally. Server order sync not available.');
+        } else {
+          throw error;
+        }
+      }
+      await updateOrderStatus(orderId, 'out_for_delivery', `Assigned to driver: ${driverName}`);
+    } finally {
+      setBusyOrderId(null);
+    }
   };
 
   // Mark as delivered
@@ -270,32 +326,52 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const deliveryProof = proof
-      ? { ...proof, receivedAt: proof.receivedAt ?? new Date() }
-      : undefined;
+    setBusyOrderId(orderId);
+    try {
+      const deliveryProof = proof
+        ? { ...proof, receivedAt: proof.receivedAt ?? new Date() }
+        : undefined;
 
-    // PATCH to API
-    const updatePayload = {
-      status: 'delivered' as OrderStatus,
-      delivery: {
-        actualTime: new Date().toISOString(),
-        deliveryProof,
-      },
-      payment: {
-        status: 'paid' as PaymentStatus,
-        paidAt: new Date().toISOString(),
-      },
-      updatedBy: user?.id || user?.email || 'system',
-    };
+      const updatePayload = {
+        status: 'delivered' as OrderStatus,
+        delivery: {
+          actualTime: new Date().toISOString(),
+          deliveryProof,
+        },
+        payment: {
+          status: 'paid' as PaymentStatus,
+          paidAt: new Date().toISOString(),
+        },
+        updatedBy: user?.id || user?.email || 'system',
+      };
 
-    const savedRaw = await apiPatch<Order>(API_BASE_URL, `/api/orders/${orderId}/deliver`, updatePayload);
-    const updatedOrder: Order = {
-      ...normalizeOrder(savedRaw),
-      createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
-    };
-
-    setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
-    showToast('success', 'Order marked as delivered');
+      try {
+        const savedRaw = await apiPatch<Order>(API_BASE_URL, `/api/orders/${orderId}/deliver`, updatePayload);
+        const updatedOrder: Order = {
+          ...normalizeOrder(savedRaw),
+          createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
+        };
+        setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
+        showToast('success', 'Order marked as delivered');
+      } catch (error) {
+        if (is404(error)) {
+          const updatedOrder: Order = {
+            ...order,
+            status: 'delivered',
+            delivery: order.delivery ? { ...order.delivery, actualTime: new Date(), deliveryProof } : undefined,
+            payment: order.payment ? { ...order.payment, status: 'paid' as PaymentStatus, paidAt: new Date() } : { method: 'cash_on_delivery', status: 'paid' as PaymentStatus, paidAmount: order.total ?? 0, paidAt: new Date() },
+            updatedAt: new Date(),
+          };
+          setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
+          showToast('success', 'Marked delivered locally. Server sync not available.');
+        } else {
+          showToast('error', error instanceof Error ? error.message : 'Failed to mark as delivered');
+          throw error;
+        }
+      }
+    } finally {
+      setBusyOrderId(null);
+    }
   };
 
   // Mark as failed
@@ -306,18 +382,23 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // PATCH to API
-    const updatePayload = {
-      status: 'failed' as OrderStatus,
-      delivery: {
-        failureReason: reason,
-      },
-      notes: `Delivery failed: ${reason}`,
-      updatedBy: user?.id || user?.email || 'system',
-    };
-
-    await apiPatch(API_BASE_URL, `/api/orders/${orderId}/fail`, updatePayload);
-    await updateOrderStatus(orderId, 'failed', `Delivery failed: ${reason}`);
+    setBusyOrderId(orderId);
+    try {
+      try {
+        await apiPatch(API_BASE_URL, `/api/orders/${orderId}/fail`, {
+          status: 'failed' as OrderStatus,
+          delivery: { failureReason: reason },
+          notes: `Delivery failed: ${reason}`,
+          updatedBy: user?.id || user?.email || 'system',
+        });
+      } catch (error) {
+        if (!is404(error)) throw error;
+        showToast('success', 'Updated locally. Server order sync not available.');
+      }
+      await updateOrderStatus(orderId, 'failed', `Delivery failed: ${reason}`);
+    } finally {
+      setBusyOrderId(null);
+    }
   };
 
   // Cancel order
@@ -328,20 +409,26 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Return stock if it was deducted
-    if (order.inventory.deducted) {
-      await returnStock(order.items);
+    setBusyOrderId(orderId);
+    try {
+      if (order.inventory.deducted) {
+        await returnStock(order.items);
+      }
+
+      try {
+        await apiPatch(API_BASE_URL, `/api/orders/${orderId}/cancel`, {
+          status: 'cancelled' as OrderStatus,
+          notes: `Order cancelled: ${reason}`,
+          updatedBy: user?.id || user?.email || 'system',
+        });
+      } catch (error) {
+        if (!is404(error)) throw error;
+        showToast('success', 'Cancelled locally. Server order sync not available.');
+      }
+      await updateOrderStatus(orderId, 'cancelled', `Order cancelled: ${reason}`);
+    } finally {
+      setBusyOrderId(null);
     }
-
-    // PATCH to API
-    const updatePayload = {
-      status: 'cancelled' as OrderStatus,
-      notes: `Order cancelled: ${reason}`,
-      updatedBy: user?.id || user?.email || 'system',
-    };
-
-    await apiPatch(API_BASE_URL, `/api/orders/${orderId}/cancel`, updatePayload);
-    await updateOrderStatus(orderId, 'cancelled', `Order cancelled: ${reason}`);
   };
 
   // Helper functions
@@ -361,6 +448,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       value={{
         orders,
         isLoading,
+        busyOrderId,
+        refreshOrders: loadOrders,
         createOrder,
         updateOrderStatus,
         assignDriver,

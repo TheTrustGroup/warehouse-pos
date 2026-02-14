@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
+import { ToastProvider } from './ToastContext';
 import { WarehouseProvider } from './WarehouseContext';
 import { InventoryProvider, useInventory } from './InventoryContext';
 
@@ -53,9 +54,11 @@ vi.mock('../hooks/useRealtimeSync', () => ({
 import { apiGet, apiPost } from '../lib/apiClient';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <WarehouseProvider>
-    <InventoryProvider>{children}</InventoryProvider>
-  </WarehouseProvider>
+  <ToastProvider>
+    <WarehouseProvider>
+      <InventoryProvider>{children}</InventoryProvider>
+    </WarehouseProvider>
+  </ToastProvider>
 );
 
 const minimalProduct = {

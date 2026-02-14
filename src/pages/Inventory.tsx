@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useInventory, ProductFilters, ADD_PRODUCT_SAVED_LOCALLY } from '../contexts/InventoryContext';
+import { useInventory, ProductFilters } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { API_BASE_URL } from '../lib/api';
@@ -13,6 +13,8 @@ import { InventorySearchBar } from '../components/inventory/InventorySearchBar';
 import { Product } from '../types';
 import { PERMISSIONS } from '../types/permissions';
 import { getCategoryDisplay, getLocationDisplay, formatRelativeTime } from '../lib/utils';
+import { getUserFriendlyMessage } from '../lib/errorMessages';
+import { Button } from '../components/ui/Button';
 import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, RefreshCw, Upload } from 'lucide-react';
 
 type ViewMode = 'table' | 'grid';
@@ -104,15 +106,10 @@ export function Inventory() {
           <p className="text-slate-500 text-xs mb-6 break-all font-mono">
             Backend: {API_BASE_URL}
           </p>
-          <button
-            type="button"
-            onClick={() => refreshProducts()}
-            className="btn-primary inline-flex items-center gap-2"
-            aria-label="Retry loading products"
-          >
+          <Button variant="primary" onClick={() => refreshProducts()} className="inline-flex items-center gap-2" aria-label="Retry loading products">
             <RefreshCw className="w-4 h-4" />
             Retry
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -131,15 +128,10 @@ export function Inventory() {
             Add your first product to get started.
           </p>
           {canCreate && (
-            <button
-              type="button"
-              onClick={() => { setEditingProduct(null); setIsModalOpen(true); }}
-              className="btn-primary inline-flex items-center gap-2 min-h-touch"
-              aria-label="Add first product"
-            >
+            <Button variant="primary" onClick={() => { setEditingProduct(null); setIsModalOpen(true); }} className="inline-flex items-center gap-2" aria-label="Add first product">
               <Plus className="w-5 h-5" />
               Add first product
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -168,7 +160,7 @@ export function Inventory() {
         setSelectedIds(prev => prev.filter(sid => sid !== id));
         showToast('success', 'Product deleted successfully');
       } catch (error) {
-        showToast('error', error instanceof Error ? error.message : 'Failed to delete product');
+        showToast('error', getUserFriendlyMessage(error));
       }
     }
   };
@@ -181,26 +173,24 @@ export function Inventory() {
         setSelectedIds([]);
         showToast('success', `${selectedIds.length} product(s) deleted successfully`);
       } catch (error) {
-        showToast('error', error instanceof Error ? error.message : 'Failed to delete products');
+        showToast('error', getUserFriendlyMessage(error));
       }
     }
   };
 
   /**
-   * RELIABILITY: "Saved" is shown only after API 2xx and read-after-write verification.
-   * On failure: clear error toast, retry possible; modal stays open and form is not reset.
+   * Optimistic save: context shows product immediately, then API. Success/error toasts from context.
+   * On success: modal closes. On failure: rollback + error toast from context; modal stays open.
    */
   const handleSubmitProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const warehouseLabel = currentWarehouse?.name ?? currentWarehouseId ?? 'warehouse';
     if (editingProduct) {
       try {
         await updateProduct(editingProduct.id, productData);
         setIsModalOpen(false);
         setEditingProduct(null);
-        showToast('success', `Saved to ${warehouseLabel}`);
-      } catch (error) {
-        showToast('error', error instanceof Error ? error.message : 'Failed to update product');
-        throw error;
+      } catch {
+        // Error toast and rollback already done in InventoryContext
+        throw undefined;
       }
       return;
     }
@@ -208,17 +198,9 @@ export function Inventory() {
       await addProduct(productData);
       setIsModalOpen(false);
       setEditingProduct(null);
-      showToast('success', `Saved to ${warehouseLabel}`);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to save product. Write failed.';
-      if (msg === ADD_PRODUCT_SAVED_LOCALLY) {
-        setIsModalOpen(false);
-        setEditingProduct(null);
-        showToast('warning', msg);
-      } else {
-        showToast('error', msg);
-        throw e;
-      }
+      // Error toast and rollback already done in InventoryContext; rethrow so modal stays open
+      throw e;
     }
   };
 
@@ -311,15 +293,10 @@ export function Inventory() {
           )}
         </div>
         {canCreate && (
-          <button
-            type="button"
-            onClick={handleAddProduct}
-            className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto"
-            aria-label="Add product"
-          >
+          <Button variant="primary" onClick={handleAddProduct} className="flex items-center justify-center gap-2 w-full sm:w-auto" aria-label="Add product">
             <Plus className="w-5 h-5" />
             Add product
-          </button>
+          </Button>
         )}
       </div>
 
@@ -374,14 +351,10 @@ export function Inventory() {
                   {selectedIds.length} selected
                 </span>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleExport}
-                    className="btn-secondary min-h-touch px-4 py-2 text-sm inline-flex items-center gap-2"
-                  >
+                  <Button variant="secondary" onClick={handleExport} size="sm" className="inline-flex items-center gap-2">
                     <Download className="w-4 h-4" />
                     Export
-                  </button>
+                  </Button>
                   {canDelete && (
                     <button
                       type="button"
@@ -407,13 +380,9 @@ export function Inventory() {
                 Try different search or filters.
               </p>
               {(searchQuery || Object.keys(filters).length > 0) && (
-                <button
-                  type="button"
-                  onClick={() => { setSearchQuery(''); setFilters({}); }}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium min-h-touch inline-flex items-center"
-                >
+                <Button variant="ghost" size="sm" onClick={() => { setSearchQuery(''); setFilters({}); }} className="text-sm">
                   Clear filters
-                </button>
+                </Button>
               )}
             </div>
           ) : viewMode === 'table' ? (

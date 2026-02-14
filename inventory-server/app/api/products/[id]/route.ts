@@ -56,6 +56,7 @@ export async function PUT(
       request_id: requestId,
       user_role: auth.role,
     });
+    // Return complete saved product so client can update UI without a follow-up GET
     return NextResponse.json(updated);
   } catch (e: unknown) {
     const err = e as Error & { status?: number };

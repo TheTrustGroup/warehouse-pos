@@ -28,13 +28,11 @@ export function reportError(error: unknown, context?: Record<string, unknown>): 
     try {
       config.reportError(err, context);
     } catch (_) {
-      console.error('Observability reportError failed:', err);
+      if (import.meta.env.DEV) console.error('Observability reportError failed:', err);
     }
     return;
   }
-  if (import.meta.env.DEV) {
-    console.error('[Observability]', err, context);
-  }
+  // When no external reporter, dev logging is done by errorReporting.reportError (single place)
 }
 
 /**

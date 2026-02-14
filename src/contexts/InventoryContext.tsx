@@ -19,7 +19,9 @@ import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage
 import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from '../lib/apiClient';
 import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
+import { useToast } from './ToastContext';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
+import { parseProductsResponse } from '../lib/apiSchemas';
 
 /** Per-warehouse cache key so we can show the right list immediately on login/refresh. */
 function productsCacheKey(warehouseId: string): string {
@@ -61,7 +63,7 @@ function getCachedProductsForWarehouse(warehouseId: string): Product[] {
   }
 }
 import { loadProductsFromDb, saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
-import { reportError } from '../lib/observability';
+import { reportError } from '../lib/errorReporting';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import {
   logInventoryCreate,
@@ -116,6 +118,7 @@ export const ADD_PRODUCT_SAVED_LOCALLY =
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const { currentWarehouseId } = useWarehouse();
+  const { showToast } = useToast();
   const effectiveWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : DEFAULT_WAREHOUSE_ID;
   const initialCache = getCachedProductsForWarehouse(effectiveWarehouseId);
   const [products, setProducts] = useState<Product[]>(() => initialCache);
@@ -238,8 +241,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             throw e;
           }
         }
-        const data = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && Array.isArray((raw as { data?: Product[] }).data) ? (raw as { data: Product[] }).data : []);
-        const apiProducts = (data || []).map((p: any) => normalizeProduct(p));
+        const parsed = parseProductsResponse(raw);
+        if (!parsed.success) {
+          setError(parsed.message);
+          return;
+        }
+        const apiProducts = parsed.items.map((p) => normalizeProduct(p));
         const apiIds = new Set(apiProducts.map((p) => p.id));
         // Keep products that exist only locally (e.g. added while offline or when API failed) so inventory never vanishes
         const localOnly: Product[] = [];
@@ -489,14 +496,34 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  /** Serialize a product for API POST/PUT (dates to ISO strings). Preserves version for optimistic locking. */
-  const productToPayload = (product: Product) => ({
-    ...product,
-    createdAt: product.createdAt instanceof Date ? product.createdAt.toISOString() : product.createdAt,
-    updatedAt: product.updatedAt instanceof Date ? product.updatedAt.toISOString() : product.updatedAt,
-    expiryDate: product.expiryDate instanceof Date ? product.expiryDate.toISOString() : product.expiryDate,
-    ...(product.version !== undefined && { version: product.version }),
-  });
+  /** Minimal payload for API POST/PUT: only fields backend persists. Reduces payload size and avoids sending UI-only data. */
+  const productToPayload = (product: Product): Record<string, unknown> => {
+    const toIso = (d: Date | string | null | undefined) =>
+      d instanceof Date ? d.toISOString() : d ?? null;
+    return {
+      id: product.id,
+      sku: product.sku ?? '',
+      barcode: product.barcode ?? '',
+      name: product.name ?? '',
+      description: product.description ?? '',
+      category: product.category ?? '',
+      tags: Array.isArray(product.tags) ? product.tags : [],
+      quantity: product.quantity ?? 0,
+      costPrice: product.costPrice ?? 0,
+      sellingPrice: product.sellingPrice ?? 0,
+      reorderLevel: product.reorderLevel ?? 0,
+      location: product.location && typeof product.location === 'object' ? product.location : { warehouse: '', aisle: '', rack: '', bin: '' },
+      supplier: product.supplier && typeof product.supplier === 'object' ? product.supplier : { name: '', contact: '', email: '' },
+      images: Array.isArray(product.images) ? product.images : [],
+      expiryDate: toIso(product.expiryDate ?? null),
+      createdBy: product.createdBy ?? '',
+      createdAt: toIso(product.createdAt),
+      updatedAt: toIso(product.updatedAt),
+      ...(product.version !== undefined && { version: product.version }),
+      ...(product.sizeKind && { sizeKind: product.sizeKind }),
+      ...(product.quantityBySize && product.quantityBySize.length > 0 && { quantityBySize: product.quantityBySize }),
+    };
+  };
 
   /**
    * Push products that exist only in this browser's storage to the API
@@ -525,22 +552,33 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const total = localOnly.length;
     if (total === 0) return { synced: 0, failed: 0, total: 0, syncedIds: [] };
 
+    const CONCURRENCY = 5;
     const syncedIds: string[] = [];
-    let synced = 0;
     let failed = 0;
-    for (const product of localOnly) {
+    const runOne = async (product: Product): Promise<boolean> => {
       try {
         try {
           await apiPost(API_BASE_URL, '/admin/api/products', productToPayload(product));
         } catch {
           await apiPost(API_BASE_URL, '/api/products', productToPayload(product));
         }
-        synced++;
-        syncedIds.push(product.id);
+        return true;
       } catch {
-        failed++;
+        return false;
       }
+    };
+    for (let i = 0; i < localOnly.length; i += CONCURRENCY) {
+      const chunk = localOnly.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(chunk.map((p) => runOne(p)));
+      chunk.forEach((p, j) => {
+        if (results[j]) {
+          syncedIds.push(p.id);
+        } else {
+          failed++;
+        }
+      });
     }
+    const synced = syncedIds.length;
     if (syncedIds.length > 0) setLocalOnlyIds((prev) => {
       const next = new Set(prev);
       syncedIds.forEach((id) => next.delete(id));
@@ -579,44 +617,47 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     raw && typeof raw === 'object' && raw.id && (raw.name != null || raw.sku != null);
 
   /**
-   * Add product: WRITE PATH. Server confirms persistence; then we use response body as verified when complete (one round-trip), else read-after-write GET.
-   * UI shows "Saved" only after we have verified data. No optimistic success; on failure we throw and keep form open.
+   * Add product: optimistic UI update, then POST. On success: update state from server response, force fresh GET, toast.
+   * On failure: rollback and error toast. No debouncing.
    */
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => {
     if (!productData?.name?.trim?.()) throw new Error('Product name is required');
+    const stableId = crypto.randomUUID();
+    const payload = productToPayload({
+      ...productData,
+      id: stableId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const bodyWithWarehouse = { ...payload, warehouseId: productData.warehouseId ?? currentWarehouseId };
+    const optimisticProduct: Product = normalizeProduct(payload);
+
+    const previousProducts = [...products];
+    setProducts((prev) => [...prev, optimisticProduct]);
+    persistProducts([...previousProducts, optimisticProduct]);
     setSavePhase('saving');
+    setError(null);
+
     try {
-      const stableId = crypto.randomUUID();
-      const payload = productToPayload({
-        ...productData,
-        id: stableId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      const bodyWithWarehouse = { ...payload, warehouseId: productData.warehouseId ?? currentWarehouseId };
+      if (import.meta.env.DEV && typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('inventory-addProduct-start');
+      }
       let savedRaw: any = null;
       try {
         savedRaw = await apiPost<any>(API_BASE_URL, '/admin/api/products', bodyWithWarehouse, {
           idempotencyKey: stableId,
         });
       } catch {
-        try {
-          savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', bodyWithWarehouse, {
-            idempotencyKey: stableId,
-          });
-        } catch {
-          const saved: Product = normalizeProduct(payload);
-          setLocalOnlyIds((prev) => new Set(prev).add(saved.id));
-          setProducts((prev) => {
-            const next = [...prev, saved];
-            persistProducts(next);
-            return next;
-          });
-          throw new Error(ADD_PRODUCT_SAVED_LOCALLY);
-        }
+        savedRaw = await apiPost<any>(API_BASE_URL, '/api/products', bodyWithWarehouse, {
+          idempotencyKey: stableId,
+        });
       }
+      if (import.meta.env.DEV && typeof performance !== 'undefined' && performance.measure) {
+        performance.measure('inventory-addProduct-api', 'inventory-addProduct-start');
+      }
+
       const saved: Product = normalizeProduct(savedRaw);
-      logInventoryCreate({ productId: saved.id, sku: saved.sku, listLength: products.length + 1 });
+      logInventoryCreate({ productId: saved.id, sku: saved.sku, listLength: previousProducts.length + 1 });
       let verified: Product;
       if (responseIsFullProduct(savedRaw)) {
         verified = saved;
@@ -626,7 +667,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           verified = await readAfterWriteVerify(saved.id);
         } catch (e) {
           reportError(e instanceof Error ? e : new Error('Read-after-write verify failed after add'), { productId: saved.id });
-          loadProducts(undefined, { silent: true }).catch(() => {});
+          await loadProducts(undefined, { silent: true, bypassCache: true });
           throw new Error('Save succeeded but verification failed. Please refresh the list or try again.');
         }
       }
@@ -634,38 +675,53 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setProducts((prev) => {
         const next = [...prev].some((p) => p.id === verified.id)
           ? prev.map((p) => (p.id === verified.id ? verified : p))
-          : [...prev, verified];
+          : [...prev.filter((p) => p.id !== optimisticProduct.id), verified];
         persistProducts(next);
         return next;
       });
+      showToast('success', 'Product saved');
+    } catch (err) {
+      setProducts(previousProducts);
+      persistProducts(previousProducts);
+      const msg = err instanceof Error ? err.message : 'Failed to save product';
+      showToast('error', msg);
+      throw err;
     } finally {
       setSavePhase('idle');
     }
   };
 
   /**
-   * Update product: WRITE PATH. Server confirms persistence; we use response body as verified when complete (one round-trip), else read-after-write GET.
-   * UI shows "Saved" only after we have verified data. Version check (409) still blocks and refreshes.
+   * Update product: optimistic UI update, then PUT. On success: update state from server response, force fresh GET, toast.
+   * On failure: rollback and error toast. 409 triggers full refresh. No debouncing.
    */
   const updateProduct = async (id: string, updates: Partial<Product> & { warehouseId?: string }) => {
     const product = products.find(p => p.id === id);
     if (!product) throw new Error('Product not found');
 
-    setSavePhase('saving');
-    try {
-      const updatedProduct = { ...product, ...updates, updatedAt: new Date() };
-      const payload = productToPayload(updatedProduct);
-      const bodyWithWarehouse = { ...payload, warehouseId: updates.warehouseId ?? currentWarehouseId };
+    const updatedProduct = { ...product, ...updates, updatedAt: new Date() };
+    const payload = productToPayload(updatedProduct);
+    const bodyWithWarehouse = { ...payload, warehouseId: updates.warehouseId ?? currentWarehouseId };
+    const optimisticProduct: Product = normalizeProduct(updatedProduct);
 
+    const previousProducts = [...products];
+    setProducts((prev) => prev.map((p) => (p.id === id ? optimisticProduct : p)));
+    persistProducts(previousProducts.map((p) => (p.id === id ? optimisticProduct : p)));
+    setSavePhase('saving');
+    setError(null);
+
+    try {
+      if (import.meta.env.DEV && typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('inventory-updateProduct-start');
+      }
       const doPut = async (): Promise<any> => {
         try {
           return await apiPut<any>(API_BASE_URL, `/admin/api/products/${id}`, bodyWithWarehouse);
         } catch (err: any) {
           if (err?.status === 409) {
-            await loadProducts();
-            throw new Error(
-              'Someone else updated this product. The list has been refreshed — please try your change again.'
-            );
+            await loadProducts(undefined, { bypassCache: true });
+            showToast('error', 'Someone else updated this product. The list has been refreshed.');
+            throw new Error('Someone else updated this product. The list has been refreshed — please try your change again.');
           }
           throw err;
         }
@@ -679,13 +735,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           putResult = await apiPut<any>(API_BASE_URL, `/api/products/${id}`, bodyWithWarehouse);
         } catch (err: any) {
           if (err?.status === 409) {
-            await loadProducts();
-            throw new Error(
-              'Someone else updated this product. The list has been refreshed — please try your change again.'
-            );
+            await loadProducts(undefined, { bypassCache: true });
+            showToast('error', 'Someone else updated this product. The list has been refreshed.');
+            throw new Error('Someone else updated this product. The list has been refreshed — please try your change again.');
           }
           throw err;
         }
+      }
+      if (import.meta.env.DEV && typeof performance !== 'undefined' && performance.measure) {
+        performance.measure('inventory-updateProduct-api', 'inventory-updateProduct-start');
       }
 
       logInventoryUpdate({ productId: id, sku: product.sku });
@@ -698,16 +756,25 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           verified = await readAfterWriteVerify(id);
         } catch (e) {
           reportError(e instanceof Error ? e : new Error('Read-after-write verify failed after update'), { productId: id });
-          loadProducts(undefined, { silent: true }).catch(() => {});
+          await loadProducts(undefined, { silent: true, bypassCache: true });
           throw new Error('Save succeeded but verification failed. Please refresh the list or try again.');
         }
       }
       if (!mountedRef.current) return;
       setProducts((prev) => {
-        const next = prev.map(p => (p.id === id ? verified : p));
+        const next = prev.map((p) => (p.id === id ? verified : p));
         persistProducts(next);
         return next;
       });
+      showToast('success', 'Product updated');
+    } catch (err) {
+      setProducts(previousProducts);
+      persistProducts(previousProducts);
+      if ((err as { status?: number })?.status !== 409) {
+        const msg = err instanceof Error ? err.message : 'Failed to update product';
+        showToast('error', msg);
+      }
+      throw err;
     } finally {
       setSavePhase('idle');
     }

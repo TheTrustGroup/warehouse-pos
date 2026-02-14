@@ -5,7 +5,7 @@
  * Use for audit and fail-loud: never swallow without logging.
  */
 
-import { reportError } from './observability';
+import { reportError } from './errorReporting';
 
 export type InventoryOp = 'inventory.create' | 'inventory.update' | 'inventory.read' | 'inventory.delete' | 'inventory.error';
 

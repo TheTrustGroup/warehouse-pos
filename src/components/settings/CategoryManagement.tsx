@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Tag, Plus, Edit, Trash2 } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface Category {
   id: string;
@@ -62,10 +63,10 @@ export function CategoryManagement() {
           placeholder="Enter new category name..."
           className="flex-1 input-field"
         />
-        <button onClick={addCategory} className="btn-primary flex items-center gap-2">
+        <Button type="button" variant="primary" onClick={addCategory} className="flex items-center gap-2">
           <Plus className="w-4 h-4" />
           Add
-        </button>
+        </Button>
       </div>
 
       {/* Categories List */}
@@ -80,15 +81,17 @@ export function CategoryManagement() {
               <p className="text-sm text-slate-500">{category.productCount} products</p>
             </div>
             <div className="flex items-center gap-2">
-              <button className="p-2 hover:bg-blue-100 rounded-lg text-blue-600">
+              <Button type="button" variant="actionEdit" className="p-2 min-h-0">
                 <Edit className="w-4 h-4" />
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
                 onClick={() => deleteCategory(category.id)}
-                className="p-2 hover:bg-red-100 rounded-lg text-red-600"
+                className="p-2 min-h-0"
               >
                 <Trash2 className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
           </div>
         ))}

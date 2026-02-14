@@ -186,34 +186,40 @@ export function apiGet<T>(baseUrl: string, path: string, options?: { signal?: Ab
   return apiRequest<T>({ ...options, baseUrl, path, method: 'GET' });
 }
 
-/** POST with optional idempotency key and signal. */
+/** POST with optional idempotency key and signal. Sends Content-Type: application/json. */
 export function apiPost<T>(
   baseUrl: string,
   path: string,
   body: unknown,
   options?: { idempotencyKey?: string; signal?: AbortSignal | null }
 ): Promise<T> {
+  const headers = new Headers(getApiHeaders());
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   return apiRequest<T>({
     ...options,
     baseUrl,
     path,
     method: 'POST',
+    headers,
     body: JSON.stringify(body),
   });
 }
 
-/** PUT with optional signal. */
+/** PUT with optional signal. Sends Content-Type: application/json. */
 export function apiPut<T>(
   baseUrl: string,
   path: string,
   body: unknown,
   options?: { signal?: AbortSignal | null }
 ): Promise<T> {
+  const headers = new Headers(getApiHeaders());
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   return apiRequest<T>({
     ...options,
     baseUrl,
     path,
     method: 'PUT',
+    headers,
     body: JSON.stringify(body),
   });
 }

@@ -31,8 +31,9 @@ const baseNavigation = [
   { name: 'Settings', to: '/settings', icon: Settings, permission: PERMISSIONS.SETTINGS.VIEW },
 ];
 
-function getRoleDisplayName(roleId: string): string {
-  const key = roleId === 'super_admin' ? 'SUPER_ADMIN' : roleId.toUpperCase();
+function getRoleDisplayName(roleId: string | undefined): string {
+  if (roleId == null || roleId === '') return '—';
+  const key = roleId === 'super_admin' ? 'SUPER_ADMIN' : roleId.toUpperCase().replace(/\s+/g, '_');
   return ROLES[key]?.name ?? roleId;
 }
 
@@ -86,7 +87,7 @@ export function Sidebar() {
             <p className="text-sm font-semibold text-slate-900 truncate">
               {user?.fullName}
             </p>
-            <p className="text-xs text-slate-600 font-medium">{user?.role ? getRoleDisplayName(user.role) : '—'}</p>
+            <p className="text-xs text-slate-600 font-medium">{getRoleDisplayName(user?.role)}</p>
           </div>
         </div>
         {canSeeSwitchRole && (

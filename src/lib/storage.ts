@@ -1,20 +1,35 @@
 /**
- * Safe localStorage utilities with error handling
+ * Safe localStorage utilities with error handling and in-memory fallback when storage is unavailable (private mode, old browsers).
  */
 
+const memoryFallback = new Map<string, string>();
+
+function getStorage(): Storage | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const test = '__storage_test__';
+    localStorage.setItem(test, test);
+    localStorage.removeItem(test);
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Safely get data from localStorage
+ * Safely get data from localStorage (or in-memory fallback when unavailable)
  * @param key - Storage key
  * @param defaultValue - Default value if key doesn't exist or parsing fails
  * @returns Parsed data or default value
  */
 export function getStoredData<T>(key: string, defaultValue: T): T {
   try {
-    const item = localStorage.getItem(key);
-    if (!item) return defaultValue;
+    const storage = getStorage();
+    const item = storage ? storage.getItem(key) : memoryFallback.get(key);
+    if (item == null) return defaultValue;
     return JSON.parse(item) as T;
   } catch (error) {
-    console.error(`Error reading ${key} from localStorage:`, error);
+    if (import.meta.env.DEV) console.error(`Error reading ${key} from localStorage:`, error);
     return defaultValue;
   }
 }
@@ -29,34 +44,37 @@ const CLEARABLE_KEYS = ['transactions', 'offline_transactions', 'orders'];
  * @returns true if successful, false otherwise
  */
 export function setStoredData<T>(key: string, value: T): boolean {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-      // Only try to free space for critical keys (e.g. warehouse_products)
-      if (key === 'warehouse_products' || key.startsWith('warehouse_products_')) {
-        for (const k of CLEARABLE_KEYS) {
-          try {
-            localStorage.removeItem(k);
-          } catch {
-            /* ignore */
+  const str = JSON.stringify(value);
+  const storage = getStorage();
+  if (storage) {
+    try {
+      storage.setItem(key, str);
+      memoryFallback.set(key, str);
+      return true;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        if (key === 'warehouse_products' || key.startsWith('warehouse_products_')) {
+          for (const k of CLEARABLE_KEYS) {
+            try { storage.removeItem(k); } catch { /* ignore */ }
           }
-        }
-        try {
-          localStorage.setItem(key, JSON.stringify(value));
-          return true;
-        } catch {
-          console.error('localStorage quota exceeded. Could not free enough space for inventory cache.');
+          try {
+            storage.setItem(key, str);
+            memoryFallback.set(key, str);
+            return true;
+          } catch {
+            if (import.meta.env.DEV) console.error('localStorage quota exceeded. Could not free enough space for inventory cache.');
+          }
+        } else {
+          if (import.meta.env.DEV) console.error('localStorage quota exceeded. Consider clearing old data.');
         }
       } else {
-        console.error('localStorage quota exceeded. Consider clearing old data.');
+        if (import.meta.env.DEV) console.error(`Error writing ${key} to localStorage:`, error);
       }
-    } else {
-      console.error(`Error writing ${key} to localStorage:`, error);
+      return false;
     }
-    return false;
   }
+  memoryFallback.set(key, str);
+  return true;
 }
 
 /**
@@ -64,10 +82,14 @@ export function setStoredData<T>(key: string, value: T): boolean {
  * @param key - Storage key
  */
 export function removeStoredData(key: string): void {
-  try {
-    localStorage.removeItem(key);
-  } catch (error) {
-    console.error(`Error removing ${key} from localStorage:`, error);
+  memoryFallback.delete(key);
+  const storage = getStorage();
+  if (storage) {
+    try {
+      storage.removeItem(key);
+    } catch (error) {
+      if (import.meta.env.DEV) console.error(`Error removing ${key} from localStorage:`, error);
+    }
   }
 }
 
@@ -76,12 +98,5 @@ export function removeStoredData(key: string): void {
  * @returns true if localStorage is available, false otherwise
  */
 export function isStorageAvailable(): boolean {
-  try {
-    const test = '__storage_test__';
-    localStorage.setItem(test, test);
-    localStorage.removeItem(test);
-    return true;
-  } catch {
-    return false;
-  }
+  return getStorage() !== null;
 }

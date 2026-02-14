@@ -1,0 +1,4 @@
+# Browsers supported for autoprefixer and legacy build
+defaults
+not dead
+supports es6-module

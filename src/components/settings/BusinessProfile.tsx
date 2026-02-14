@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { Building2, Save, Upload } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useToast } from '../../contexts/ToastContext';
+import { validateBusinessProfile } from '../../lib/validationSchemas';
+import { Button } from '../ui/Button';
 
 export function BusinessProfile() {
   const { businessSettings, updateBusinessSettings } = useSettings();
+  const { showToast } = useToast();
   const [formData, setFormData] = useState(businessSettings);
   const [logoPreview, setLogoPreview] = useState(businessSettings.logo || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -20,10 +25,19 @@ export function BusinessProfile() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateBusinessSettings(formData);
-    alert('Business profile updated successfully!');
+    if (isSubmitting) return;
+    try {
+      const validated = validateBusinessProfile({ ...formData, logo: formData.logo ?? logoPreview });
+      setIsSubmitting(true);
+      updateBusinessSettings({ ...validated, logo: formData.logo ?? logoPreview ?? businessSettings.logo });
+      showToast('success', 'Business profile updated successfully.');
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Please check required fields.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -78,6 +92,7 @@ export function BusinessProfile() {
               onChange={e => setFormData({ ...formData, businessName: e.target.value })}
               className="input-field"
               required
+              aria-required="true"
             />
           </div>
 
@@ -91,6 +106,7 @@ export function BusinessProfile() {
               onChange={e => setFormData({ ...formData, phone: e.target.value })}
               className="input-field"
               required
+              aria-required="true"
             />
           </div>
 
@@ -104,6 +120,7 @@ export function BusinessProfile() {
               onChange={e => setFormData({ ...formData, email: e.target.value })}
               className="input-field"
               required
+              aria-required="true"
             />
           </div>
 
@@ -118,6 +135,7 @@ export function BusinessProfile() {
               onChange={e => setFormData({ ...formData, taxRate: parseFloat(e.target.value) })}
               className="input-field"
               required
+              aria-required="true"
             />
           </div>
 
@@ -131,15 +149,16 @@ export function BusinessProfile() {
               className="input-field"
               rows={3}
               required
+              aria-required="true"
             />
           </div>
         </div>
 
         <div className="flex justify-end">
-          <button type="submit" className="btn-primary flex items-center gap-2">
+          <Button type="submit" variant="primary" className="flex items-center gap-2" disabled={isSubmitting} aria-busy={isSubmitting}>
             <Save className="w-4 h-4" />
-            Save Changes
-          </button>
+            {isSubmitting ? 'Saving…' : 'Save Changes'}
+          </Button>
         </div>
       </form>
     </div>

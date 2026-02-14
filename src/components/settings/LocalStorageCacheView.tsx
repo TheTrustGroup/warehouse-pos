@@ -6,6 +6,7 @@
 import { useState, useMemo } from 'react';
 import { Database, Download, AlertTriangle, CheckCircle } from 'lucide-react';
 import { getStoredData, isStorageAvailable } from '../../lib/storage';
+import { Button } from '../ui/Button';
 
 const INVENTORY_KEY_PREFIX = 'warehouse_products';
 const LEGACY_KEY = 'warehouse_products';
@@ -100,23 +101,27 @@ export function LocalStorageCacheView() {
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => setLastRefreshed(Date.now())}
-              className="btn-secondary text-sm inline-flex items-center gap-2"
+              className="inline-flex items-center gap-2"
             >
               <Database className="w-4 h-4" />
               Refresh
-            </button>
+            </Button>
             {entries.length > 0 && (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={handleExportAll}
-                className="btn-secondary text-sm inline-flex items-center gap-2"
+                className="inline-flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
                 Export all cache as JSON
-              </button>
+              </Button>
             )}
           </div>
 
@@ -134,8 +139,8 @@ export function LocalStorageCacheView() {
                 <CheckCircle className="w-4 h-4 inline-block mr-1 text-green-600 align-middle" />
                 <strong>{totalProducts}</strong> product{totalProducts !== 1 ? 's' : ''} across <strong>{entries.length}</strong> cache key{entries.length !== 1 ? 's' : ''}.
               </p>
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="border border-slate-200 rounded-xl overflow-hidden table-scroll-wrap">
+                <table className="w-full text-sm min-w-[320px]">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <th className="text-left py-3 px-4 font-medium text-slate-600">Key / Label</th>
@@ -156,13 +161,15 @@ export function LocalStorageCacheView() {
                         <td className="py-3 px-4 text-right font-medium text-slate-900">{entry.count}</td>
                         <td className="py-3 px-4 text-right text-slate-600">{formatBytes(entry.sizeBytes)}</td>
                         <td className="py-3 px-4 text-right">
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleExport(entry)}
-                            className="text-primary-600 hover:text-primary-700 font-medium text-sm"
+                            className="text-primary-600 hover:text-primary-700 font-medium text-sm min-h-0 py-0"
                           >
                             Export
-                          </button>
+                          </Button>
                         </td>
                       </tr>
                     ))}

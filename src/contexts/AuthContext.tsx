@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useRef, ReactNode, useEffect, useC
 import { User } from '../types';
 import { ROLES, PERMISSIONS, Permission } from '../types/permissions';
 import { API_BASE_URL, handleApiResponse } from '../lib/api';
+import { parseLoginResponse, parseAuthUserPayload } from '../lib/apiSchemas';
 
 const DEMO_ROLE_KEY = 'warehouse_demo_role';
 
@@ -17,6 +18,9 @@ const ACTIVITY_THROTTLE_MS = 30 * 1000;
 /** Role is authoritative from server only. Never derive or upgrade on client. */
 const KNOWN_ROLE_IDS = ['super_admin', 'admin', 'manager', 'cashier', 'warehouse', 'driver', 'viewer'] as const;
 
+/** Default role when API omits role or it cannot be resolved (avoids "role" undefined errors). */
+const DEFAULT_ROLE = 'viewer' as const;
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
@@ -29,15 +33,22 @@ interface AuthContextType {
   clearSessionExpired: () => void;
   /** Clear blocking auth error (e.g. after logout). */
   clearAuthError: () => void;
-  login: (email: string, password: string) => Promise<void>;
+  /** Returns the path to redirect to after login (role-based). */
+  login: (email: string, password: string) => Promise<string>;
   /** Sign in with local data only when the server is unreachable. No API call. */
   loginOffline: (email: string) => void;
   logout: () => Promise<void>;
+  /** Re-validate session (e.g. after 401). Calls /me or /api/auth/user. Returns true if session is valid. */
+  tryRefreshSession: () => Promise<boolean>;
   /** Switch role for demo/testing only (admins). Never used for initial role resolution. */
   switchRole: (roleId: string) => void;
   hasPermission: (permission: Permission) => boolean;
   hasAnyPermission: (permissions: Permission[]) => boolean;
   hasAllPermissions: (permissions: Permission[]) => boolean;
+  /** True if current user's role is in the given list (for route guards). */
+  hasRole: (roles: User['role'] | User['role'][]) => boolean;
+  /** Default path for current user's role (e.g. cashier -> /pos, admin -> /). Use after login for role-based redirect. */
+  getDefaultPathForRole: () => string;
   requireApproval: (action: string, reason: string) => Promise<boolean>;
   canPerformAction: (action: string, amount?: number) => { allowed: boolean; needsApproval: boolean };
 }
@@ -114,6 +125,70 @@ function buildFallbackCashierUser(userData: any): User {
 }
 
 /**
+ * Fallback viewer User when server returns 200 but role is missing/invalid and email is not in known lists.
+ * Ensures we never block login with "role could not be verified" and never expose undefined role to UI.
+ */
+function buildFallbackViewerUser(userData: any): User {
+  const email = (userData.email ?? '').trim().toLowerCase();
+  const role = ROLES.VIEWER;
+  return {
+    id: userData.id ?? 'api-session-user',
+    username: userData.username || userData.email?.split('@')[0] || 'user',
+    email: userData.email ?? email,
+    role: 'viewer',
+    fullName: userData.fullName || userData.name || userData.email || email,
+    avatar: userData.avatar,
+    permissions: userData.permissions ?? role.permissions,
+    isActive: userData.isActive !== undefined ? userData.isActive : true,
+    lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : new Date(),
+    createdAt: userData.createdAt ? new Date(userData.createdAt) : new Date(),
+    warehouseId: userData.warehouse_id ?? userData.warehouseId ?? undefined,
+    storeId: userData.store_id !== undefined ? userData.store_id : userData.storeId,
+    deviceId: userData.device_id ?? userData.deviceId ?? undefined,
+    assignedPos: userData.assignedPos === 'main_town' || userData.assignedPos === 'store' ? userData.assignedPos : undefined,
+  };
+}
+
+/** Safe role for permission/UI: never undefined so callers never throw on user.role. */
+function getEffectiveRole(user: User | null): string {
+  if (!user) return DEFAULT_ROLE;
+  const r = user.role;
+  if (r != null && typeof r === 'string' && r.trim()) return r.trim().toLowerCase();
+  return DEFAULT_ROLE;
+}
+
+/** Default landing path by role (for redirects after login and when access is forbidden). */
+export function getDefaultPathForRole(role: User['role']): string {
+  switch (role) {
+    case 'cashier':
+    case 'viewer':
+      return '/pos';
+    case 'warehouse':
+      return '/inventory';
+    case 'driver':
+      return '/orders';
+    case 'admin':
+    case 'super_admin':
+    case 'manager':
+    default:
+      return '/';
+  }
+}
+
+/** Clear all auth-related storage so a new login has no stale session (admin vs POS). */
+function clearAllSessionData(): void {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('current_user');
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem(DEMO_ROLE_KEY);
+  }
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem('user_role');
+    sessionStorage.removeItem('user_email');
+  }
+}
+
+/**
  * Normalize user data from API response. Role is SERVER-AUTHORITATIVE only.
  * - No client-side role derivation from email. No fallback to viewer.
  * - If server returns a role not in KNOWN_ROLE_IDS, returns null (caller must show blocking error).
@@ -130,14 +205,14 @@ function normalizeUserData(userData: any): User | null {
   if (!role && !isSuperAdmin) {
     if (email === KNOWN_ADMIN_EMAIL) return buildFallbackAdminUser(userData);
     if (KNOWN_POS_EMAILS.has(email)) return buildFallbackCashierUser(userData);
-    return null;
+    return buildFallbackViewerUser(userData);
   }
   const effectiveRole = isSuperAdmin ? ROLES.SUPER_ADMIN : role!;
   const roleId = (isSuperAdmin ? 'super_admin' : role!.id) as User['role'];
   if (!KNOWN_ROLE_IDS.includes(roleId)) {
     if (email === KNOWN_ADMIN_EMAIL) return buildFallbackAdminUser(userData);
     if (KNOWN_POS_EMAILS.has(email)) return buildFallbackCashierUser(userData);
-    return null;
+    return buildFallbackViewerUser(userData);
   }
 
   return {
@@ -241,7 +316,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const userData = await handleApiResponse<User>(response);
-        let normalizedUser = normalizeUserData(userData);
+        const payload = parseAuthUserPayload(userData ?? {});
+        let normalizedUser = normalizeUserData(payload);
         // When server returns 200 but payload lacks email/role (e.g. minimal /me response), use stored email for known accounts so refresh doesn't show "Role could not be verified".
         if (!normalizedUser && typeof localStorage !== 'undefined') {
           try {
@@ -250,7 +326,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const parsed = JSON.parse(stored) as { email?: string };
               const storedEmail = (parsed?.email ?? '').trim().toLowerCase();
               if (storedEmail === KNOWN_ADMIN_EMAIL || KNOWN_POS_EMAILS.has(storedEmail)) {
-                normalizedUser = normalizeUserData({ ...userData, email: userData.email ?? storedEmail });
+                normalizedUser = normalizeUserData({ ...payload, email: payload.email ?? storedEmail });
               }
             }
           } catch {
@@ -271,6 +347,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         lastActivityRef.current = Date.now();
         setUser(normalizedUser);
         localStorage.setItem('current_user', JSON.stringify(normalizedUser));
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('user_role', normalizedUser.role ?? DEFAULT_ROLE);
+          sessionStorage.setItem('user_email', normalizedUser.email ?? '');
+        }
       } else {
         setAuthError(null);
         setUser(null);
@@ -339,6 +419,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!trimmedEmail || !trimmedPassword) {
       throw new Error('Please enter email and password');
     }
+
+    // Clear all previous session data so admin vs POS login are independent (no stale role/token).
+    clearAllSessionData();
+    setUser(null);
 
     const loginBody = { email: trimmedEmail, password: trimmedPassword };
     const headers = {
@@ -409,11 +493,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const data = await response.json().catch(() => ({}));
-      // Support multiple response shapes: { user }, { data: { user } }, or user at top level
-      const userPayload = data?.user ?? data?.data?.user ?? data;
-      if (!userPayload || typeof userPayload !== 'object') {
-        throw new Error('Invalid login response');
-      }
+      const { userPayload, token: responseToken } = parseLoginResponse(data);
       // Merge login email so role fallback works when server omits email/role (cross-browser, backward-compatible).
       const payloadWithEmail = { ...userPayload, email: userPayload.email ?? trimmedEmail };
       const normalizedUser = normalizeUserData(payloadWithEmail);
@@ -425,10 +505,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       lastActivityRef.current = Date.now();
       setUser(normalizedUser);
       localStorage.setItem('current_user', JSON.stringify(normalizedUser));
-      const token = data?.token ?? data?.access_token ?? data?.data?.token;
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('user_role', normalizedUser.role ?? DEFAULT_ROLE);
+        sessionStorage.setItem('user_email', normalizedUser.email ?? '');
+      }
+      if (import.meta.env.DEV) {
+        console.log('[Auth] Login success – full user object:', JSON.stringify(normalizedUser, null, 2));
+      }
+      const token = responseToken ?? (data as { token?: string; access_token?: string })?.token ?? (data as { token?: string; access_token?: string })?.access_token;
       if (token) {
         localStorage.setItem('auth_token', token.startsWith('Bearer ') ? token : `Bearer ${token}`);
       }
+      return getDefaultPathForRole(normalizedUser.role ?? (DEFAULT_ROLE as User['role']));
     } catch (error) {
       console.error('Login failed:', error);
       // Throw user-friendly message for network/connection errors
@@ -456,23 +544,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('current_user');
       localStorage.removeItem('auth_token');
       localStorage.removeItem(DEMO_ROLE_KEY);
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('user_role');
+        sessionStorage.removeItem('user_email');
+      }
     }
   };
 
+  /**
+   * Re-validate session (e.g. before retry after 401). If backend uses JWT refresh, wire it here.
+   * Current backend uses session cookie; this just re-fetches /me to confirm session is valid.
+   */
+  const tryRefreshSession = useCallback(async (): Promise<boolean> => {
+    try {
+      const headers: HeadersInit = { Accept: 'application/json' };
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      if (token) headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
+      let response = await fetch(`${API_BASE_URL}/admin/api/me`, opts);
+      if (response.status === 404 || response.status === 403 || response.status === 401) {
+        response = await fetch(`${API_BASE_URL}/api/auth/user`, opts);
+      }
+      if (!response.ok) return false;
+      const userData = await handleApiResponse<User>(response);
+      const payload = parseAuthUserPayload(userData ?? {});
+      const normalizedUser = normalizeUserData(payload);
+      if (!normalizedUser) return false;
+      setUser(normalizedUser);
+      localStorage.setItem('current_user', JSON.stringify(normalizedUser));
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('user_role', normalizedUser.role ?? DEFAULT_ROLE);
+        sessionStorage.setItem('user_email', normalizedUser.email ?? '');
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const hasPermission = (permission: Permission): boolean => {
     if (!user) return false;
-    if (permission === PERMISSIONS.POS.ACCESS && user.role === 'cashier') return true;
-    return user.permissions.includes(permission);
+    const effectiveRole = getEffectiveRole(user);
+    if (permission === PERMISSIONS.POS.ACCESS && effectiveRole === 'cashier') return true;
+    const perms = user.permissions ?? [];
+    return Array.isArray(perms) && perms.includes(permission);
   };
 
   const hasAnyPermission = (permissions: Permission[]): boolean => {
     if (!user) return false;
-    return permissions.some(p => user.permissions.includes(p));
+    const perms = user.permissions ?? [];
+    return Array.isArray(perms) && permissions.some(p => perms.includes(p));
   };
 
   const hasAllPermissions = (permissions: Permission[]): boolean => {
     if (!user) return false;
-    return permissions.every(p => user.permissions.includes(p));
+    const perms = user.permissions ?? [];
+    return Array.isArray(perms) && permissions.every(p => perms.includes(p));
+  };
+
+  const hasRole = (roles: User['role'] | User['role'][]): boolean => {
+    if (!user) return false;
+    const effectiveRole = getEffectiveRole(user) as User['role'];
+    const list = Array.isArray(roles) ? roles : [roles];
+    return list.includes(effectiveRole);
+  };
+
+  const getDefaultPathForRoleFromUser = (): string => {
+    if (!user) return '/';
+    return getDefaultPathForRole((getEffectiveRole(user) || DEFAULT_ROLE) as User['role']);
   };
 
   const requireApproval = async (action: string, reason: string): Promise<boolean> => {
@@ -486,7 +625,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canPerformAction = (action: string, amount?: number) => {
     if (!user) return { allowed: false, needsApproval: false };
 
-    const role = ROLES[user.role.toUpperCase()];
+    const roleKey = getEffectiveRole(user).toUpperCase().replace(/\s+/g, '_');
+    const role = ROLES[roleKey] ?? ROLES.VIEWER;
     if (!role || !role.limits) {
       return { allowed: true, needsApproval: false };
     }
@@ -545,10 +685,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         loginOffline,
         logout,
+        tryRefreshSession,
         switchRole,
         hasPermission,
         hasAnyPermission,
         hasAllPermissions,
+        hasRole,
+        getDefaultPathForRole: getDefaultPathForRoleFromUser,
         requireApproval,
         canPerformAction,
       }}

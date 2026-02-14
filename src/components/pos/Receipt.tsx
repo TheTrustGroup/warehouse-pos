@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Transaction } from '../../types';
 import { formatCurrency, formatDateTime } from '../../lib/utils';
 import { X, Printer, Mail } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface ReceiptProps {
   transaction: Transaction;
@@ -37,17 +38,17 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
       onClick={() => onClose()}
     >
       <div
-        className="glass-card rounded-2xl shadow-large max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="glass-card rounded-2xl shadow-large w-full max-w-md overflow-hidden flex flex-col modal-content-fit mx-2 sm:mx-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4 border-b border-slate-200/50 flex items-center justify-between flex-shrink-0 print:hidden">
-          <h2 id="receipt-title" className="text-xl font-bold text-slate-900 tracking-tight">Receipt</h2>
-          <button type="button" onClick={onClose} className="btn-action" aria-label="Close">
+          <h2 id="receipt-title" className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Receipt</h2>
+          <Button type="button" variant="action" onClick={onClose} className="min-h-[44px] min-w-[44px] flex-shrink-0" aria-label="Close">
             <X className="w-5 h-5" strokeWidth={2} />
-          </button>
+          </Button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1" id="receipt-content">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0" id="receipt-content">
           {/* Store Header */}
           <div className="text-center mb-6">
             <h1 className="text-2xl font-extrabold gradient-text">Extreme Dept Kidz</h1>
@@ -73,8 +74,8 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
           </div>
 
           {/* Items */}
-          <div className="mb-4">
-            <table className="w-full text-sm">
+          <div className="mb-4 table-scroll-wrap">
+            <table className="w-full text-sm min-w-[280px]">
               <thead>
                 <tr className="border-b border-slate-200">
                   <th className="text-left py-2">Item</th>
@@ -129,20 +130,21 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
           </div>
         </div>
 
-        <div className="p-4 border-t border-slate-200 flex gap-3 flex-shrink-0 print:hidden">
-          <button
+        <div className="p-4 border-t border-slate-200 flex gap-3 flex-shrink-0 print:hidden flex-wrap sm:flex-nowrap">
+          <Button
             type="button"
+            variant="primary"
             onClick={handlePrint}
-            className="btn-primary flex-1 inline-flex items-center justify-center gap-2 min-h-touch"
+            className="flex-1 inline-flex items-center justify-center gap-2"
             aria-label="Print receipt"
           >
             <Printer className="w-5 h-5" />
             Print receipt
-          </button>
-          <button type="button" className="btn-secondary flex-1 inline-flex items-center justify-center gap-2 min-h-touch" aria-label="Email receipt">
+          </Button>
+          <Button type="button" variant="secondary" className="flex-1 inline-flex items-center justify-center gap-2" aria-label="Email receipt">
             <Mail className="w-5 h-5" />
             Email
-          </button>
+          </Button>
         </div>
       </div>
     </div>

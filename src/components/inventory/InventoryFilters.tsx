@@ -1,5 +1,6 @@
 import { ProductFilters } from '../../contexts/InventoryContext';
 import { X, Filter } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface InventoryFiltersProps {
   filters: ProductFilters;
@@ -22,15 +23,17 @@ export function InventoryFilters({ filters, onFiltersChange, categories }: Inven
           <h3 className="text-sm font-medium text-slate-700">Filters</h3>
         </div>
         {hasActiveFilters && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={clearFilters}
-            className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1.5 min-h-touch"
+            size="sm"
+            className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1.5 min-h-0 py-1"
             aria-label="Clear all filters"
           >
             <X className="w-4 h-4" />
             Clear all
-          </button>
+          </Button>
         )}
       </div>
 

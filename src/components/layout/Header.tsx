@@ -6,6 +6,7 @@ import { Search, Bell, LogOut, MapPin } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWarehouse } from '../../contexts/WarehouseContext';
 import { useStore } from '../../contexts/StoreContext';
+import { Button } from '../ui/Button';
 
 export function Header() {
   const navigate = useNavigate();
@@ -48,7 +49,8 @@ export function Header() {
         <form onSubmit={handleSearch} className="relative group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-primary-500 transition-colors pointer-events-none" strokeWidth={2} />
           <input
-            type="text"
+            type="search"
+            inputMode="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search products, SKU, or barcode..."
@@ -75,7 +77,7 @@ export function Header() {
           <select
             value={currentWarehouseId || ''}
             onChange={(e) => setCurrentWarehouseId(e.target.value)}
-            className="input-field min-h-touch text-sm font-medium text-slate-800 bg-white max-w-[200px]"
+            className="input-field min-h-touch text-sm font-medium text-slate-800 bg-white w-full min-w-0 max-w-[200px]"
             aria-label="Current warehouse"
           >
             {!currentWarehouseId && (
@@ -87,14 +89,15 @@ export function Header() {
           </select>
         )}
         {warehouses.length === 0 && !isLoading && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => refreshWarehouses()}
-            className="text-xs font-medium text-primary-600 hover:text-primary-700"
+            className="text-xs font-medium text-primary-600 hover:text-primary-700 min-h-0 py-1"
             aria-label="Reload warehouses"
           >
             Reload
-          </button>
+          </Button>
         )}
         </div>
       </div>
@@ -102,11 +105,12 @@ export function Header() {
       {/* Right Section: search, logout, alerts only. Role switch is in sidebar/mobile menu only. */}
       <div className="flex items-center gap-2 flex-shrink-0">
         {/* Log out - visible on all screens including mobile; min touch target 44px */}
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={handleLogout}
           disabled={isLoggingOut}
-          className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium transition-colors disabled:opacity-60 disabled:pointer-events-none min-h-[44px] min-w-[44px] touch-manipulation"
+          className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 text-sm font-medium min-h-[44px] min-w-[44px] touch-manipulation disabled:opacity-60 disabled:pointer-events-none"
           title="Log out"
           aria-label="Log out"
         >
@@ -116,18 +120,19 @@ export function Header() {
             <LogOut className="w-5 h-5" />
           )}
           <span className="hidden sm:inline">{isLoggingOut ? 'Signing out…' : 'Log out'}</span>
-        </button>
+        </Button>
         {/* Notifications - Coming soon; 44px touch target */}
-        <button
+        <Button
           type="button"
-          className="relative p-2.5 hover:bg-slate-50/80 rounded-xl transition-all duration-200 group min-w-[44px] min-h-[44px] flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+          variant="action"
+          className="relative p-2.5 hover:bg-slate-50/80 rounded-xl group min-w-[44px] min-h-[44px] flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
           aria-label="View notifications"
           title="Notifications coming soon"
           disabled
         >
           <Bell className="w-5 h-5 text-slate-600 group-hover:text-slate-900 transition-colors" strokeWidth={2} />
           <span className="absolute top-2 right-2 w-2 h-2 bg-primary-500 rounded-full ring-2 ring-white shadow-lg" aria-hidden="true"></span>
-        </button>
+        </Button>
       </div>
     </header>
   );

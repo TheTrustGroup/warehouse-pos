@@ -1,6 +1,10 @@
 /**
  * Real-time sync: poll refresh callbacks when tab is visible.
  * Use for inventory and orders so multiple tabs/devices get updates.
+ *
+ * Future: Consider WebSocket (e.g. Supabase Realtime or custom WS) for push-based
+ * updates instead of polling — reduces latency and server load when many clients
+ * are open. Polling remains simple and works without WS infrastructure.
  */
 
 import { useEffect, useRef } from 'react';

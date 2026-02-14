@@ -3,6 +3,7 @@ import { Search, Scan, Package } from 'lucide-react';
 import { useInventory } from '../../contexts/InventoryContext';
 import { usePOS } from '../../contexts/POSContext';
 import { formatCurrency, getCategoryDisplay } from '../../lib/utils';
+import { Button } from '../ui/Button';
 
 export function ProductSearch() {
   const { products } = useInventory();
@@ -70,36 +71,35 @@ export function ProductSearch() {
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin" style={{ scrollbarWidth: 'thin' }}>
-        <button
+        <Button
           type="button"
+          variant={selectedCategory === '' ? 'primary' : 'secondary'}
           onClick={() => setSelectedCategory('')}
-          className={`min-h-touch px-4 py-2 rounded-xl whitespace-nowrap font-medium transition-colors flex-shrink-0 ${
-            selectedCategory === '' ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
+          className="min-h-touch px-4 py-2 rounded-xl whitespace-nowrap flex-shrink-0"
           aria-pressed={selectedCategory === ''}
         >
           All
-        </button>
+        </Button>
         {categories.map((cat) => (
-          <button
+          <Button
             key={cat}
             type="button"
+            variant={selectedCategory === cat ? 'primary' : 'secondary'}
             onClick={() => setSelectedCategory(cat)}
-            className={`min-h-touch px-4 py-2 rounded-xl whitespace-nowrap font-medium transition-colors flex-shrink-0 ${
-              selectedCategory === cat ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
+            className="min-h-touch px-4 py-2 rounded-xl whitespace-nowrap flex-shrink-0"
             aria-pressed={selectedCategory === cat}
           >
             {cat}
-          </button>
+          </Button>
         ))}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[calc(100vh-320px)] overflow-y-auto min-h-0">
         {filteredProducts.map((product) => (
-          <button
+          <Button
             key={product.id}
             type="button"
+            variant="secondary"
             onClick={() => handleProductClick(product.id)}
             className="glass-card p-3 text-left transition-shadow hover:shadow-card-hover"
           >
@@ -120,8 +120,8 @@ export function ProductSearch() {
               <span className="font-semibold text-primary-600">{formatCurrency(product.sellingPrice)}</span>
               <span className="badge badge-info text-xs">{product.quantity} left</span>
             </div>
-          </button>
-        ))}
+</Button>
+          ))}
       </div>
 
       {filteredProducts.length === 0 && (

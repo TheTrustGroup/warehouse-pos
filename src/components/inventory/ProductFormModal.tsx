@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Product, type QuantityBySizeItem } from '../../types';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
+import { safeValidateProductForm } from '../../lib/validationSchemas';
 import { useWarehouse } from '../../contexts/WarehouseContext';
 import { useInventory } from '../../contexts/InventoryContext';
+import { useToast } from '../../contexts/ToastContext';
 import { API_BASE_URL } from '../../lib/api';
 import { apiGet } from '../../lib/apiClient';
+import { Button } from '../ui/Button';
 import { X, Upload, Plus, Trash2 } from 'lucide-react';
 
 export type SizeKind = 'na' | 'one_size' | 'sized';
@@ -25,6 +28,7 @@ interface ProductFormModalProps {
 export function ProductFormModal({ isOpen, onClose, onSubmit, product }: ProductFormModalProps) {
   const { warehouses, currentWarehouseId } = useWarehouse();
   const { savePhase } = useInventory();
+  const { showToast } = useToast();
   const [formData, setFormData] = useState({
     sku: '',
     barcode: '',
@@ -60,6 +64,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
   const [imagePreview, setImagePreview] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sizeCodes, setSizeCodes] = useState<SizeCodeOption[]>([]);
+  const [sizeCodesLoading, setSizeCodesLoading] = useState(false);
 
   useEffect(() => {
     if (product) {
@@ -118,9 +123,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
 
   useEffect(() => {
     if (!isOpen) return;
+    setSizeCodesLoading(true);
     apiGet<{ data: SizeCodeOption[] }>(API_BASE_URL, '/api/size-codes')
       .then((res) => setSizeCodes(Array.isArray(res?.data) ? res.data : []))
-      .catch(() => setSizeCodes([]));
+      .catch(() => setSizeCodes([]))
+      .finally(() => setSizeCodesLoading(false));
   }, [isOpen]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,13 +166,34 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
     if (isSubmitting) return;
     const validSizeRows = (formData.quantityBySize ?? []).filter((r) => (r.sizeCode ?? '').trim() !== '');
     if (formData.sizeKind === 'sized' && validSizeRows.length === 0) {
-      return; // Need at least one size with a non-empty size code
+      showToast('error', 'Add at least one size row to save.');
+      return;
+    }
+    const toValidate = {
+      name: formData.name,
+      sku: formData.sku,
+      barcode: formData.barcode,
+      description: formData.description,
+      category: formData.category,
+      quantity: formData.sizeKind === 'sized' ? validSizeRows.reduce((s, r) => s + (r.quantity || 0), 0) : formData.quantity,
+      costPrice: formData.costPrice,
+      sellingPrice: formData.sellingPrice,
+      reorderLevel: formData.reorderLevel,
+      location: formData.location,
+      supplier: formData.supplier,
+      sizeKind: formData.sizeKind,
+      quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize,
+    };
+    const validated = safeValidateProductForm(toValidate);
+    if (!validated.success) {
+      showToast('error', validated.message);
+      return;
     }
     setIsSubmitting(true);
     try {
       const payload = { ...formData, quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize };
       if (formData.sizeKind === 'sized' && validSizeRows.length > 0) {
-        (payload as any).quantity = validSizeRows.reduce((s, r) => s + (r.quantity || 0), 0);
+        (payload as Record<string, unknown>).quantity = validated.data.quantity;
       }
       await Promise.resolve(onSubmit(payload));
       onClose();
@@ -203,24 +231,19 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
       onClick={() => onClose()}
     >
       <div
-        className="glass rounded-2xl shadow-large max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="glass rounded-2xl shadow-large w-full max-w-4xl overflow-hidden flex flex-col modal-content-fit mx-2 sm:mx-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 glass border-b border-slate-200/50 px-6 py-4 flex items-center justify-between z-10">
-          <h2 id="product-form-title" className="text-xl font-bold text-slate-900 tracking-tight">
+        <div className="sticky top-0 glass border-b border-slate-200/50 px-4 sm:px-6 py-4 flex items-center justify-between z-10 flex-shrink-0">
+          <h2 id="product-form-title" className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate pr-2">
             {product ? 'Edit product' : 'Add product'}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn-action rounded-lg"
-            aria-label="Close"
-          >
+          <Button type="button" variant="action" onClick={onClose} className="rounded-lg min-h-[44px] min-w-[44px] flex-shrink-0" aria-label="Close">
             <X className="w-5 h-5 text-slate-600" />
-          </button>
+          </Button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 lg:p-8 space-y-6 overflow-y-auto flex-1">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto flex-1 min-h-0">
           {/* Basic info: labels calm (font-medium), inputs min-h-touch */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
@@ -296,6 +319,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
                 </label>
                 <input
                   type="number"
+                  inputMode="numeric"
                   required
                   min="0"
                   value={formData.quantity}
@@ -321,6 +345,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
               </label>
               <input
                 type="number"
+                inputMode="decimal"
                 required
                 min="0"
                 step="0.01"
@@ -336,6 +361,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
               </label>
               <input
                 type="number"
+                inputMode="decimal"
                 required
                 min="0"
                 step="0.01"
@@ -351,6 +377,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
               </label>
               <input
                 type="number"
+                inputMode="numeric"
                 required
                 min="0"
                 value={formData.reorderLevel}
@@ -390,6 +417,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Quantity by size
+                {sizeCodesLoading && (
+                  <span className="ml-2 text-slate-400 font-normal">(Loading sizes…)</span>
+                )}
               </label>
               {formData.quantityBySize.length === 0 && (
                 <p className="text-amber-600 text-sm mb-2">Add at least one size row to save.</p>
@@ -591,13 +621,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
                 className="input-field flex-1"
                 placeholder="Add a tag and press Enter"
               />
-              <button
-                type="button"
-                onClick={addTag}
-                className="btn-secondary"
-              >
+              <Button type="button" variant="secondary" onClick={addTag}>
                 Add
-              </button>
+              </Button>
             </div>
             <div className="flex flex-wrap gap-2">
               {formData.tags.map((tag) => (
@@ -651,12 +677,12 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
 
           {/* One primary action = Save; Cancel secondary, de-emphasized */}
           <div className="flex justify-end gap-3 pt-6 border-t border-slate-200/50 sticky bottom-0 bg-white/90 backdrop-blur-md -mx-6 lg:-mx-8 px-6 lg:px-8 pb-6">
-            <button type="button" onClick={onClose} className="btn-secondary">
+            <Button type="button" variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="btn-primary"
+              variant="primary"
               disabled={isSubmitting}
               aria-busy={isSubmitting}
             >
@@ -665,7 +691,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product }: Product
                 : product
                   ? 'Update product'
                   : 'Add product'}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

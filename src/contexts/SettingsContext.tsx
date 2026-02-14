@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { getStoredData, setStoredData, removeStoredData } from '../lib/storage';
 
 export interface BusinessSettings {
   businessName: string;
@@ -49,26 +50,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [businessSettings, setBusinessSettings] = useState<BusinessSettings>(defaultBusinessSettings);
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(defaultSystemSettings);
 
-  // Load from localStorage on mount
+  // Load from storage on mount (uses localStorage with in-memory fallback when unavailable)
   useEffect(() => {
-    const storedBusiness = localStorage.getItem('business_settings');
-    const storedSystem = localStorage.getItem('system_settings');
-
-    if (storedBusiness) {
-      setBusinessSettings(JSON.parse(storedBusiness));
-    }
-    if (storedSystem) {
-      setSystemSettings(JSON.parse(storedSystem));
-    }
+    const business = getStoredData<BusinessSettings>('business_settings', defaultBusinessSettings);
+    const system = getStoredData<SystemSettings>('system_settings', defaultSystemSettings);
+    if (business && typeof business === 'object') setBusinessSettings({ ...defaultBusinessSettings, ...business });
+    if (system && typeof system === 'object') setSystemSettings({ ...defaultSystemSettings, ...system });
   }, []);
 
-  // Save to localStorage on change
+  // Save to storage on change
   useEffect(() => {
-    localStorage.setItem('business_settings', JSON.stringify(businessSettings));
+    setStoredData('business_settings', businessSettings);
   }, [businessSettings]);
 
   useEffect(() => {
-    localStorage.setItem('system_settings', JSON.stringify(systemSettings));
+    setStoredData('system_settings', systemSettings);
   }, [systemSettings]);
 
   const updateBusinessSettings = (settings: Partial<BusinessSettings>) => {
@@ -82,8 +78,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const resetToDefaults = () => {
     setBusinessSettings(defaultBusinessSettings);
     setSystemSettings(defaultSystemSettings);
-    localStorage.removeItem('business_settings');
-    localStorage.removeItem('system_settings');
+    removeStoredData('business_settings');
+    removeStoredData('system_settings');
   };
 
   return (

@@ -3,6 +3,7 @@ import { AlertTriangle, RefreshCw, XCircle } from 'lucide-react';
 import { fetchSyncRejections, voidSyncRejection, type SyncRejection } from '../../services/syncRejectionsApi';
 import { useToast } from '../../contexts/ToastContext';
 import { formatRelativeTime } from '../../lib/utils';
+import { Button } from '../ui/Button';
 
 export function SyncRejectionsCard() {
   const { showToast } = useToast();
@@ -43,14 +44,15 @@ export function SyncRejectionsCard() {
       <div className="flex items-center gap-2 mb-4">
         <AlertTriangle className="w-5 h-5 text-amber-600" strokeWidth={2} aria-hidden />
         <h2 className="text-lg font-semibold text-amber-900">Failed syncs (needs review)</h2>
-        <button
+        <Button
           type="button"
+          variant="action"
           onClick={load}
           className="ml-auto p-2 rounded-lg hover:bg-amber-100/80 text-amber-700"
           aria-label="Refresh list"
         >
           <RefreshCw className="w-4 h-4" />
-        </button>
+        </Button>
       </div>
       <p className="text-sm text-amber-800 mb-4">
         These sales could not be applied (e.g. insufficient stock at sync time). Void to stop retries; no inventory change.
@@ -69,16 +71,17 @@ export function SyncRejectionsCard() {
                 {formatRelativeTime(new Date(r.createdAt))}
               </span>
             </div>
-            <button
+            <Button
               type="button"
+              variant="danger"
               onClick={() => handleVoid(r.id)}
               disabled={voidingId === r.id}
-              className="btn-action btn-action-delete inline-flex items-center gap-1 text-sm"
+              className="inline-flex items-center gap-1 text-sm"
               aria-label="Void this rejection"
             >
               <XCircle className="w-4 h-4" />
               Void
-            </button>
+            </Button>
           </li>
         ))}
       </ul>

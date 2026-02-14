@@ -11,11 +11,13 @@ import {
   Search,
 } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '../lib/utils';
+import { Button } from '../components/ui/Button';
 
 export function Orders() {
   const {
     orders,
     isLoading,
+    busyOrderId,
     updateOrderStatus,
     assignDriver,
     markAsDelivered,
@@ -71,10 +73,10 @@ export function Orders() {
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Orders</h1>
           <p className="text-slate-600 text-sm mt-0.5">{filteredOrders.length} orders found</p>
         </div>
-        <button className="btn-primary flex items-center gap-2">
+        <Button variant="primary" className="inline-flex items-center gap-2">
           <Plus className="w-5 h-5" />
           New Order
-        </button>
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -216,22 +218,24 @@ export function Orders() {
                 )}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {order.status === 'pending' && (
                   <button
                     onClick={() => updateOrderStatus(order.id, 'confirmed')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                    disabled={busyOrderId === order.id}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
                   >
-                    Confirm
+                    {busyOrderId === order.id ? 'Updating…' : 'Confirm'}
                   </button>
                 )}
 
                 {(order.status === 'confirmed' || order.status === 'processing') && (
                   <button
                     onClick={() => updateOrderStatus(order.id, 'ready')}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
+                    disabled={busyOrderId === order.id}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
                   >
-                    Mark Ready
+                    {busyOrderId === order.id ? 'Updating…' : 'Mark Ready'}
                   </button>
                 )}
 
@@ -244,9 +248,10 @@ export function Orders() {
                         assignDriver(order.id, driver, phone);
                       }
                     }}
-                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-medium"
+                    disabled={busyOrderId === order.id}
+                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
                   >
-                    Assign Driver
+                    {busyOrderId === order.id ? 'Updating…' : 'Assign Driver'}
                   </button>
                 )}
 
@@ -256,18 +261,20 @@ export function Orders() {
                       onClick={() =>
                         markAsDelivered(order.id, { recipientName: order.customer.name })
                       }
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                      disabled={busyOrderId === order.id}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      Mark Delivered
+                      {busyOrderId === order.id ? 'Updating…' : 'Mark Delivered'}
                     </button>
                     <button
                       onClick={() => {
                         const reason = prompt('Reason for failure:');
                         if (reason) markAsFailed(order.id, reason);
                       }}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+                      disabled={busyOrderId === order.id}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      Mark Failed
+                      {busyOrderId === order.id ? 'Updating…' : 'Mark Failed'}
                     </button>
                   </>
                 )}

@@ -93,7 +93,7 @@ export function formatDate(date: Date | string | null | undefined): string {
   try {
     const d = typeof date === 'string' ? new Date(date) : date;
     if (isNaN(d.getTime())) {
-      console.error('Invalid date for formatting:', date);
+      if (import.meta.env.DEV) console.error('Invalid date for formatting:', date);
       return '';
     }
     return new Intl.DateTimeFormat('en-US', {
@@ -102,7 +102,7 @@ export function formatDate(date: Date | string | null | undefined): string {
       day: 'numeric',
     }).format(d);
   } catch (error) {
-    console.error('Error formatting date:', date, error);
+    if (import.meta.env.DEV) console.error('Error formatting date:', date, error);
     return '';
   }
 }
@@ -118,7 +118,7 @@ export function formatDateTime(date: Date | string | null | undefined): string {
   try {
     const d = typeof date === 'string' ? new Date(date) : date;
     if (isNaN(d.getTime())) {
-      console.error('Invalid date for formatting:', date);
+      if (import.meta.env.DEV) console.error('Invalid date for formatting:', date);
       return '';
     }
     return new Intl.DateTimeFormat('en-US', {
@@ -129,7 +129,7 @@ export function formatDateTime(date: Date | string | null | undefined): string {
       minute: '2-digit',
     }).format(d);
   } catch (error) {
-    console.error('Error formatting date-time:', date, error);
+    if (import.meta.env.DEV) console.error('Error formatting date-time:', date, error);
     return '';
   }
 }

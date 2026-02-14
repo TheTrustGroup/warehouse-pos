@@ -15,6 +15,7 @@ import { InventoryActivity } from '../types';
 import { fetchTransactionsFromApi } from '../services/transactionsApi';
 import { API_BASE_URL } from '../lib/api';
 import { formatCurrency } from '../lib/utils';
+import { Button } from '../components/ui/Button';
 
 export function Dashboard() {
   const { products } = useInventory();
@@ -141,56 +142,61 @@ export function Dashboard() {
             Admin quick access
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            <button
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => navigate('/inventory')}
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors text-left"
+              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 text-left"
             >
               <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
                 <Package className="w-5 h-5" />
               </div>
               <span className="font-medium text-slate-900 text-sm">Inventory</span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => navigate('/pos')}
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors text-left"
+              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 text-left"
             >
               <div className="p-2 rounded-lg bg-green-100 text-green-600">
                 <ShoppingBag className="w-5 h-5" />
               </div>
               <span className="font-medium text-slate-900 text-sm">POS</span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => navigate('/reports')}
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors text-left"
+              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 text-left"
             >
               <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
                 <BarChart3 className="w-5 h-5" />
               </div>
               <span className="font-medium text-slate-900 text-sm">Reports</span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => navigate('/settings?tab=users')}
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors text-left"
+              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 text-left"
             >
               <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
                 <Users className="w-5 h-5" />
               </div>
               <span className="font-medium text-slate-900 text-sm">User management</span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => navigate('/settings')}
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors text-left"
+              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 text-left"
             >
               <div className="p-2 rounded-lg bg-slate-100 text-slate-600">
                 <Settings className="w-5 h-5" />
               </div>
               <span className="font-medium text-slate-900 text-sm">Settings</span>
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -239,8 +245,8 @@ export function Dashboard() {
             <StoreIcon className="w-5 h-5 text-slate-600" />
             Sales by store (last 30 days)
           </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="table-scroll-wrap">
+            <table className="w-full text-sm min-w-[260px]">
               <thead>
                 <tr className="border-b border-slate-200">
                   <th className="text-left py-2 font-medium text-slate-600">Store</th>
@@ -269,8 +275,8 @@ export function Dashboard() {
             <MapPin className="w-5 h-5 text-slate-600" />
             Warehouse → Store
           </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="table-scroll-wrap">
+            <table className="w-full text-sm min-w-[260px]">
               <thead>
                 <tr className="border-b border-slate-200">
                   <th className="text-left py-2 font-medium text-slate-600">Warehouse</th>
@@ -322,13 +328,14 @@ export function Dashboard() {
               <p className="text-sm text-amber-700 mb-3">
                 You have {stats.lowStockItems} product{stats.lowStockItems > 1 ? 's' : ''} running low on stock.
               </p>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => navigate('/inventory?filter=lowStock')}
-                className="text-sm font-semibold text-amber-900 hover:text-amber-700 transition-colors"
+                className="text-sm font-semibold text-amber-900 hover:text-amber-700 min-h-0 py-0"
               >
                 View Low Stock Items →
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -345,13 +352,14 @@ export function Dashboard() {
               <p className="text-sm text-red-700 mb-3">
                 You have {stats.outOfStockItems} product{stats.outOfStockItems > 1 ? 's' : ''} out of stock.
               </p>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => navigate('/inventory?filter=outOfStock')}
-                className="text-sm font-semibold text-red-900 hover:text-red-700 transition-colors"
+                className="text-sm font-semibold text-red-900 hover:text-red-700 min-h-0 py-0"
               >
                 Restock Now →
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -9,9 +9,17 @@
  * - Inventory table differs by env? Backend must expose the same inventory source to all clients; otherwise "saved here, vanished there" occurs.
  */
 
+const DEFAULT_API_BASE = 'https://extremedeptkidz.com';
 const _rawApiBase = import.meta.env.VITE_API_BASE_URL;
-// Use default so Vercel (and other hosts) build succeeds when env is not set; set VITE_API_BASE_URL in Vercel to override.
-export const API_BASE_URL = (_rawApiBase && String(_rawApiBase).trim() ? _rawApiBase : 'https://extremedeptkidz.com').replace(/\/$/, '');
+const _resolved = (_rawApiBase && String(_rawApiBase).trim() ? _rawApiBase : DEFAULT_API_BASE).replace(/\/$/, '');
+export const API_BASE_URL = _resolved;
+
+// Warn at runtime when default URL is used (dev only; production build fails if unset).
+if (import.meta.env.DEV && _resolved === DEFAULT_API_BASE) {
+  console.warn(
+    '[API] VITE_API_BASE_URL is unset; using default. Set it in .env.local for your backend.'
+  );
+}
 
 /**
  * Get authentication token from stored user session
@@ -27,6 +35,7 @@ export const API_BASE_URL = (_rawApiBase && String(_rawApiBase).trim() ? _rawApi
  */
 export function getAuthToken(): string | null {
   try {
+    if (typeof localStorage === 'undefined') return null;
     // First, check for explicit token storage (common patterns)
     const authToken = localStorage.getItem('auth_token') || 
                      localStorage.getItem('access_token') || 
