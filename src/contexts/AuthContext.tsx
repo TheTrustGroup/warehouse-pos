@@ -51,14 +51,73 @@ function getSuperAdminEmails(): Set<string> {
   return new Set(raw.split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean));
 }
 
+/** Known admin email so login always works even when backend returns wrong/missing role. Prevents "Role could not be verified" for admin. */
+const KNOWN_ADMIN_EMAIL = 'info@extremedeptkidz.com';
+
+/** POS emails (Main Store/DC and Main Town) — same as backend; fallback to cashier when server returns 200 but role invalid/missing. */
+const KNOWN_POS_EMAILS = new Set([
+  'cashier@extremedeptkidz.com',
+  'maintown_cashier@extremedeptkidz.com',
+]);
+
 /** Backend role values that should be treated as cashier (POS access, no admin). */
 const CASHIER_ROLE_ALIASES = ['cashier', 'sales_person', 'salesperson', 'sales'];
+
+/**
+ * Build a fallback admin User when server returns 200 but role is missing/invalid.
+ * Used only for KNOWN_ADMIN_EMAIL so admin login never shows "Role could not be verified".
+ */
+function buildFallbackAdminUser(userData: any): User {
+  const email = (userData.email ?? KNOWN_ADMIN_EMAIL).trim().toLowerCase();
+  const role = ROLES.SUPER_ADMIN;
+  return {
+    id: userData.id ?? 'api-session-user',
+    username: userData.username || email.split('@')[0] || 'user',
+    email: userData.email ?? email,
+    role: 'super_admin',
+    fullName: userData.fullName || userData.name || email,
+    avatar: userData.avatar,
+    permissions: userData.permissions ?? role.permissions,
+    isActive: userData.isActive !== undefined ? userData.isActive : true,
+    lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : new Date(),
+    createdAt: userData.createdAt ? new Date(userData.createdAt) : new Date(),
+    warehouseId: userData.warehouse_id ?? userData.warehouseId ?? undefined,
+    storeId: userData.store_id !== undefined ? userData.store_id : userData.storeId,
+    deviceId: userData.device_id ?? userData.deviceId ?? undefined,
+    assignedPos: userData.assignedPos === 'main_town' || userData.assignedPos === 'store' ? userData.assignedPos : undefined,
+  };
+}
+
+/**
+ * Build a fallback cashier User when server returns 200 but role is missing/invalid.
+ * Used only for KNOWN_POS_EMAILS so POS logins never show "Role could not be verified".
+ */
+function buildFallbackCashierUser(userData: any): User {
+  const email = (userData.email ?? '').trim().toLowerCase();
+  const role = ROLES.CASHIER;
+  return {
+    id: userData.id ?? 'api-session-user',
+    username: userData.username || userData.email?.split('@')[0] || 'user',
+    email: userData.email ?? email,
+    role: 'cashier',
+    fullName: userData.fullName || userData.name || userData.email || email,
+    avatar: userData.avatar,
+    permissions: userData.permissions ?? role.permissions,
+    isActive: userData.isActive !== undefined ? userData.isActive : true,
+    lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : new Date(),
+    createdAt: userData.createdAt ? new Date(userData.createdAt) : new Date(),
+    warehouseId: userData.warehouse_id ?? userData.warehouseId ?? undefined,
+    storeId: userData.store_id !== undefined ? userData.store_id : userData.storeId,
+    deviceId: userData.device_id ?? userData.deviceId ?? undefined,
+    assignedPos: userData.assignedPos === 'main_town' || userData.assignedPos === 'store' ? userData.assignedPos : undefined,
+  };
+}
 
 /**
  * Normalize user data from API response. Role is SERVER-AUTHORITATIVE only.
  * - No client-side role derivation from email. No fallback to viewer.
  * - If server returns a role not in KNOWN_ROLE_IDS, returns null (caller must show blocking error).
- * - Only exception: VITE_SUPER_ADMIN_EMAILS forces super_admin for that email (env-specific override).
+ * - Exceptions: VITE_SUPER_ADMIN_EMAILS forces super_admin; KNOWN_ADMIN_EMAIL (info@) and KNOWN_POS_EMAILS always accepted when server returns 200 but role invalid/missing.
  */
 function normalizeUserData(userData: any): User | null {
   const rawRole = (userData.role ?? '').toString().trim().toLowerCase();
@@ -68,10 +127,18 @@ function normalizeUserData(userData: any): User | null {
   const email = (userData.email ?? '').trim().toLowerCase();
   const superAdminEmails = getSuperAdminEmails();
   const isSuperAdmin = superAdminEmails.has(email);
-  if (!role && !isSuperAdmin) return null;
+  if (!role && !isSuperAdmin) {
+    if (email === KNOWN_ADMIN_EMAIL) return buildFallbackAdminUser(userData);
+    if (KNOWN_POS_EMAILS.has(email)) return buildFallbackCashierUser(userData);
+    return null;
+  }
   const effectiveRole = isSuperAdmin ? ROLES.SUPER_ADMIN : role!;
   const roleId = (isSuperAdmin ? 'super_admin' : role!.id) as User['role'];
-  if (!KNOWN_ROLE_IDS.includes(roleId)) return null;
+  if (!KNOWN_ROLE_IDS.includes(roleId)) {
+    if (email === KNOWN_ADMIN_EMAIL) return buildFallbackAdminUser(userData);
+    if (KNOWN_POS_EMAILS.has(email)) return buildFallbackCashierUser(userData);
+    return null;
+  }
 
   return {
     id: userData.id,
