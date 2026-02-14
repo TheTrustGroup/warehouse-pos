@@ -24,6 +24,8 @@ const is401 = (e: unknown) => (e as { status?: number })?.status === 401;
 interface CriticalDataContextType {
   /** True until the first parallel load after login has completed (success or failure). */
   isCriticalDataLoading: boolean;
+  /** True while phase 2 (inventory, orders) is syncing in the background after app is shown. */
+  isSyncingCriticalData: boolean;
   /** Error message if the initial load failed after all retries (we still allow UI to show). */
   criticalDataError: string | null;
   /** Manually trigger a full reload of critical data (e.g. after session refresh). */
@@ -35,6 +37,7 @@ const CriticalDataContext = createContext<CriticalDataContextType | undefined>(u
 /** Internal: setters for the gate. */
 interface CriticalDataInternalType extends CriticalDataContextType {
   setCriticalDataLoading: (v: boolean) => void;
+  setSyncingCriticalData: (v: boolean) => void;
   setCriticalDataError: (v: string | null) => void;
   loadTrigger: number;
   triggerReload: () => void;
@@ -79,17 +82,26 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
     internal.setCriticalDataLoading(true);
     internal.setCriticalDataError(null);
     try {
-      // Phase 1: warmup + scope (stores, warehouses) so shell/selectors can rely on them
+      // Phase 1: warmup + scope (stores, warehouses) — block so nav/selectors work
       await Promise.all([
         apiWarmup(),
         withRetry(() => refreshStores(initialOpts), MAX_RETRIES),
         withRetry(() => refreshWarehouses(initialOpts), MAX_RETRIES),
       ]);
-      // Phase 2: inventory + orders (heavier; server more likely warm after phase 1)
-      await Promise.all([
+      // Show app immediately; phase 2 (inventory, orders) runs in background so products appear from cache then refresh
+      internal.setCriticalDataLoading(false);
+      internal.setSyncingCriticalData(true);
+      // Phase 2: inventory + orders (heavier) — don't block; InventoryContext already shows cache on mount
+      Promise.all([
         withRetry(() => refreshProducts({ bypassCache: true, timeoutMs: INITIAL_LOAD_TIMEOUT_MS }), MAX_RETRIES),
         withRetry(() => refreshOrders(initialOpts), MAX_RETRIES),
-      ]);
+      ])
+        .catch((err) => {
+          const msg = getUserFriendlyMessage(err);
+          internal.setCriticalDataError(msg);
+          reportError(err, { context: 'CriticalDataContext.phase2' });
+        })
+        .finally(() => internal.setSyncingCriticalData(false));
     } catch (err) {
       if (is401(err) && (await tryRefreshSession())) {
         try {
@@ -98,18 +110,28 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
             withRetry(() => refreshStores(initialOpts), MAX_RETRIES),
             withRetry(() => refreshWarehouses(initialOpts), MAX_RETRIES),
           ]);
-          await Promise.all([
+          internal.setCriticalDataLoading(false);
+          internal.setSyncingCriticalData(true);
+          Promise.all([
             withRetry(() => refreshProducts({ bypassCache: true, timeoutMs: INITIAL_LOAD_TIMEOUT_MS }), MAX_RETRIES),
             withRetry(() => refreshOrders(initialOpts), MAX_RETRIES),
-          ]);
+          ])
+            .catch((retryErr) => {
+              const msg = getUserFriendlyMessage(retryErr);
+              internal.setCriticalDataError(msg);
+              reportError(retryErr, { context: 'CriticalDataContext.phase2-retry' });
+            })
+            .finally(() => internal.setSyncingCriticalData(false));
         } catch (retryErr) {
           const msg = getUserFriendlyMessage(retryErr);
           internal.setCriticalDataError(msg);
+          internal.setCriticalDataLoading(false);
           reportError(retryErr, { context: 'CriticalDataContext.retry' });
         }
       } else {
         const msg = getUserFriendlyMessage(err);
         internal.setCriticalDataError(msg);
+        internal.setCriticalDataLoading(false);
         reportError(err, { context: 'CriticalDataContext.load' });
       }
     } finally {
@@ -146,11 +168,13 @@ export function useCriticalData() {
 
 export function CriticalDataProvider({ children }: { children: ReactNode }) {
   const [isCriticalDataLoading, setCriticalDataLoading] = useState(false);
+  const [isSyncingCriticalData, setSyncingCriticalData] = useState(false);
   const [criticalDataError, setCriticalDataError] = useState<string | null>(null);
   const [loadTrigger, setLoadTrigger] = useState(0);
 
   const triggerReload = useCallback(() => {
     setCriticalDataLoading(true);
+    setSyncingCriticalData(false);
     setCriticalDataError(null);
     setLoadTrigger((n) => n + 1);
   }, []);
@@ -161,6 +185,7 @@ export function CriticalDataProvider({ children }: { children: ReactNode }) {
 
   const value: CriticalDataContextType = {
     isCriticalDataLoading,
+    isSyncingCriticalData,
     criticalDataError,
     reloadCriticalData,
   };
@@ -168,6 +193,7 @@ export function CriticalDataProvider({ children }: { children: ReactNode }) {
   const internalValue: CriticalDataInternalType = {
     ...value,
     setCriticalDataLoading,
+    setSyncingCriticalData,
     setCriticalDataError,
     loadTrigger,
     triggerReload,

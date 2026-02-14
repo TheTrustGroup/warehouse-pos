@@ -18,7 +18,7 @@ export function Layout() {
     if (typeof sessionStorage === 'undefined') return false;
     return sessionStorage.getItem(DISMISS_BANNER_KEY) === '1';
   });
-  const { criticalDataError, reloadCriticalData } = useCriticalData();
+  const { criticalDataError, isSyncingCriticalData, reloadCriticalData } = useCriticalData();
 
   useEffect(() => {
     const circuit = getApiCircuitBreaker();
@@ -51,6 +51,7 @@ export function Layout() {
   };
 
   const showDegradedBanner = degraded && !dismissed;
+  const showSyncingBar = isSyncingCriticalData;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
@@ -59,6 +60,17 @@ export function Layout() {
       </div>
       <MobileMenu />
       <Header />
+      {/* Slim hint while phase 2 (inventory, orders) syncs in background after login */}
+      {isSyncingCriticalData && (
+        <div
+          className="lg:ml-[280px] mt-[calc(72px+var(--safe-top))] bg-primary-50/90 text-primary-900 text-center py-2 px-4 text-sm font-medium flex items-center justify-center gap-2 border-b border-primary-200/50"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" aria-hidden />
+          Syncing inventory & orders…
+        </div>
+      )}
       {/* In-flow banner: reserves layout space so content is never overlapped. Pushes main content down. */}
       {criticalDataError && (
         <div
@@ -97,7 +109,7 @@ export function Layout() {
       )}
       <main
         className={`lg:ml-[280px] pt-20 lg:pt-8 pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] lg:px-8 pb-[max(2rem,var(--safe-bottom))] min-h-[calc(100vh-72px)] max-w-[1600px] overflow-x-hidden ${
-          showDegradedBanner ? 'mt-0' : 'mt-[calc(72px+var(--safe-top))]'
+          showDegradedBanner || showSyncingBar ? 'mt-0' : 'mt-[calc(72px+var(--safe-top))]'
         }`}
       >
         <Outlet />

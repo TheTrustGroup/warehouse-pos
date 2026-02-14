@@ -77,7 +77,7 @@ export function MobileMenu() {
         }`}
       >
         <div className="absolute inset-0 glass-overlay" onClick={() => setIsOpen(false)} aria-hidden></div>
-        <aside className="relative w-[280px] max-w-[85vw] h-full flex flex-col glass shadow-large border-r border-slate-200/50">
+        <aside className="relative w-[280px] max-w-[85vw] h-full flex flex-col glass-panel shadow-large border-r border-slate-200/50">
           <div className="px-5 py-5 border-b border-slate-200/30">
             <div className="flex flex-col gap-0.5">
               <h1 className="text-xl font-bold leading-tight tracking-tight gradient-text">
