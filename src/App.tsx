@@ -79,7 +79,6 @@ const Users = () => {
 };
 
 const NotFound = lazyWithRetry(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
-const LiquidGlassShowcase = lazyWithRetry(() => import('./pages/demo/LiquidGlassShowcase').then(m => ({ default: m.LiquidGlassShowcase })));
 
 /** Listens for service worker update event and shows toast. Must be inside ToastProvider. */
 function ServiceWorkerUpdateListener() {
@@ -270,14 +269,6 @@ function App() {
                                 <Settings />
                               </RouteErrorBoundary>
                             </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="demo/liquid-glass-showcase"
-                          element={
-                            <RouteErrorBoundary routeName="Liquid Glass Demo">
-                              <LiquidGlassShowcase />
-                            </RouteErrorBoundary>
                           }
                         />
                       </Route>

@@ -9,7 +9,6 @@ import {
   BarChart3,
   Settings,
   Users,
-  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { PERMISSIONS, ROLES, type Permission } from '../../types/permissions';
@@ -39,7 +38,6 @@ const baseNavigation: NavItem[] = [
   },
   { name: 'Users', to: '/users', icon: Users, permission: PERMISSIONS.USERS.VIEW },
   { name: 'Settings', to: '/settings', icon: Settings, permission: PERMISSIONS.SETTINGS.VIEW },
-  { name: 'Liquid Glass Demo', to: '/demo/liquid-glass-showcase', icon: Sparkles, permission: undefined },
 ];
 
 function getRoleDisplayName(roleId: string | undefined): string {
