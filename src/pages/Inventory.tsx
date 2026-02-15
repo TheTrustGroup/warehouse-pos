@@ -241,11 +241,28 @@ export function Inventory() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Inventory</h1>
-          <p className="text-slate-500 text-sm">
-            {s.filteredProducts.length} product{s.filteredProducts.length !== 1 ? 's' : ''} found
-            {s.filteredProducts.length !== s.products.length && ` of ${s.products.length}`}
+          <p className="text-slate-500 text-sm flex flex-wrap items-center gap-x-1 gap-y-1">
+            <span>{s.filteredProducts.length} product{s.filteredProducts.length !== 1 ? 's' : ''} found</span>
+            {s.filteredProducts.length !== s.products.length && <span> of {s.products.length}</span>}
             {s.currentWarehouseId && (
-              <span className="text-slate-600 font-medium"> · Warehouse: {s.currentWarehouse?.name ?? s.currentWarehouseId}</span>
+              <>
+                <span className="text-slate-400">·</span>
+                <span className="text-slate-600 font-medium">Warehouse:</span>
+                {s.warehouses.length > 1 && !s.isWarehouseBoundToSession ? (
+                  <select
+                    value={s.currentWarehouseId}
+                    onChange={(e) => s.setCurrentWarehouseId(e.target.value)}
+                    className="input-field min-h-touch text-sm font-medium text-slate-800 bg-white border-slate-200 rounded-lg py-1.5 pr-8 pl-2 max-w-[180px]"
+                    aria-label="View inventory for warehouse"
+                  >
+                    {s.warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-slate-700">{s.currentWarehouse?.name ?? s.currentWarehouseId}</span>
+                )}
+              </>
             )}
           </p>
           {s.lastSyncAt && (

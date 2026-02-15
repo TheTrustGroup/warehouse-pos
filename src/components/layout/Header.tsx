@@ -60,17 +60,17 @@ export function Header() {
         </form>
       </div>
 
-      {/* Store & warehouse: show current location so POS/staff know which store they're at. Main Town POS: only "Main Town", no store/dropdown. */}
-      <div className="hidden sm:flex items-center gap-3 flex-shrink-0">
+      {/* Store & warehouse: visible on all screens (including mobile) so Inventory can be filtered by warehouse. Main Town POS: only "Main Town", no store/dropdown. */}
+      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0">
         {!isMainTownPos && currentStore && (
-          <span className="text-sm font-medium text-slate-700 whitespace-nowrap" title="Current store">
+          <span className="hidden sm:inline text-sm font-medium text-slate-700 whitespace-nowrap" title="Current store">
             Store: <strong className="text-slate-900">{currentStore.name}</strong>
           </span>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <MapPin className="w-4 h-4 text-slate-600 shrink-0" strokeWidth={2} aria-hidden />
           {showLocationAsStatic || warehouses.length === 0 ? (
-          <span className="text-sm font-medium text-slate-800">
+          <span className="text-sm font-medium text-slate-800 truncate">
             {isMainTownPos ? 'Main Town' : (currentWarehouse?.name ?? (currentWarehouseId ? 'Warehouse' : 'Main Store'))}
           </span>
         ) : (

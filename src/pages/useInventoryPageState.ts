@@ -21,7 +21,7 @@ export type ViewMode = 'table' | 'grid';
 export function useInventoryPageState() {
   const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, undoAddProduct, searchProducts, filterProducts, refreshProducts, isBackgroundRefreshing, unsyncedCount, lastSyncAt, isUnsynced, verifyProductSaved } = useInventory();
   const { hasPermission } = useAuth();
-  const { currentWarehouse, currentWarehouseId } = useWarehouse();
+  const { currentWarehouse, currentWarehouseId, setCurrentWarehouseId, warehouses, isWarehouseBoundToSession } = useWarehouse();
   const { showToast } = useToast();
   const [searchParams] = useSearchParams();
   const [isSyncing, setIsSyncing] = useState(false);
@@ -117,6 +117,9 @@ export function useInventoryPageState() {
     showToast,
     currentWarehouse,
     currentWarehouseId,
+    setCurrentWarehouseId,
+    warehouses,
+    isWarehouseBoundToSession,
     isSyncing,
     setIsSyncing,
     viewMode,
