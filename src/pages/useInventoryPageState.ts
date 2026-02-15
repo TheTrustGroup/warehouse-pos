@@ -60,21 +60,18 @@ export function useInventoryPageState() {
   }, [products]);
 
   const filteredProducts = useMemo(() => {
-    // Only show contents of the selected warehouse: products with stock there (quantity > 0).
-    // When "Out of stock only" is set, show products with quantity === 0 at this warehouse instead.
-    const outOfStockOnly = filters.outOfStock === true;
-    let result = outOfStockOnly
-      ? products.filter((p) => (p.quantity ?? 0) === 0)
-      : products.filter((p) => (p.quantity ?? 0) > 0);
-    if (searchQuery.trim()) {
-      const searchResult = searchProducts(searchQuery);
-      const searchIds = new Set(searchResult.map((p) => p.id));
-      result = result.filter((p) => searchIds.has(p.id));
-    }
+    // Show all products for the selected warehouse (quantity column reflects stock at that warehouse).
+    // Use filters for search, category, low stock, out of stock, etc.
+    let result = products;
+    if (searchQuery.trim()) result = searchProducts(searchQuery);
     if (Object.keys(filters).length > 0) {
       const filtered = filterProducts(filters);
-      const filterIds = new Set(filtered.map((p) => p.id));
-      result = result.filter((p) => filterIds.has(p.id));
+      if (searchQuery.trim()) {
+        const searchIds = new Set(result.map((p) => p.id));
+        result = filtered.filter((p) => searchIds.has(p.id));
+      } else {
+        result = filtered;
+      }
     }
     return result;
   }, [products, searchQuery, filters, searchProducts, filterProducts]);
