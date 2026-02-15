@@ -137,10 +137,14 @@ export function Inventory() {
   /* Stability (Phase 2): stable min-height so list never collapses; keep list visible while loading. */
   const listMinHeight = 'min-h-[60dvh]';
 
+  /* When server returns no products but we have cache, we set both error and products — show list + banner, not full error card. */
+  const isCacheFallbackError = Boolean(s.error && s.products.length > 0 && s.error.includes('Showing last saved list'));
+  const showFullErrorCard = !s.isLoading && s.error && s.products.length === 0;
+
   return (
     <>
-      {/* Error: only when not loading and error is set */}
-      {!s.isLoading && s.error && (
+      {/* Full error card only when no products (no cache to show) */}
+      {showFullErrorCard && (
         <div className={`flex items-center justify-center ${listMinHeight}`}>
           <div className="solid-card max-w-md w-full mx-auto text-center p-8">
             <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -159,7 +163,7 @@ export function Inventory() {
         </div>
       )}
       {/* Empty state: only when not loading, no error, and truly no products */}
-      {!s.isLoading && !s.error && s.products.length === 0 && (
+      {!s.isLoading && !s.error && s.products.length === 0 && !showFullErrorCard && (
         <div className={`flex items-center justify-center ${listMinHeight}`}>
           <div className="solid-card max-w-md w-full mx-auto text-center p-8">
             <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -185,8 +189,21 @@ export function Inventory() {
         </div>
       )}
       {/* Has products: show list (keep visible while loading — no collapse, no full replace). */}
-      {s.products.length > 0 && (
+      {s.products.length > 0 && !showFullErrorCard && (
     <div className={`space-y-6 ${listMinHeight}`}>
+      {/* Banner when server returned no products but we're showing cached list */}
+      {isCacheFallbackError && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-amber-900 text-sm font-medium flex-1">
+            <AlertTriangle className="inline-block w-4 h-4 mr-2 align-middle text-amber-600" aria-hidden />
+            {s.error}
+          </p>
+          <Button variant="primary" size="sm" onClick={() => s.refreshProducts({ bypassCache: true, timeoutMs: 60_000 })} className="inline-flex items-center gap-2 shrink-0" aria-label="Retry loading products">
+            <RefreshCw className="w-4 h-4" />
+            Retry
+          </Button>
+        </div>
+      )}
       {(s.isLoading || s.isBackgroundRefreshing) && (
         <div className="flex items-center gap-2 rounded-lg bg-slate-100/90 px-3 py-2 text-slate-600 text-sm" role="status" aria-live="polite">
           <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" aria-hidden />
