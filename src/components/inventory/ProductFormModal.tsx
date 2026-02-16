@@ -9,6 +9,7 @@ import { useNetworkStatusContext } from '../../contexts/NetworkStatusContext';
 import { API_BASE_URL } from '../../lib/api';
 import { apiGet } from '../../lib/apiClient';
 import { compressImage, MAX_IMAGE_BASE64_LENGTH } from '../../lib/imageUtils';
+import { setProductImages } from '../../lib/productImagesStore';
 import { Button } from '../ui/Button';
 import { X, Upload, Plus, Trash2, CloudOff } from 'lucide-react';
 
@@ -367,6 +368,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
           ? validSizeRows.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
           : Number(formData.quantity) || 0;
       const imagesToSubmit = formDataImagesRef.current?.length ? formDataImagesRef.current : formData.images;
+      const payloadImages = Array.isArray(imagesToSubmit) ? imagesToSubmit : [];
       const payload = {
         ...formData,
         name,
@@ -376,9 +378,13 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         description,
         quantity,
         quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize,
-        images: Array.isArray(imagesToSubmit) ? imagesToSubmit : [],
+        images: payloadImages,
         ...(effectiveWarehouseId && { warehouseId: effectiveWarehouseId }),
       };
+      // Persist images to client store before async submit so list shows them even if API/state path fails or is delayed
+      if (product?.id && payloadImages.length > 0) {
+        setProductImages(product.id, payloadImages);
+      }
       await Promise.resolve(onSubmit(payload));
       onClose();
     } catch {

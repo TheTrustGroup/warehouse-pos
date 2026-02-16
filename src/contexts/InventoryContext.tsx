@@ -851,6 +851,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const updateProduct = async (id: string, updates: Partial<Product> & { warehouseId?: string }) => {
     const product = products.find((p: Product) => p.id === id);
     if (!product) throw new Error('Product not found');
+    const payloadImages = Array.isArray(updates.images) ? updates.images : [];
+    if (payloadImages.length > 0) setProductImages(id, payloadImages);
     const SAVE_TIMEOUT_MS = 10_000;
     if (import.meta.env?.DEV) {
       console.time('Total Update Time');
@@ -861,8 +863,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     try {
       if (offlineEnabled) {
         await offline.updateProduct(id, updates);
-        const images = Array.isArray(updates.images) ? updates.images : [];
-        if (images.length > 0) setProductImages(id, images);
         logInventoryUpdate({ productId: id, sku: product.sku });
         showToast('success', 'Product updated. Syncing to server when online.');
         return;
@@ -897,11 +897,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const withImages =
         Array.isArray(normalized.images) && normalized.images.length > 0
           ? normalized
-          : { ...normalized, images: Array.isArray(updated.images) ? updated.images : [] };
+          : { ...normalized, images: payloadImages.length > 0 ? payloadImages : (Array.isArray(updated.images) ? updated.images : []) };
       const newList = products.map((p) => (p.id === id ? withImages : p));
-      if (Array.isArray(withImages.images) && withImages.images.length > 0) {
-        setProductImages(id, withImages.images);
-      }
+      if (payloadImages.length > 0) setProductImages(id, payloadImages);
       setApiOnlyProductsState(newList);
       cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
       lastUpdatedProductRef.current = { product: withImages, at: Date.now() };

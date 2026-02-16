@@ -34,3 +34,9 @@ So **you don’t need to shrink images yourself** – the app does it. Only prod
 | Max images per product | 5 | Add form and sync |
 
 If you see “Load failed” or the sync hint, try **Retry** first. If it keeps failing, check your connection and that the backend allows POST from the warehouse domain (see `SERVER_SIDE_FIX_GUIDE.md`).
+
+---
+
+## Edit flow: why images stay in the list
+
+When you **edit a product and add an image**, the list shows that image after save because: (1) **Client image store** (`product_images_v1` in localStorage) is written on every add/update that has images, and the list merges it when rendering. (2) **Form writes before submit**: on Save, the form calls `setProductImages(product.id, payload.images)` before `onSubmit`. (3) **Context writes at update entry**: `updateProduct` calls `setProductImages(id, payloadImages)` at the very start when the payload has images. The store is the single source of truth for last-saved images on this device.
