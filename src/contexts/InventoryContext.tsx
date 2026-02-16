@@ -374,7 +374,18 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             /* ignore */
           }
         }
-        const merged = [...apiProducts, ...localOnly];
+        let merged = [...apiProducts, ...localOnly];
+        // Preserve images from cache when API returns product without images (e.g. after update, silent refresh would otherwise wipe them)
+        const cached = cacheRef.current[wid]?.data;
+        if (cached?.length) {
+          merged = merged.map((p) => {
+            const c = cached.find((x: Product) => x.id === p.id);
+            if (c && Array.isArray(c.images) && c.images.length > 0 && (!p.images || p.images.length === 0)) {
+              return { ...p, images: c.images };
+            }
+            return p;
+          });
+        }
         // Persistence: never show empty if we have cached data (avoid data loss from wrong warehouse or transient API empty)
         if (merged.length === 0 && (isStorageAvailable() || isIndexedDBAvailable())) {
           const toProducts = (list: any[]): Product[] => {
@@ -858,7 +869,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const normalized = fromApi && (fromApi as { id?: string }).id
         ? normalizeProduct(fromApi as any)
         : updated;
-      const newList = products.map((p) => (p.id === id ? normalized : p));
+      // Keep images from our update if API response omits them (e.g. backend doesn't return base64)
+      const withImages =
+        Array.isArray(normalized.images) && normalized.images.length > 0
+          ? normalized
+          : { ...normalized, images: Array.isArray(updated.images) ? updated.images : [] };
+      const newList = products.map((p) => (p.id === id ? withImages : p));
       setApiOnlyProductsState(newList);
       cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
       if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), newList);
