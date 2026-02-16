@@ -159,6 +159,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         quantityBySize: qtyBySize.length > 0 ? qtyBySize : [],
       });
       setImagePreview(validImages);
+      imagesLengthRef.current = validImages.length;
     } else {
       setFormData({
         sku: generateSKU(),
@@ -182,6 +183,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         quantityBySize: [],
       });
       setImagePreview([]);
+      imagesLengthRef.current = 0;
     }
   }, [isOpen, product, currentWarehouseId]);
 
@@ -202,7 +204,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     const currentLen = imagesLengthRef.current;
     const toAdd = Math.min(MAX_PRODUCT_IMAGES - currentLen, files.length);
     if (toAdd <= 0) {
-      showToast('warning', `Maximum ${MAX_PRODUCT_IMAGES} images. Remove one to add more.`);
+      if (currentLen >= MAX_PRODUCT_IMAGES) {
+        showToast('warning', `Maximum ${MAX_PRODUCT_IMAGES} images. Remove one to add more.`);
+      }
       return;
     }
 
@@ -282,6 +286,10 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     }
     setIsSubmitting(true);
     try {
+      const quantity =
+        formData.sizeKind === 'sized' && validSizeRows.length > 0
+          ? validSizeRows.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
+          : Number(formData.quantity) || 0;
       const payload = {
         ...formData,
         name,
@@ -289,12 +297,10 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         barcode,
         category,
         description,
+        quantity,
         quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize,
         ...(effectiveWarehouseId && { warehouseId: effectiveWarehouseId }),
       };
-      if (formData.sizeKind === 'sized' && validSizeRows.length > 0) {
-        (payload as Record<string, unknown>).quantity = validated.data.quantity;
-      }
       await Promise.resolve(onSubmit(payload));
       onClose();
     } catch {

@@ -242,16 +242,19 @@ export function generateInventoryReport(products: Product[]): InventoryReport {
   const realProducts = products.filter(p => !isMockProduct(p));
   
   const totalProducts = realProducts.length;
-  const totalStockValue = realProducts.reduce((sum, p) => sum + p.quantity * p.costPrice, 0);
-  const lowStockItems = realProducts.filter(p => p.quantity > 0 && p.quantity <= p.reorderLevel).length;
-  const outOfStockItems = realProducts.filter(p => p.quantity === 0).length;
+  const qty = (p: Product) => Number(p.quantity ?? 0) || 0;
+  const cost = (p: Product) => Number(p.costPrice ?? 0) || 0;
+  const reorder = (p: Product) => Number(p.reorderLevel ?? 0) || 0;
+  const totalStockValue = realProducts.reduce((sum, p) => sum + qty(p) * cost(p), 0);
+  const lowStockItems = realProducts.filter(p => qty(p) > 0 && qty(p) <= reorder(p)).length;
+  const outOfStockItems = realProducts.filter(p => qty(p) === 0).length;
 
   // Products by category (using real products only)
   const categoryStats = new Map<string, { count: number; value: number }>();
   realProducts.forEach(p => {
     const catKey = getCategoryDisplay(p.category);
     const existing = categoryStats.get(catKey);
-    const value = p.quantity * p.costPrice;
+    const value = qty(p) * cost(p);
     if (existing) {
       existing.count += 1;
       existing.value += value;
@@ -272,8 +275,8 @@ export function generateInventoryReport(products: Product[]): InventoryReport {
   const topValueProducts = [...realProducts]
     .map(p => ({
       name: p.name,
-      quantity: p.quantity,
-      value: p.quantity * p.costPrice,
+      quantity: qty(p),
+      value: qty(p) * cost(p),
     }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);

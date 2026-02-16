@@ -69,8 +69,10 @@ export function ProductGridView({
   };
 
   const getStockStatus = (product: Product) => {
-    if (product.quantity === 0) return { label: 'Out of Stock', color: 'border-red-200 bg-red-50' };
-    if (product.quantity <= product.reorderLevel) return { label: 'Low Stock', color: 'border-amber-200 bg-amber-50' };
+    const qty = Number(product.quantity ?? 0) || 0;
+    const reorder = Number(product.reorderLevel ?? 0) || 0;
+    if (qty === 0) return { label: 'Out of Stock', color: 'border-red-200 bg-red-50' };
+    if (qty <= reorder) return { label: 'Low Stock', color: 'border-amber-200 bg-amber-50' };
     return { label: 'In Stock', color: 'border-green-200 bg-green-50' };
   };
 
@@ -203,7 +205,7 @@ export function ProductGridView({
                     : 'badge-error'
                 }`}>
                   <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                  {product.quantity} left
+                  {Number(product.quantity ?? 0) || 0} left
                 </span>
               </div>
               {(product.sizeKind === 'sized' || (product.quantityBySize?.length)) && product.quantityBySize && product.quantityBySize.length > 0 && (
@@ -213,7 +215,7 @@ export function ProductGridView({
                   ))}
                 </div>
               )}
-              {(product.quantity === 0 || product.quantity <= product.reorderLevel) && (
+              {status.label !== 'In Stock' && (
                 <div className="flex items-center gap-2 text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                   <span className="text-xs font-semibold">{status.label}</span>

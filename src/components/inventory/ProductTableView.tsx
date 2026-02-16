@@ -83,8 +83,10 @@ export function ProductTableView({
   };
 
   const getStockStatus = (product: Product) => {
-    if (product.quantity === 0) return { label: 'Out of Stock', color: 'text-red-600 bg-red-50' };
-    if (product.quantity <= product.reorderLevel) return { label: 'Low Stock', color: 'text-amber-600 bg-amber-50' };
+    const qty = Number(product.quantity ?? 0) || 0;
+    const reorder = Number(product.reorderLevel ?? 0) || 0;
+    if (qty === 0) return { label: 'Out of Stock', color: 'text-red-600 bg-red-50' };
+    if (qty <= reorder) return { label: 'Low Stock', color: 'text-amber-600 bg-amber-50' };
     return { label: 'In Stock', color: 'text-green-600 bg-green-50' };
   };
 
@@ -210,7 +212,7 @@ export function ProductTableView({
                   <td className="px-4 py-3 align-middle">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-3">
-                        <span className="font-semibold text-slate-900">{product.quantity}</span>
+                        <span className="font-semibold text-slate-900">{Number(product.quantity ?? 0) || 0}</span>
                         <span className={`badge ${
                           status.label === 'In Stock'
                             ? 'badge-success'

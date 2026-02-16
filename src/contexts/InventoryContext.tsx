@@ -290,10 +290,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  /** Normalize product from API or localStorage (dates + location only). Never touch prices or quantity. */
+  /** Normalize product from API or localStorage: dates, location, and numeric fields (quantity/costPrice) so list and totals are accurate. */
   const normalizeProduct = (p: any): Product =>
     normalizeProductLocation({
       ...p,
+      quantity: Number(p.quantity ?? 0) || 0,
+      costPrice: Number(p.costPrice ?? p.cost_price ?? 0) || 0,
+      sellingPrice: Number(p.sellingPrice ?? p.selling_price ?? 0) || 0,
+      reorderLevel: Number(p.reorderLevel ?? p.reorder_level ?? 0) || 0,
       createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
       updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
       expiryDate: p.expiryDate ? new Date(p.expiryDate) : null,
@@ -612,10 +616,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       description: product.description ?? '',
       category: product.category ?? '',
       tags: Array.isArray(product.tags) ? product.tags : [],
-      quantity: product.quantity ?? 0,
-      costPrice: product.costPrice ?? 0,
-      sellingPrice: product.sellingPrice ?? 0,
-      reorderLevel: product.reorderLevel ?? 0,
+      quantity: Number(product.quantity ?? 0) || 0,
+      costPrice: Number(product.costPrice ?? 0) || 0,
+      sellingPrice: Number(product.sellingPrice ?? 0) || 0,
+      reorderLevel: Number(product.reorderLevel ?? 0) || 0,
       location: product.location && typeof product.location === 'object' ? product.location : { warehouse: '', aisle: '', rack: '', bin: '' },
       supplier: product.supplier && typeof product.supplier === 'object' ? product.supplier : { name: '', contact: '', email: '' },
       images,
@@ -968,11 +972,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const filterProducts = (filters: ProductFilters) => {
     return products.filter((p: Product) => {
+      const qty = Number(p.quantity ?? 0) || 0;
+      const reorder = Number(p.reorderLevel ?? 0) || 0;
       if (filters.category && getCategoryDisplay(p.category) !== filters.category) return false;
-      if (filters.minQuantity !== undefined && p.quantity < filters.minQuantity) return false;
-      if (filters.maxQuantity !== undefined && p.quantity > filters.maxQuantity) return false;
-      if (filters.lowStock && !(p.quantity > 0 && p.quantity <= p.reorderLevel)) return false;
-      if (filters.outOfStock && p.quantity !== 0) return false;
+      if (filters.minQuantity !== undefined && qty < filters.minQuantity) return false;
+      if (filters.maxQuantity !== undefined && qty > filters.maxQuantity) return false;
+      if (filters.lowStock && !(qty > 0 && qty <= reorder)) return false;
+      if (filters.outOfStock && qty !== 0) return false;
       if (filters.tag && !p.tags.includes(filters.tag)) return false;
       return true;
     });

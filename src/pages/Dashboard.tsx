@@ -85,9 +85,12 @@ export function Dashboard() {
 
   const stats = useMemo(() => {
     const totalProducts = products.length;
-    const totalStockValue = products.reduce((sum, p) => sum + (p.quantity * p.costPrice), 0);
-    const lowStockItems = products.filter(p => p.quantity > 0 && p.quantity <= p.reorderLevel).length;
-    const outOfStockItems = products.filter(p => p.quantity === 0).length;
+    const q = (p: { quantity?: number; costPrice?: number; reorderLevel?: number }) => Number(p.quantity ?? 0) || 0;
+    const cost = (p: { costPrice?: number }) => Number(p.costPrice ?? 0) || 0;
+    const reorder = (p: { reorderLevel?: number }) => Number(p.reorderLevel ?? 0) || 0;
+    const totalStockValue = products.reduce((sum, p) => sum + (q(p) * cost(p)), 0);
+    const lowStockItems = products.filter(p => q(p) > 0 && q(p) <= reorder(p)).length;
+    const outOfStockItems = products.filter(p => q(p) === 0).length;
     
     return {
       totalProducts,
