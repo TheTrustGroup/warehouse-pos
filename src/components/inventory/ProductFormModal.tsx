@@ -120,6 +120,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
 
     if (product) {
       const qtyBySize = (product.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
+      const validImages = Array.isArray(product.images)
+        ? product.images.filter((img): img is string => typeof img === 'string' && img.length > 0)
+        : [];
       setFormData({
         sku: product.sku,
         barcode: product.barcode,
@@ -138,14 +141,14 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         supplier: product.supplier && typeof product.supplier === 'object'
           ? { name: (product.supplier as any).name ?? '', contact: (product.supplier as any).contact ?? '', email: (product.supplier as any).email ?? '' }
           : { name: '', contact: '', email: '' },
-        images: product.images,
+        images: validImages,
         expiryDate: product.expiryDate,
         variants: product.variants || {},
         createdBy: product.createdBy,
         sizeKind: (product.sizeKind ?? 'na') as SizeKind,
         quantityBySize: qtyBySize.length > 0 ? qtyBySize : [],
       });
-      setImagePreview(product.images);
+      setImagePreview(validImages);
     } else {
       setFormData({
         sku: generateSKU(),
