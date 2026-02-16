@@ -11,9 +11,11 @@ interface PaymentPanelProps {
   onComplete: (payments: Payment[]) => void;
   /** Phase 5: when true, Complete sale is disabled (read-only / last saved data). */
   disableComplete?: boolean;
+  /** When true, sale is being processed; show "Processing…" and disable button. */
+  isCompleting?: boolean;
 }
 
-export function PaymentPanel({ onComplete, disableComplete = false }: PaymentPanelProps) {
+export function PaymentPanel({ onComplete, disableComplete = false, isCompleting = false }: PaymentPanelProps) {
   const { calculateTotal, calculateSubtotal, discount, setDiscount } = usePOS();
   const { canPerformAction, requireApproval } = useAuth();
   const { showToast } = useToast();
@@ -169,12 +171,20 @@ export function PaymentPanel({ onComplete, disableComplete = false }: PaymentPan
         type="button"
         variant="primary"
         onClick={handlePayment}
-        disabled={disableComplete || (paymentMethod === 'cash' && cashAmount < total)}
-        title={disableComplete ? 'Read-only. Writes disabled until connection is restored.' : undefined}
-        className="w-full py-3.5 text-base disabled:opacity-50 disabled:cursor-not-allowed"
-        aria-label={disableComplete ? 'Complete sale (disabled — read-only)' : `Complete payment ${formatCurrency(total)}`}
+        disabled={disableComplete || isCompleting || (paymentMethod === 'cash' && cashAmount < total)}
+        title={disableComplete ? 'Read-only. Writes disabled until connection is restored.' : isCompleting ? 'Processing sale…' : undefined}
+        className="w-full py-3.5 text-base disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+        aria-label={disableComplete ? 'Complete sale (disabled — read-only)' : isCompleting ? 'Processing sale' : `Complete payment ${formatCurrency(total)}`}
+        aria-busy={isCompleting}
       >
-        Complete sale — {formatCurrency(total)}
+        {isCompleting ? (
+          <>
+            <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden />
+            Processing…
+          </>
+        ) : (
+          <>Complete sale — {formatCurrency(total)}</>
+        )}
       </Button>
     </div>
   );

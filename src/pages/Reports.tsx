@@ -15,6 +15,7 @@ import { getStoredData } from '../lib/storage';
 import { parseDate, validateDateRange } from '../lib/dateUtils';
 import { API_BASE_URL } from '../lib/api';
 import { Button } from '../components/ui/Button';
+import { PageHeader } from '../components/ui/PageHeader';
 
 type ReportType = 'sales' | 'inventory';
 type TransactionsSource = 'server' | 'local';
@@ -134,11 +135,8 @@ export function Reports() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between animate-fade-in-up">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">Reports & Analytics</h1>
-          <p className="text-slate-500 text-sm">Comprehensive business insights</p>
-        </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fade-in-up">
+        <PageHeader title="Reports & Analytics" description="Comprehensive business insights" />
         <Button
           type="button"
           variant="primary"

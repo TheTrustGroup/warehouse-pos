@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useInventoryPageState } from './useInventoryPageState';
 import { API_BASE_URL } from '../lib/api';
 import { useApiStatus } from '../contexts/ApiStatusContext';
@@ -7,6 +8,7 @@ import { ProductFormModal } from '../components/inventory/ProductFormModal';
 import { InventoryFilters } from '../components/inventory/InventoryFilters';
 import { InventorySearchBar } from '../components/inventory/InventorySearchBar';
 import { InventoryListSkeleton } from '../components/inventory/InventoryListSkeleton';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Product } from '../types';
 import { getLocationDisplay, formatRelativeTime } from '../lib/utils';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
@@ -17,9 +19,13 @@ import { Plus, LayoutGrid, List, Trash2, Download, Package, AlertTriangle, Refre
  * Inventory page: single hook (useInventoryPageState) then early returns or content.
  * This structure guarantees React never sees a different number of hooks between renders (#310).
  */
+type DeleteConfirm = { type: 'single'; id: string } | { type: 'bulk'; ids: string[] } | null;
+
 export function Inventory() {
   const s = useInventoryPageState();
   const { isDegraded } = useApiStatus();
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirm>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   /** Read-only when server is unreachable (degraded). When offline, allow add/edit so products can be saved locally and sync when online. */
   const readOnlyMode = isDegraded;
   const disableDestructive = readOnlyMode;
@@ -39,28 +45,33 @@ export function Inventory() {
     s.setIsModalOpen(true);
   };
 
-  const handleDeleteProduct = async (id: string) => {
-    if (confirm('Are you sure you want to delete this product?')) {
-      try {
-        await s.deleteProduct(id);
-        s.setSelectedIds(prev => prev.filter(sid => sid !== id));
-        s.showToast('success', 'Product deleted successfully');
-      } catch (error) {
-        s.showToast('error', getUserFriendlyMessage(error));
-      }
-    }
+  const handleDeleteProduct = (id: string) => {
+    setDeleteConfirm({ type: 'single', id });
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (s.selectedIds.length === 0) return;
-    if (confirm(`Are you sure you want to delete ${s.selectedIds.length} product(s)?`)) {
-      try {
-        await s.deleteProducts(s.selectedIds);
+    setDeleteConfirm({ type: 'bulk', ids: [...s.selectedIds] });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      if (deleteConfirm.type === 'single') {
+        await s.deleteProduct(deleteConfirm.id);
+        s.setSelectedIds(prev => prev.filter(sid => sid !== deleteConfirm.id));
+        s.showToast('success', 'Product deleted.');
+      } else {
+        await s.deleteProducts(deleteConfirm.ids);
         s.setSelectedIds([]);
-        s.showToast('success', `${s.selectedIds.length} product(s) deleted successfully`);
-      } catch (error) {
-        s.showToast('error', getUserFriendlyMessage(error));
+        s.showToast('success', `${deleteConfirm.ids.length} product(s) deleted.`);
       }
+      setDeleteConfirm(null);
+    } catch (error) {
+      s.showToast('error', getUserFriendlyMessage(error));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -402,6 +413,21 @@ export function Inventory() {
         onSubmit={handleSubmitProduct}
         product={s.editingProduct}
         readOnlyMode={readOnlyMode}
+      />
+      <ConfirmDialog
+        isOpen={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={handleConfirmDelete}
+        title={deleteConfirm?.type === 'bulk' ? 'Delete products' : 'Delete product'}
+        message={
+          deleteConfirm?.type === 'bulk'
+            ? `Are you sure you want to delete ${deleteConfirm.ids.length} product(s)? This cannot be undone.`
+            : 'Are you sure you want to delete this product? This cannot be undone.'
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isConfirming={isDeleting}
       />
     </>
   );

@@ -70,6 +70,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const [sizeCodes, setSizeCodes] = useState<SizeCodeOption[]>([]);
   const [sizeCodesLoading, setSizeCodesLoading] = useState(false);
   const wasOpenRef = useRef(false);
+  const modalContentRef = useRef<HTMLDivElement>(null);
+  const previousActiveRef = useRef<HTMLElement | null>(null);
 
   // Only sync form to product when the modal opens (not on every re-render while open).
   // This prevents the form from resetting when background refresh or context updates change product/currentWarehouseId.
@@ -236,13 +238,51 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     const lock = () => document.body.classList.add('scroll-lock');
     const unlock = () => document.body.classList.remove('scroll-lock');
     lock();
+    previousActiveRef.current = document.activeElement as HTMLElement | null;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !modalContentRef.current) return;
+      const root = modalContentRef.current;
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      );
+      const list = Array.from(focusable).filter((el) => el.tabIndex >= 0 || el === document.activeElement || /^(INPUT|SELECT|TEXTAREA|BUTTON|A)$/.test(el.tagName));
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', onKeyDown);
+    const raf = requestAnimationFrame(() => {
+      const root = modalContentRef.current;
+      if (!root) return;
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      );
+      const first = Array.from(focusable).find((el) => el.tabIndex >= 0 || /^(INPUT|SELECT|TEXTAREA|BUTTON|A)$/.test(el.tagName));
+      if (first) first.focus();
+    });
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener('keydown', onKeyDown);
       unlock();
+      const prev = previousActiveRef.current;
+      if (prev && typeof prev.focus === 'function' && document.contains(prev)) {
+        prev.focus();
+      }
     };
   }, [isOpen, onClose]);
 
@@ -258,6 +298,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       onClick={() => onClose()}
     >
       <div
+        ref={modalContentRef}
         className="solid-panel rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col modal-content-fit mx-2 sm:mx-4"
         onClick={(e) => e.stopPropagation()}
       >

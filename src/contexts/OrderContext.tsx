@@ -12,6 +12,8 @@ import { useRealtimeSync } from '../hooks/useRealtimeSync';
 interface OrderContextType {
   orders: Order[];
   isLoading: boolean;
+  /** Set when initial load or refresh failed; show banner + Retry on Orders page. */
+  error: string | null;
   /** Order id currently being updated (assign driver, deliver, fail, cancel, or status update). Use to show loading on buttons. */
   busyOrderId: string | null;
   /** Reload orders from API (used by critical data load after login). */
@@ -33,6 +35,7 @@ const OrderContext = createContext<OrderContextType | undefined>(undefined);
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const { products, refreshProducts } = useInventory();
   const { user } = useAuth();
@@ -72,15 +75,17 @@ export function OrderProvider({ children }: { children: ReactNode }) {
    */
   const loadOrders = useCallback(async (options?: { timeoutMs?: number }) => {
     try {
+      setError(null);
       setIsLoading(true);
       const data = await apiGet<Order[] | { data: Order[] }>(API_BASE_URL, '/api/orders', {
         timeoutMs: options?.timeoutMs,
       });
       const list = Array.isArray(data) ? data : (data && (data as any).data && Array.isArray((data as any).data) ? (data as any).data : []);
       setOrders(list.map((o: any) => normalizeOrder(o)));
-    } catch (error) {
-      reportError(error, { context: 'loadOrders' });
+    } catch (err) {
+      reportError(err, { context: 'loadOrders' });
       setOrders([]);
+      setError(err instanceof Error ? err.message : 'Failed to load orders. Check your connection.');
     } finally {
       setIsLoading(false);
     }
@@ -92,6 +97,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       loadOrders();
     } else {
       setOrders([]);
+      setError(null);
       setIsLoading(false);
     }
   }, [user, loadOrders]);
@@ -450,6 +456,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       value={{
         orders,
         isLoading,
+        error,
         busyOrderId,
         refreshOrders: loadOrders,
         createOrder,

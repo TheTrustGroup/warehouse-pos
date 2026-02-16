@@ -1,4 +1,4 @@
-import { Package, DollarSign, AlertTriangle, ShoppingBag, Store as StoreIcon, MapPin, Shield, Settings, Users, BarChart3, LayoutGrid } from 'lucide-react';
+import { Package, DollarSign, AlertTriangle, ShoppingBag, Store as StoreIcon, MapPin, Shield, Settings, Users, BarChart3, LayoutGrid, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { StatCard } from '../components/dashboard/StatCard';
 import { SalesChart } from '../components/dashboard/SalesChart';
@@ -10,7 +10,7 @@ import { useInventory } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useStore } from '../contexts/StoreContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { InventoryActivity } from '../types';
 import { fetchTransactionsFromApi } from '../services/transactionsApi';
 import { API_BASE_URL } from '../lib/api';
@@ -26,36 +26,36 @@ export function Dashboard() {
   const [todaySales, setTodaySales] = useState(0);
   const [todayTransactions, setTodayTransactions] = useState(0);
   const [salesByStore, setSalesByStore] = useState<Array<{ storeId: string | null; storeName: string; revenue: number; count: number }>>([]);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const isSuperAdmin = user?.role === 'super_admin';
   const adminRoleLabel = isSuperAdmin ? 'Super Admin' : 'Admin';
-  useEffect(() => {
-    if (!isAdmin) return;
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const end = new Date();
-    fetchTransactionsFromApi(API_BASE_URL, {
-      from: start.toISOString(),
-      to: end.toISOString(),
-      limit: 500,
-    })
-      .then(({ data }) => {
-        const completed = data.filter((t) => t.status === 'completed');
-        setTodayTransactions(completed.length);
-        setTodaySales(completed.reduce((sum, t) => sum + t.total, 0));
-      })
-      .catch(() => {});
-  }, [isAdmin]);
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 30);
-    fetchTransactionsFromApi(API_BASE_URL, { from: start.toISOString(), to: end.toISOString(), limit: 2000 })
-      .then(({ data }) => {
-        const completed = data.filter((t) => t.status === 'completed');
+  const loadDashboardData = useCallback(() => {
+    if (!isAdmin) {
+      setDashboardLoading(false);
+      setDashboardError(null);
+      return;
+    }
+    setDashboardError(null);
+    setDashboardLoading(true);
+    const startToday = new Date();
+    startToday.setHours(0, 0, 0, 0);
+    const endToday = new Date();
+    const startMonth = new Date();
+    startMonth.setDate(startMonth.getDate() - 30);
+    const endMonth = new Date();
+    Promise.all([
+      fetchTransactionsFromApi(API_BASE_URL, { from: startToday.toISOString(), to: endToday.toISOString(), limit: 500 }),
+      fetchTransactionsFromApi(API_BASE_URL, { from: startMonth.toISOString(), to: endMonth.toISOString(), limit: 2000 }),
+    ])
+      .then(([todayRes, monthRes]) => {
+        const completedToday = todayRes.data.filter((t) => t.status === 'completed');
+        setTodayTransactions(completedToday.length);
+        setTodaySales(completedToday.reduce((sum, t) => sum + t.total, 0));
+        const completed = monthRes.data.filter((t) => t.status === 'completed');
         const byStore = new Map<string | null, { revenue: number; count: number }>();
         completed.forEach((t) => {
           const key = t.storeId ?? null;
@@ -73,8 +73,15 @@ export function Dashboard() {
           }))
         );
       })
-      .catch(() => setSalesByStore([]));
+      .catch((err) => {
+        setDashboardError(err instanceof Error ? err.message : 'Failed to load dashboard data. Check your connection.');
+      })
+      .finally(() => setDashboardLoading(false));
   }, [isAdmin, stores]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   const stats = useMemo(() => {
     const totalProducts = products.length;
@@ -100,6 +107,33 @@ export function Dashboard() {
 
   return (
     <div className="space-y-8">
+      {isAdmin && dashboardError && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3 animate-fade-in-up" role="alert">
+          <p className="text-amber-900 text-sm font-medium flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600" aria-hidden />
+            {dashboardError}
+          </p>
+          <Button variant="primary" size="sm" onClick={() => loadDashboardData()} className="inline-flex items-center gap-2 shrink-0" aria-label="Retry loading dashboard">
+            <RefreshCw className="w-4 h-4" />
+            Retry
+          </Button>
+        </div>
+      )}
+      {isAdmin && dashboardLoading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in-up" role="status" aria-live="polite">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="solid-card p-6">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 bg-slate-200 rounded-xl animate-pulse flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="h-4 w-24 bg-slate-100 rounded mb-2 animate-pulse" />
+                  <div className="h-8 w-16 bg-slate-200 rounded animate-pulse" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="animate-fade-in-up">
         <div className="flex flex-wrap items-center gap-3 mb-2">
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
@@ -201,7 +235,8 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Stats Grid */}
+      {/* Stats Grid — hide for admin until dashboard data loaded to avoid showing zeros */}
+      {(!isAdmin || !dashboardLoading) && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in-up">
         <StatCard
           title="Total Stock Value"
@@ -234,12 +269,13 @@ export function Dashboard() {
           trend={{ value: 8.2, isPositive: true }}
         />
       </div>
+      )}
 
       {/* Phase 4: Failed offline syncs (admin only) */}
       {isAdmin && <SyncRejectionsCard />}
 
-      {/* Sales by store (Phase 3) — graceful when no stores */}
-      {salesByStore.length > 0 && (
+      {/* Sales by store (Phase 3) — graceful when no stores; hide while admin dashboard loading */}
+      {!dashboardLoading && salesByStore.length > 0 && (
         <div className="solid-card p-6 animate-fade-in-up">
           <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <StoreIcon className="w-5 h-5 text-slate-600" />

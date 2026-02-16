@@ -29,6 +29,7 @@ export function POS() {
   const { user } = useAuth();
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(null);
+  const [isCompletingSale, setIsCompletingSale] = useState(false);
 
   /** User is assigned to Main Town POS only: show fixed "Main Town" text, no store/warehouse dropdowns. Fallback: single store named "Main town" when API doesn't return assignedPos. */
   const isMainTownPos =
@@ -103,12 +104,16 @@ export function POS() {
   };
 
   const handleCompletePayment = async (payments: Payment[]) => {
+    if (isCompletingSale) return;
     try {
+      setIsCompletingSale(true);
       const transaction = await processTransaction(payments);
       setCompletedTransaction(transaction);
       setShowReceipt(true);
     } catch (err) {
       showToast('error', getUserFriendlyMessage(err));
+    } finally {
+      setIsCompletingSale(false);
     }
   };
 
@@ -319,7 +324,7 @@ export function POS() {
             <div className="solid-card p-5">
               <h2 className="text-lg font-semibold text-slate-900 mb-4">Payment</h2>
               {canCompleteSale ? (
-                <PaymentPanel onComplete={handleCompletePayment} disableComplete={readOnlyMode} />
+                <PaymentPanel onComplete={handleCompletePayment} disableComplete={readOnlyMode} isCompleting={isCompletingSale} />
               ) : (
                 <p className="text-amber-700 text-sm">Select a warehouse above to complete payment.</p>
               )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useOrders } from '../contexts/OrderContext';
 import { useApiStatus } from '../contexts/ApiStatusContext';
 import { useNetworkStatusContext } from '../contexts/NetworkStatusContext';
@@ -11,22 +12,30 @@ import {
   XCircle,
   Plus,
   Search,
+  AlertTriangle,
+  RefreshCw,
+  ClipboardList,
 } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '../lib/utils';
 import { Button } from '../components/ui/Button';
+import { EmptyState } from '../components/ui/EmptyState';
+import { PageHeader } from '../components/ui/PageHeader';
 
 export function Orders() {
   const {
     orders,
     isLoading,
+    error: ordersError,
     busyOrderId,
     updateOrderStatus,
     assignDriver,
     markAsDelivered,
     markAsFailed,
+    refreshOrders,
   } = useOrders();
   const { isDegraded } = useApiStatus();
   const { isOnline } = useNetworkStatusContext();
+  const navigate = useNavigate();
   /** Phase 5: last saved data mode is read-only. Disable status updates (e.g. deduct stock) when server unreachable or offline. */
   const readOnlyMode = isDegraded || !isOnline;
 
@@ -104,13 +113,41 @@ export function Orders() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Orders</h1>
-          <p className="text-slate-600 text-sm mt-0.5">{filteredOrders.length} orders found</p>
+      {ordersError && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3" role="alert">
+          <p className="text-amber-900 text-sm font-medium flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600" aria-hidden />
+            {ordersError}
+          </p>
+          <Button variant="primary" size="sm" onClick={() => refreshOrders()} className="inline-flex items-center gap-2 shrink-0" aria-label="Retry loading orders">
+            <RefreshCw className="w-4 h-4" />
+            Retry
+          </Button>
         </div>
-        <Button variant="primary" className="inline-flex items-center gap-2">
+      )}
+      {!ordersError && orders.length === 0 ? (
+        <div className="min-h-[50vh] flex flex-col justify-center">
+          <EmptyState
+            icon={ClipboardList}
+            title="No orders yet"
+            description="Orders will appear here when they are created from POS or delivery."
+            action={
+              <Button variant="primary" onClick={() => navigate('/pos')} className="inline-flex items-center gap-2">
+                <Plus className="w-5 h-5" />
+                Go to POS
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <PageHeader
+          title="Orders"
+          description={`${filteredOrders.length} order${filteredOrders.length !== 1 ? 's' : ''} found`}
+        />
+        <Button variant="primary" className="inline-flex items-center gap-2 w-full sm:w-auto justify-center" aria-label="New order">
           <Plus className="w-5 h-5" />
           New Order
         </Button>
@@ -357,6 +394,8 @@ export function Orders() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
