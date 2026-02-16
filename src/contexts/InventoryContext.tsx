@@ -77,19 +77,12 @@ function getAllCachedProducts(): Product[] {
   }
 }
 
-/** Read cached product list for a warehouse (per-warehouse key + legacy fallback). If still empty, use all caches so previous products show when API is down. */
+/** Read cached product list for this warehouse only. Never returns another warehouse's data — so switching warehouse always shows correct scope (or loading until API returns). */
 function getCachedProductsForWarehouse(warehouseId: string): Product[] {
   if (typeof window === 'undefined' || !isStorageAvailable()) return [];
   try {
-    let list: any[] = getStoredData<any[]>(productsCacheKey(warehouseId), []);
-    if (!Array.isArray(list)) list = [];
-    if (list.length === 0) {
-      const legacy = getStoredData<any[]>('warehouse_products', []);
-      list = Array.isArray(legacy) ? legacy : [];
-    }
-    if (list.length === 0) {
-      return getAllCachedProducts();
-    }
+    const list: any[] = getStoredData<any[]>(productsCacheKey(warehouseId), []);
+    if (!Array.isArray(list) || list.length === 0) return [];
     const out: Product[] = [];
     for (const p of list) {
       if (p == null || typeof p !== 'object') continue;
@@ -530,7 +523,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       return out;
     };
 
-    // Synchronous read: per-warehouse cache so the right list shows immediately on login/refresh.
+    // Synchronous read: only this warehouse's cache — never show another warehouse's list when switching.
     const productsFromCache = getCachedProductsForWarehouse(effectiveWarehouseId);
     if (productsFromCache.length > 0) {
       setProducts(productsFromCache);
@@ -540,8 +533,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
 
     (async () => {
-      // Start API fetch immediately; run IndexedDB read in parallel so we don't delay the first paint.
-      const loadProductsPromise = loadProducts(ac.signal, hadCache ? { silent: true } : undefined);
+      // On warehouse change always fetch fresh for the selected warehouse (bypass cache) so the list/quantities match.
+      const loadProductsPromise = loadProducts(ac.signal, hadCache ? { silent: true, bypassCache: true } : { bypassCache: true });
       if (!hadCache && isIndexedDBAvailable()) {
         try {
           const fromDb = await loadProductsFromDb<any>();
