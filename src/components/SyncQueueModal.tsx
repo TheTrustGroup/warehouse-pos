@@ -132,9 +132,16 @@ export function SyncQueueModal({ isOpen, onClose }: SyncQueueModalProps) {
                         <span className="font-medium text-slate-800 capitalize">{item.operation}</span>
                         <span className="text-slate-500 text-sm ml-2 truncate block">{String(label)}</span>
                         {item.error && (
-                          <p className="text-red-600 text-xs mt-0.5 truncate" title={item.error}>
-                            {item.error}
-                          </p>
+                          <>
+                            <p className="text-red-600 text-xs mt-0.5 truncate" title={item.error}>
+                              {item.error}
+                            </p>
+                            {item.error.toLowerCase().includes('load failed') && (
+                              <p className="text-amber-700 text-xs mt-0.5" title="Common causes">
+                                Often connection, CORS, or request too large. Retry; sync omits large images to avoid size limits.
+                              </p>
+                            )}
+                          </>
                         )}
                         <p className="text-slate-400 text-xs">
                           Attempts: {item.attempts} · {item.status}

@@ -28,11 +28,22 @@ const TABLE_NAMES = /** @type {const} */ (['products']);
 // TODO: Support additional tableNames (e.g. 'orders') and corresponding API paths in syncSingleItem.
 
 /**
- * Build API payload from Dexie product record (minimal fields; server may expect more).
+ * Max size for a single image (base64) to include in sync payload. Larger images are omitted
+ * to avoid 413 / body limit (e.g. Vercel 4.5MB), which often surfaces as "Load failed".
+ */
+const MAX_IMAGE_SIZE_SYNC = 100_000; // ~100KB per image
+
+/**
+ * Build API payload from Dexie product record. Images are stripped or limited so sync POST
+ * stays under server body limit (avoids "Load failed" after first few products with large images).
  * @param {Object} data - Record from sync queue (product shape)
  * @returns {Record<string, unknown>}
  */
 function buildProductPayload(data) {
+  const rawImages = Array.isArray(data.images) ? data.images : [];
+  const images = rawImages
+    .filter((img) => typeof img === 'string' && img.length <= MAX_IMAGE_SIZE_SYNC)
+    .slice(0, 5);
   return {
     id: data.id,
     name: data.name ?? '',
@@ -42,7 +53,7 @@ function buildProductPayload(data) {
     sellingPrice: data.price ?? 0,
     costPrice: data.price ?? 0,
     description: data.description ?? '',
-    images: Array.isArray(data.images) ? data.images : [],
+    images,
     barcode: data.barcode ?? '',
     tags: Array.isArray(data.tags) ? data.tags : [],
     reorderLevel: data.reorderLevel ?? 0,
@@ -52,6 +63,7 @@ function buildProductPayload(data) {
     createdBy: data.createdBy ?? '',
     createdAt: data.createdAt ?? new Date().toISOString(),
     updatedAt: data.updatedAt ?? new Date().toISOString(),
+    ...(data.warehouseId && { warehouseId: data.warehouseId }),
   };
 }
 
@@ -493,9 +505,13 @@ export class SyncService {
         summary.synced.push(queueId);
       } else {
         const attempts = (item.attempts || 0) + 1;
-        const errorMsg = result.error || 'Unknown error';
-        const isFinalFailure = attempts > MAX_ATTEMPTS;
         const status = result.status;
+        const rawMsg = result.error || 'Unknown error';
+        const errorMsg =
+          status != null && status >= 400
+            ? `[${status}] ${rawMsg}`
+            : rawMsg;
+        const isFinalFailure = attempts > MAX_ATTEMPTS;
         if (status >= 400 && status < 500 && item.data?.id) {
           try {
             await setSyncError(item.data.id, errorMsg);

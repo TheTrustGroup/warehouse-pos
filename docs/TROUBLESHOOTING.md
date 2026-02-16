@@ -37,6 +37,18 @@ This guide covers common issues, how to clear data, force resync, browser compat
 - **Cause:** The same product was changed offline on this device and also on the server (or another device). The server returns 409 and the app shows the conflict modal.
 - **What to do:** Choose **Keep local**, **Keep server**, or **Merge** as appropriate. To avoid future prompts for similar cases, set **Conflict resolution** in Settings to **Last write wins** (Settings or Data & cache / Admin area, if available). Note: last-write-wins uses local `lastModified` vs server `updatedAt` to pick the newer version automatically.
 
+### "Sync worked for first 2 items, then Load failed" / products don’t save or show
+
+- **Cause:** The browser reports **"Load failed"** when the request never completes. Common reasons:
+  1. **Request body too large** – Products with large base64 images can push the POST body over the server limit (e.g. Vercel 4.5MB). The first products may have had no/small images; later ones with images then fail.
+  2. **CORS** – The server must allow `POST` from `https://warehouse.extremedeptkidz.com` (see `SERVER_SIDE_FIX_GUIDE.md`). If only GET works, POST can still show "Load failed".
+  3. **Network / timeouts** – Unstable connection or server taking too long.
+- **What we did:** The sync service now **omits large images** from the sync payload (keeps only small ones, up to 5 images) so the body stays under typical limits. Product metadata still syncs; you can add images again via Edit after sync.
+- **What to do:**
+  1. **Retry** the failed item(s) in the Sync queue. With the new payload, they may succeed.
+  2. If it still fails: check DevTools → Network for the `POST /api/products` request. If it’s red/canceled with no response, it’s likely CORS or body size; ensure CORS allows POST and the backend body limit is sufficient.
+  3. Backend logs: check for 413 (payload too large) or CORS preflight failures.
+
 ### "Server is temporarily unavailable" or "Using last saved data"
 
 - **Cause:** The API client’s **circuit breaker** has opened after repeated failures (e.g. server down, timeouts).
