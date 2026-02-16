@@ -196,9 +196,17 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       .finally(() => setSizeCodesLoading(false));
   }, [isOpen, isOnline]);
 
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files) return;
+    if (!files || files.length === 0) return;
     e.target.value = '';
 
     const currentLen = imagesLengthRef.current;
@@ -213,26 +221,28 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     const newDataUrls: string[] = [];
     for (let i = 0; i < toAdd; i++) {
       const file = files[i];
-      if (!file.type.startsWith('image/')) {
+      const isImage = !file.type || file.type.startsWith('image/');
+      if (!isImage) {
         showToast('error', `Skipped non-image: ${file.name}`);
         continue;
       }
+      let dataUrl: string;
       try {
-        const dataUrl = await compressImage(file, MAX_IMAGE_BASE64_LENGTH);
-        newDataUrls.push(dataUrl);
-      } catch {
-        try {
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = () => reject(reader.error);
-            reader.readAsDataURL(file);
-          });
-          newDataUrls.push(dataUrl);
-        } catch (err) {
-          showToast('error', `Could not add image: ${file.name}`);
-        }
+        dataUrl = await readFileAsDataUrl(file);
+        if (!dataUrl || typeof dataUrl !== 'string') throw new Error('Empty result');
+      } catch (err) {
+        showToast('error', `Could not read image: ${file.name}`);
+        continue;
       }
+      try {
+        const compressed = await compressImage(file, MAX_IMAGE_BASE64_LENGTH);
+        if (compressed && compressed.length <= MAX_IMAGE_BASE64_LENGTH) {
+          dataUrl = compressed;
+        }
+      } catch {
+        // Keep uncompressed dataUrl so preview and save still work
+      }
+      newDataUrls.push(dataUrl);
     }
 
     if (newDataUrls.length === 0) return;
@@ -867,8 +877,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             )}
             <div className="flex flex-wrap gap-4 mb-4">
               {imagePreview.map((img, index) => (
-                <div key={index} className="relative">
-                  <img src={img} alt={`Preview ${index}`} className="w-24 h-24 object-cover rounded-lg" />
+                <div key={`preview-${index}-${img.length}`} className="relative">
+                  <img src={img} alt={`Preview ${index + 1}`} className="w-24 h-24 object-cover rounded-lg bg-slate-100" loading="eager" />
                   <button
                     type="button"
                     onClick={() => removeImage(index)}
