@@ -937,6 +937,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   /**
    * Delete product: offline-first when enabled; API-only when flag off.
+   * On success: remove from state immediately (optimistic) then refetch in background so other tabs/devices see update on next poll.
    */
   const deleteProduct = async (id: string) => {
     try {
@@ -951,9 +952,18 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         await apiDelete(API_BASE_URL, productByIdPath('/api/products', id));
       }
       logInventoryDelete({ productId: id });
-      await loadProducts(undefined, { bypassCache: true });
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      loadProducts(undefined, { bypassCache: true, silent: true }).catch(() => {});
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete product';
+      const status = (err as { status?: number })?.status;
+      const msg =
+        status === 403
+          ? "You don't have permission to delete products."
+          : status === 401
+            ? 'Please log in again.'
+            : err instanceof Error
+              ? err.message
+              : 'Failed to delete product';
       showToast('error', msg);
       throw err;
     }
@@ -961,6 +971,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   /**
    * Delete multiple products: offline-first when enabled; API-only when flag off.
+   * On success: remove from state immediately (optimistic) then refetch in background.
    */
   const deleteProducts = async (ids: string[]) => {
     if (ids.length === 0) return;
@@ -979,6 +990,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       return;
     }
+    const idSet = new Set(ids);
     for (const id of ids) {
       try {
         try {
@@ -988,11 +1000,21 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         logInventoryDelete({ productId: id });
       } catch (err) {
-        showToast('error', err instanceof Error ? err.message : 'Delete failed');
+        const status = (err as { status?: number })?.status;
+        const msg =
+          status === 403
+            ? "You don't have permission to delete products."
+            : status === 401
+              ? 'Please log in again.'
+              : err instanceof Error
+                ? err.message
+                : 'Delete failed';
+        showToast('error', msg);
         throw err;
       }
     }
-    await loadProducts(undefined, { bypassCache: true });
+    setProducts((prev) => prev.filter((p) => !idSet.has(p.id)));
+    loadProducts(undefined, { bypassCache: true, silent: true }).catch(() => {});
   };
 
   const getProduct = (id: string) => {
