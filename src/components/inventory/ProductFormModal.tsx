@@ -77,10 +77,15 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const previousActiveRef = useRef<HTMLElement | null>(null);
   /** Current image count so handleImageUpload always sees latest (avoids stale closure). */
   const imagesLengthRef = useRef(0);
+  /** Latest images at submit time (avoids stale formData.images when load runs right after add). */
+  const formDataImagesRef = useRef<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     imagesLengthRef.current = formData.images.length;
   }, [formData.images.length]);
+  useEffect(() => {
+    formDataImagesRef.current = formData.images;
+  }, [formData.images]);
   /** Only focus first field when modal first opens; avoid re-running on every render (unstable onClose) so typing doesn't lose focus / dismiss keyboard. */
   const didInitialFocusRef = useRef(false);
   /** Track last focused form field so we can restore focus when mobile browser or re-render steals it. */
@@ -361,6 +366,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         formData.sizeKind === 'sized' && validSizeRows.length > 0
           ? validSizeRows.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
           : Number(formData.quantity) || 0;
+      const imagesToSubmit = formDataImagesRef.current?.length ? formDataImagesRef.current : formData.images;
       const payload = {
         ...formData,
         name,
@@ -370,6 +376,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         description,
         quantity,
         quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize,
+        images: Array.isArray(imagesToSubmit) ? imagesToSubmit : [],
         ...(effectiveWarehouseId && { warehouseId: effectiveWarehouseId }),
       };
       await Promise.resolve(onSubmit(payload));

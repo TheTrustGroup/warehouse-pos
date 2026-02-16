@@ -233,7 +233,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const CACHED_TOAST_COOLDOWN_MS = 15_000;
   /** Recently added product so loadProducts never overwrites and drops it; also used to pin to top to avoid jitter. */
   const lastAddedProductRef = useRef<{ product: Product; at: number } | null>(null);
+  /** Recently updated product (with images) so any subsequent loadProducts (refresh/sync/mount) keeps the image. */
+  const lastUpdatedProductRef = useRef<{ product: Product; at: number } | null>(null);
   const RECENT_ADD_WINDOW_MS = 15_000;
+  const RECENT_UPDATE_WINDOW_MS = 60_000;
 
   const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
     const params = new URLSearchParams();
@@ -386,6 +389,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             }
             return p;
           });
+        }
+        // If we just updated a product (with images), any loadProducts that runs afterward must keep that version so the image does not vanish
+        const updated = lastUpdatedProductRef.current;
+        if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
+          merged = merged.map((p) => (p.id === updated.product.id ? updated.product : p));
         }
         // Persistence: never show empty if we have cached data (avoid data loss from wrong warehouse or transient API empty)
         if (merged.length === 0 && (isStorageAvailable() || isIndexedDBAvailable())) {
@@ -878,6 +886,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const newList = products.map((p) => (p.id === id ? withImages : p));
       setApiOnlyProductsState(newList);
       cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
+      lastUpdatedProductRef.current = { product: withImages, at: Date.now() };
       if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), newList);
       if (isIndexedDBAvailable()) {
         saveProductsToDb(newList).catch((e) => {
