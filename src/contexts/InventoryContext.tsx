@@ -734,7 +734,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         _pending: true,
       } as Product;
       setApiOnlyProductsState((prev) => [tempProduct, ...prev]);
-      const payload = productToPayload({ ...tempProduct, _pending: undefined } as Product);
+      const payload: Record<string, unknown> = productToPayload({ ...tempProduct, _pending: undefined } as Product);
+      if (productData.warehouseId?.trim()) payload.warehouseId = productData.warehouseId.trim();
       if (import.meta.env?.DEV) {
         console.timeEnd('Data Preparation');
         console.time('API Request');
