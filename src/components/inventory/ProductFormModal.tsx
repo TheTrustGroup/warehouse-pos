@@ -8,8 +8,11 @@ import { useToast } from '../../contexts/ToastContext';
 import { useNetworkStatusContext } from '../../contexts/NetworkStatusContext';
 import { API_BASE_URL } from '../../lib/api';
 import { apiGet } from '../../lib/apiClient';
+import { compressImage, MAX_IMAGE_BASE64_LENGTH } from '../../lib/imageUtils';
 import { Button } from '../ui/Button';
 import { X, Upload, Plus, Trash2, CloudOff } from 'lucide-react';
+
+const MAX_PRODUCT_IMAGES = 5;
 
 export type SizeKind = 'na' | 'one_size' | 'sized';
 
@@ -178,19 +181,33 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       .finally(() => setSizeCodesLoading(false));
   }, [isOpen, isOnline]);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
+    e.target.value = '';
 
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setFormData(prev => ({ ...prev, images: [...prev.images, result] }));
-        setImagePreview(prev => [...prev, result]);
-      };
-      reader.readAsDataURL(file);
-    });
+    const toAdd = Math.min(MAX_PRODUCT_IMAGES - formData.images.length, files.length);
+    if (toAdd <= 0) {
+      showToast('warning', `Maximum ${MAX_PRODUCT_IMAGES} images. Remove one to add more.`);
+      return;
+    }
+
+    for (let i = 0; i < toAdd; i++) {
+      const file = files[i];
+      try {
+        const dataUrl = await compressImage(file, MAX_IMAGE_BASE64_LENGTH);
+        setFormData(prev => {
+          if (prev.images.length >= MAX_PRODUCT_IMAGES) return prev;
+          return { ...prev, images: [...prev.images, dataUrl] };
+        });
+        setImagePreview(prev => {
+          if (prev.length >= MAX_PRODUCT_IMAGES) return prev;
+          return [...prev, dataUrl];
+        });
+      } catch (err) {
+        showToast('error', `Could not add image: ${file.name}`);
+      }
+    }
   };
 
   const removeImage = (index: number) => {
@@ -802,6 +819,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             <label className="block text-sm font-medium text-slate-600 mb-1.5">
               Product images
             </label>
+            <p className="text-slate-500 text-xs mb-2">
+              Up to {MAX_PRODUCT_IMAGES} images. Each is auto-resized to under ~100KB so sync works reliably.
+            </p>
             {!isOnline && (
               <p className="text-amber-700 text-xs mb-2">Images are stored locally only when offline. Cloud upload when back online.</p>
             )}

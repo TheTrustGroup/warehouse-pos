@@ -138,7 +138,7 @@ export function SyncQueueModal({ isOpen, onClose }: SyncQueueModalProps) {
                             </p>
                             {item.error.toLowerCase().includes('load failed') && (
                               <p className="text-amber-700 text-xs mt-0.5" title="Common causes">
-                                Often connection, CORS, or request too large. Retry; sync omits large images to avoid size limits.
+                                Usually connection, CORS, or request too large. Retry. New uploads are auto-resized to ~100KB each; old large images are omitted when syncing.
                               </p>
                             )}
                           </>
