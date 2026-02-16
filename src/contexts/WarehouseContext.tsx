@@ -60,8 +60,8 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
           if (bound) return bound;
           const exists = arr.some((w) => w.id === prev);
           if (exists) return prev;
-          if (arr.length === 1) return arr[0].id;
-          return '';
+          // Always set a valid selection so the warehouse filter/dropdown works (single or multiple warehouses).
+          return arr[0].id;
         });
       }
       // On empty list from API, keep current selection (don't clear) so products still load for default warehouse.
