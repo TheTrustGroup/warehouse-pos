@@ -567,8 +567,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   }, [currentWarehouseId]);
 
-  // Real-time: poll when tab visible so inventory shows latest. 25s interval.
-  useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true }), intervalMs: 25_000 });
+  // Real-time: poll when tab visible so all devices see server truth (adds/edits/deletes). Bypass cache so deletes on one device appear on others.
+  useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }), intervalMs: 25_000 });
+
+  // When user returns to this tab, refetch from server so changes from other devices (e.g. deletes) show immediately.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadProductsRef.current(undefined, { silent: true, bypassCache: true }).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   // When user clicks "Try again" on the server-unavailable banner, refetch products.
   useEffect(() => {
@@ -741,10 +752,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.time('API Request');
       }
       const postProduct = async (): Promise<Record<string, unknown> | null> => {
+        const postOpts = { timeoutMs: SAVE_TIMEOUT_MS, idempotencyKey: tempId };
         try {
-          return (await apiPost<Record<string, unknown>>(API_BASE_URL, productsPath('/admin/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+          return (await apiPost<Record<string, unknown>>(API_BASE_URL, productsPath('/admin/api/products'), payload, postOpts)) ?? null;
         } catch {
-          return (await apiPost<Record<string, unknown>>(API_BASE_URL, productsPath('/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+          return (await apiPost<Record<string, unknown>>(API_BASE_URL, productsPath('/api/products'), payload, postOpts)) ?? null;
         }
       };
       let created: Record<string, unknown> | null = null;

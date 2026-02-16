@@ -2,23 +2,13 @@
 // Role switcher lives ONLY in Sidebar + MobileMenu (bottom/nav). Removed from header to avoid duplicate global-state controls and reduce cognitive load (HIG: clarity > density).
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bell, LogOut, MapPin } from 'lucide-react';
+import { Search, Bell, LogOut } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useWarehouse } from '../../contexts/WarehouseContext';
-import { useStore } from '../../contexts/StoreContext';
 import { Button } from '../ui/Button';
 
 export function Header() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
-  const { currentStore, isSingleStore } = useStore();
-  const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse, refreshWarehouses, isLoading, isWarehouseBoundToSession } = useWarehouse();
-  /** Main Town POS: show only "Main Town", no store/location dropdowns. Fallback: single store named "Main town" when API doesn't return assignedPos. */
-  const isMainTownPos =
-    user?.assignedPos === 'main_town' ||
-    (isSingleStore && currentStore?.name?.trim().toLowerCase() === 'main town');
-  /** Single assigned POS: show location as static text, not a dropdown. */
-  const showLocationAsStatic = isMainTownPos || (isSingleStore && (warehouses.length <= 1 || isWarehouseBoundToSession));
+  const { logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -60,49 +50,7 @@ export function Header() {
         </form>
       </div>
 
-      {/* Store & warehouse: visible on all screens (including mobile) so Inventory can be filtered by warehouse. Main Town POS: only "Main Town", no store/dropdown. */}
-      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0">
-        {!isMainTownPos && currentStore && (
-          <span className="hidden sm:inline text-sm font-medium text-slate-700 whitespace-nowrap" title="Current store">
-            Store: <strong className="text-slate-900">{currentStore.name}</strong>
-          </span>
-        )}
-        <div className="flex items-center gap-2 min-w-0">
-          <MapPin className="w-4 h-4 text-slate-600 shrink-0" strokeWidth={2} aria-hidden />
-          {showLocationAsStatic || warehouses.length === 0 ? (
-          <span className="text-sm font-medium text-slate-800 truncate">
-            {isMainTownPos ? 'Main Town' : (currentWarehouse?.name ?? (currentWarehouseId ? 'Warehouse' : 'Main Store'))}
-          </span>
-        ) : (
-          <select
-            value={currentWarehouseId || ''}
-            onChange={(e) => setCurrentWarehouseId(e.target.value)}
-            className="input-field min-h-touch text-sm font-medium text-slate-800 bg-white w-full min-w-0 max-w-[200px]"
-            aria-label="Current warehouse"
-          >
-            {!currentWarehouseId && (
-              <option value="">Select warehouse</option>
-            )}
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>{w.name}</option>
-            ))}
-          </select>
-        )}
-        {warehouses.length === 0 && !isLoading && !currentWarehouseId && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => refreshWarehouses()}
-            className="text-xs text-slate-500 hover:text-slate-700 min-h-0 py-1 font-normal"
-            aria-label="Retry loading warehouses"
-          >
-            Retry
-          </Button>
-        )}
-        </div>
-      </div>
-
-      {/* Right Section: search, logout, alerts only. Role switch is in sidebar/mobile menu only. */}
+      {/* Right Section: logout, alerts. Warehouse/location lives only on Inventory and POS pages. */}
       <div className="flex items-center gap-2 flex-shrink-0">
         {/* Log out - visible on all screens including mobile; min touch target 44px */}
         <Button

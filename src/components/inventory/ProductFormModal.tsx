@@ -205,9 +205,19 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       showToast('error', validated.message);
       return;
     }
+    // When warehouses exist, require a warehouse so the product is assigned to the correct location.
+    const effectiveWarehouseId = (formData.warehouseId?.trim() || currentWarehouseId?.trim() || '').trim() || undefined;
+    if (warehouses.length > 0 && !effectiveWarehouseId) {
+      showToast('error', 'Please select a warehouse.');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const payload = { ...formData, quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize };
+      const payload = {
+        ...formData,
+        quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize,
+        ...(effectiveWarehouseId && { warehouseId: effectiveWarehouseId }),
+      };
       if (formData.sizeKind === 'sized' && validSizeRows.length > 0) {
         (payload as Record<string, unknown>).quantity = validated.data.quantity;
       }
