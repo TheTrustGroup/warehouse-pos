@@ -210,23 +210,42 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       return;
     }
 
+    const newDataUrls: string[] = [];
     for (let i = 0; i < toAdd; i++) {
       const file = files[i];
+      if (!file.type.startsWith('image/')) {
+        showToast('error', `Skipped non-image: ${file.name}`);
+        continue;
+      }
       try {
         const dataUrl = await compressImage(file, MAX_IMAGE_BASE64_LENGTH);
-        setFormData(prev => {
-          if (prev.images.length >= MAX_PRODUCT_IMAGES) return prev;
-          return { ...prev, images: [...prev.images, dataUrl] };
-        });
-        setImagePreview(prev => {
-          if (prev.length >= MAX_PRODUCT_IMAGES) return prev;
-          return [...prev, dataUrl];
-        });
-        imagesLengthRef.current = currentLen + i + 1;
-      } catch (err) {
-        showToast('error', `Could not add image: ${file.name}`);
+        newDataUrls.push(dataUrl);
+      } catch {
+        try {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+          });
+          newDataUrls.push(dataUrl);
+        } catch (err) {
+          showToast('error', `Could not add image: ${file.name}`);
+        }
       }
     }
+
+    if (newDataUrls.length === 0) return;
+
+    setFormData(prev => {
+      const combined = [...prev.images, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
+      return { ...prev, images: combined };
+    });
+    setImagePreview(prev => {
+      const combined = [...prev, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
+      return combined;
+    });
+    imagesLengthRef.current = Math.min(currentLen + newDataUrls.length, MAX_PRODUCT_IMAGES);
   };
 
   const removeImage = (index: number) => {
