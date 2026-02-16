@@ -321,7 +321,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto flex-1 min-h-0">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto flex-1 min-h-0" autoComplete="off">
           {readOnlyMode && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-center gap-2 text-amber-900 text-sm font-medium" role="status">
               <CloudOff className="w-5 h-5 flex-shrink-0" aria-hidden />
@@ -337,6 +337,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
               <input
                 type="text"
                 required
+                autoComplete="off"
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 className="input-field"
@@ -350,6 +351,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
               <input
                 type="text"
                 required
+                autoComplete="off"
                 value={formData.sku}
                 onChange={(e) => setFormData(prev => ({ ...prev, sku: e.target.value }))}
                 className="input-field"
@@ -362,6 +364,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
               </label>
               <input
                 type="text"
+                autoComplete="off"
                 value={formData.barcode}
                 onChange={(e) => setFormData(prev => ({ ...prev, barcode: e.target.value }))}
                 className="input-field"
@@ -375,6 +378,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
               <input
                 type="text"
                 required
+                autoComplete="off"
                 value={formData.category}
                 onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
                 className="input-field"
@@ -392,6 +396,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
               className="input-field"
               rows={3}
+              autoComplete="off"
             />
           </div>
 
@@ -682,6 +687,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
               </label>
               <input
                 type="email"
+                autoComplete="off"
                 value={formData.supplier.email}
                 onChange={(e) => setFormData(prev => ({ 
                   ...prev, 
@@ -699,6 +705,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
+                autoComplete="off"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
