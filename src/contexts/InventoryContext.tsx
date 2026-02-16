@@ -29,6 +29,9 @@ function productsCacheKey(warehouseId: string): string {
   return `warehouse_products_${warehouseId}`;
 }
 
+/** Seed/placeholder product ID that may exist in cache but not on production API; skip verify to avoid 404. */
+const SEED_PLACEHOLDER_PRODUCT_ID = '00000000-0000-0000-0000-000000000101';
+
 /** Normalize raw cache entry to Product (dates + location). Used for initial state and cache read. */
 function normalizeProductFromRaw(p: any): Product {
   return normalizeProductLocation({
@@ -1029,6 +1032,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const isUnsynced = (productId: string) => localOnlyIds.has(productId);
 
   const verifyProductSaved = async (productId: string): Promise<{ saved: boolean; product?: Product }> => {
+    if (productId === SEED_PLACEHOLDER_PRODUCT_ID) return { saved: false };
     try {
       const found = await apiGet<any>(API_BASE_URL, productByIdPath('/api/products', productId));
       if (!found?.id) return { saved: false };
