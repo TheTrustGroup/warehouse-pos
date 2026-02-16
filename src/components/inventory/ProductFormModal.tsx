@@ -242,7 +242,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     }
     const lock = () => document.body.classList.add('scroll-lock');
     const unlock = () => document.body.classList.remove('scroll-lock');
-    lock();
+    // Skip scroll-lock on touch devices: body overflow:hidden + touch-action:none can make the keyboard dismiss or misbehave on mobile.
+    const isTouch = typeof window !== 'undefined' && 'ontouchstart' in window;
+    if (!isTouch) lock();
     previousActiveRef.current = document.activeElement as HTMLElement | null;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -288,7 +290,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener('keydown', onKeyDown);
-      unlock();
+      if (!isTouch) unlock();
       const prev = previousActiveRef.current;
       if (prev && typeof prev.focus === 'function' && document.contains(prev)) {
         prev.focus();
@@ -305,7 +307,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-form-title"
-      onClick={() => onClose()}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
         ref={modalContentRef}
@@ -321,7 +323,17 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto flex-1 min-h-0" autoComplete="off">
+        <form
+          onSubmit={handleSubmit}
+          className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto flex-1 min-h-0"
+          autoComplete="off"
+          onFocus={(e) => {
+            const el = e.target instanceof HTMLElement ? e.target : null;
+            if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
+              setTimeout(() => el.scrollIntoView({ block: 'nearest', behavior: 'auto' }), 150);
+            }
+          }}
+        >
           {readOnlyMode && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-center gap-2 text-amber-900 text-sm font-medium" role="status">
               <CloudOff className="w-5 h-5 flex-shrink-0" aria-hidden />
