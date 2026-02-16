@@ -169,7 +169,7 @@ export function ProductGridView({
                 )}
               </div>
             )}
-            {product.images[0] ? (
+            {Array.isArray(product.images) && product.images[0] ? (
               <img 
                 src={product.images[0]} 
                 alt={product.name}

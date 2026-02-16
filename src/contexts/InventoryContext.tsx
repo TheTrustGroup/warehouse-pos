@@ -290,10 +290,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  /** Normalize product from API or localStorage: dates, location, and numeric fields (quantity/costPrice) so list and totals are accurate. */
+  /** Normalize product from API or localStorage: dates, location, images array, and numeric fields so list and totals are accurate. */
   const normalizeProduct = (p: any): Product =>
     normalizeProductLocation({
       ...p,
+      images: Array.isArray(p.images) ? p.images : [],
       quantity: Number(p.quantity ?? 0) || 0,
       costPrice: Number(p.costPrice ?? p.cost_price ?? 0) || 0,
       sellingPrice: Number(p.sellingPrice ?? p.selling_price ?? 0) || 0,
@@ -890,7 +891,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.timeEnd('State Update (update)');
         console.timeEnd('Total Update Time');
       }
-      loadProducts(undefined, { silent: true }).catch(() => {});
+      // Do not refetch after update: API often omits images in GET, which would overwrite the list and make the new image vanish
     } catch (err) {
       const status = (err as { status?: number })?.status;
       const msg =

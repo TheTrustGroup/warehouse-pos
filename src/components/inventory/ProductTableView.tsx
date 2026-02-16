@@ -150,7 +150,7 @@ export function ProductTableView({
                     </td>
                   )}
                   <td className="px-4 py-3 align-middle">
-                    {product.images[0] ? (
+                    {Array.isArray(product.images) && product.images[0] ? (
                       <img 
                         src={product.images[0]} 
                         alt={product.name}
