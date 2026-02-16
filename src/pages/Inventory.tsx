@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useInventoryPageState } from './useInventoryPageState';
 import { API_BASE_URL } from '../lib/api';
 import { useApiStatus } from '../contexts/ApiStatusContext';
@@ -98,6 +98,11 @@ export function Inventory() {
       throw e;
     }
   };
+
+  const handleCloseProductModal = useCallback(() => {
+    s.setIsModalOpen(false);
+    s.setEditingProduct(null);
+  }, [s.setIsModalOpen, s.setEditingProduct]);
 
   const handleUndoAdd = async (productId: string) => {
     try {
@@ -409,7 +414,7 @@ export function Inventory() {
       )}
       <ProductFormModal
         isOpen={s.isModalOpen}
-        onClose={() => { s.setIsModalOpen(false); s.setEditingProduct(null); }}
+        onClose={handleCloseProductModal}
         onSubmit={handleSubmitProduct}
         product={s.editingProduct}
         readOnlyMode={readOnlyMode}

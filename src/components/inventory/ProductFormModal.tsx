@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Product, type QuantityBySizeItem } from '../../types';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
 import { safeValidateProductForm } from '../../lib/validationSchemas';
@@ -74,6 +74,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const previousActiveRef = useRef<HTMLElement | null>(null);
   /** Only focus first field when modal first opens; avoid re-running on every render (unstable onClose) so typing doesn't lose focus / dismiss keyboard. */
   const didInitialFocusRef = useRef(false);
+  /** Track last focused form field so we can restore focus when mobile browser or re-render steals it. */
+  const lastFocusedInModalRef = useRef<HTMLElement | null>(null);
 
   // Only sync form to product when the modal opens (not on every re-render while open).
   // This prevents the form from resetting when background refresh or context updates change product/currentWarehouseId.
@@ -238,6 +240,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   useEffect(() => {
     if (!isOpen) {
       didInitialFocusRef.current = false;
+      lastFocusedInModalRef.current = null;
       return;
     }
     const lock = () => document.body.classList.add('scroll-lock');
@@ -298,6 +301,17 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     };
   }, [isOpen, onClose]);
 
+  // Restore focus when mobile browser or React re-render steals it (controlled input DOM update can blur on iOS).
+  useLayoutEffect(() => {
+    if (!isOpen || !modalContentRef.current) return;
+    const modal = modalContentRef.current;
+    const active = document.activeElement as HTMLElement | null;
+    const last = lastFocusedInModalRef.current;
+    if (!last || !document.contains(last)) return;
+    if (active && modal.contains(active)) return;
+    last.focus();
+  }, [isOpen, formData]);
+
   if (!isOpen) return null;
 
   /* Modal: opaque panel so form is readable (no background bleed-through). Backdrop click + Escape close. Scroll lock when open. */
@@ -330,7 +344,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
           onFocus={(e) => {
             const el = e.target instanceof HTMLElement ? e.target : null;
             if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
-              setTimeout(() => el.scrollIntoView({ block: 'nearest', behavior: 'auto' }), 150);
+              lastFocusedInModalRef.current = el;
             }
           }}
         >
