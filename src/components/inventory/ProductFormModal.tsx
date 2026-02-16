@@ -70,6 +70,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
 
   const [tagInput, setTagInput] = useState('');
   const [imagePreview, setImagePreview] = useState<string[]>([]);
+  const [imageUploading, setImageUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sizeCodes, setSizeCodes] = useState<SizeCodeOption[]>([]);
   const [sizeCodesLoading, setSizeCodesLoading] = useState(false);
@@ -80,6 +81,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const imagesLengthRef = useRef(0);
   /** Latest images at submit time (avoids stale formData.images when load runs right after add). */
   const formDataImagesRef = useRef<string[]>([]);
+  /** When true, init effect must not overwrite imagePreview/formData.images (user just added image). */
+  const imageUploadingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     imagesLengthRef.current = formData.images.length;
@@ -119,10 +122,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     };
   }, [isOpen, product]);
 
-  // Only sync form when the modal *first* opens (isOpen: false -> true). Do not re-run when product/currentWarehouseId change while open, or we wipe the user's newly added images.
+  // Only sync form when the modal *first* opens (isOpen: false -> true). Do not overwrite image state if user just added an image (imageUploadingRef).
   useEffect(() => {
     if (!isOpen) {
       wasOpenRef.current = false;
+      imageUploadingRef.current = false;
       return;
     }
     const justOpened = !wasOpenRef.current;
@@ -131,6 +135,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
 
     const currentProduct = product;
     const warehouseId = currentWarehouseId;
+    const skipImageOverwrite = imageUploadingRef.current;
+
     if (currentProduct) {
       const qtyBySize = (currentProduct.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
       const validImages = Array.isArray(currentProduct.images)
@@ -141,7 +147,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
               (img.startsWith('data:') || img.startsWith('http://') || img.startsWith('https://'))
           )
         : [];
-      setFormData({
+      setFormData((prev) => ({
         sku: currentProduct.sku,
         barcode: currentProduct.barcode,
         name: currentProduct.name,
@@ -159,18 +165,20 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         supplier: currentProduct.supplier && typeof currentProduct.supplier === 'object'
           ? { name: (currentProduct.supplier as any).name ?? '', contact: (currentProduct.supplier as any).contact ?? '', email: (currentProduct.supplier as any).email ?? '' }
           : { name: '', contact: '', email: '' },
-        images: validImages,
+        images: skipImageOverwrite ? prev.images : validImages,
         expiryDate: currentProduct.expiryDate,
         variants: currentProduct.variants || {},
         createdBy: currentProduct.createdBy,
         sizeKind: (currentProduct.sizeKind ?? 'na') as SizeKind,
         quantityBySize: qtyBySize.length > 0 ? qtyBySize : [],
-      });
-      setImagePreview(validImages);
-      formDataImagesRef.current = validImages;
-      imagesLengthRef.current = validImages.length;
+      }));
+      if (!skipImageOverwrite) {
+        setImagePreview(validImages);
+        formDataImagesRef.current = validImages;
+        imagesLengthRef.current = validImages.length;
+      }
     } else {
-      setFormData({
+      setFormData((prev) => ({
         sku: generateSKU(),
         barcode: '',
         name: '',
@@ -184,16 +192,18 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         warehouseId,
         location: { warehouse: 'Main Store', aisle: '', rack: '', bin: '' },
         supplier: { name: '', contact: '', email: '' },
-        images: [],
+        images: skipImageOverwrite ? prev.images : [],
         expiryDate: null,
         variants: {},
         createdBy: 'admin',
         sizeKind: 'na',
         quantityBySize: [],
-      });
-      setImagePreview([]);
-      formDataImagesRef.current = [];
-      imagesLengthRef.current = 0;
+      }));
+      if (!skipImageOverwrite) {
+        setImagePreview([]);
+        formDataImagesRef.current = [];
+        imagesLengthRef.current = 0;
+      }
     }
     // Intentionally only isOpen: re-run only when modal opens, not when product/warehouse refs change while open.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -231,43 +241,71 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         return;
       }
 
-      const newDataUrls: string[] = [];
-      for (let i = 0; i < toAdd; i++) {
-        const file = fileArray[i];
+      const filesToProcess = fileArray.slice(0, toAdd).filter((file) => {
         const isImage = !file.type || file.type.startsWith('image/');
         if (!isImage) {
           showToast('error', `Skipped non-image: ${file.name}`);
-          continue;
+          return false;
         }
-        let dataUrl: string;
-        try {
-          dataUrl = await readFileAsDataUrl(file);
-          if (!dataUrl || typeof dataUrl !== 'string') throw new Error('Empty result');
-        } catch {
-          showToast('error', `Could not read image: ${file.name}`);
-          continue;
-        }
-        if (!product) {
-          try {
-            const compressed = await compressImage(file, MAX_IMAGE_BASE64_LENGTH);
-            if (compressed && compressed.length <= MAX_IMAGE_BASE64_LENGTH) {
-              dataUrl = compressed;
-            }
-          } catch {
-            // Keep uncompressed dataUrl so preview and save still work
-          }
-        }
-        // When editing, skip compression to avoid HEIC/canvas issues on mobile; preview and save use dataUrl as-is
-        newDataUrls.push(dataUrl);
+        return true;
+      });
+      if (filesToProcess.length === 0) return;
+
+      imageUploadingRef.current = true;
+      setImageUploading(true);
+
+      const objectUrls: string[] = [];
+      for (let i = 0; i < filesToProcess.length; i++) {
+        objectUrls.push(URL.createObjectURL(filesToProcess[i]));
       }
+      const newPreviewCount = objectUrls.length;
+      setImagePreview((prev) => [...prev, ...objectUrls].slice(0, MAX_PRODUCT_IMAGES));
+      imagesLengthRef.current = Math.min(imagesLengthRef.current + newPreviewCount, MAX_PRODUCT_IMAGES);
 
-      if (newDataUrls.length === 0) return;
+      try {
+        const newDataUrls: string[] = [];
+        for (let i = 0; i < filesToProcess.length; i++) {
+          const file = filesToProcess[i];
+          let dataUrl: string;
+          try {
+            dataUrl = await readFileAsDataUrl(file);
+            if (!dataUrl || typeof dataUrl !== 'string') throw new Error('Empty result');
+          } catch {
+            showToast('error', `Could not read image: ${file.name}`);
+            continue;
+          }
+          if (!product) {
+            try {
+              const compressed = await compressImage(file, MAX_IMAGE_BASE64_LENGTH);
+              if (compressed && compressed.length <= MAX_IMAGE_BASE64_LENGTH) {
+                dataUrl = compressed;
+              }
+            } catch {
+              // Keep uncompressed dataUrl so preview and save still work
+            }
+          }
+          newDataUrls.push(dataUrl);
+        }
 
-      const combined = [...formDataImagesRef.current, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
-      formDataImagesRef.current = combined;
-      setFormData(prev => ({ ...prev, images: combined }));
-      setImagePreview(prev => [...prev, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES));
-      imagesLengthRef.current = combined.length;
+        if (newDataUrls.length === 0) {
+          setImagePreview((prev) => prev.slice(0, -newPreviewCount));
+          imagesLengthRef.current = Math.max(0, imagesLengthRef.current - newPreviewCount);
+          return;
+        }
+
+        setImagePreview((prev) => {
+          const withoutNew = prev.slice(0, prev.length - newPreviewCount);
+          return [...withoutNew, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
+        });
+        const combined = [...formDataImagesRef.current, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
+        formDataImagesRef.current = combined;
+        setFormData((prev) => ({ ...prev, images: combined }));
+        imagesLengthRef.current = combined.length;
+      } finally {
+        objectUrls.forEach((url) => URL.revokeObjectURL(url));
+        imageUploadingRef.current = false;
+        setImageUploading(false);
+      }
     },
     [showToast, product]
   );
@@ -932,7 +970,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             )}
             <div className="flex flex-wrap gap-4 mb-4">
               {imagePreview.map((img, index) => (
-                <div key={`preview-${index}-${img.length}`} className="relative">
+                <div key={`preview-${index}`} className="relative">
                   <img src={img} alt={`Preview ${index + 1}`} className="w-24 h-24 object-cover rounded-lg bg-slate-100" loading="eager" />
                   <button
                     type="button"
@@ -944,19 +982,22 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
                 </div>
               ))}
             </div>
+            {imageUploading && (
+              <p className="text-slate-500 text-xs mb-2" role="status">Adding image…</p>
+            )}
             <label
-              className={`flex items-center gap-2 min-h-touch px-4 py-2.5 border border-slate-200/80 rounded-xl w-fit transition-colors text-sm font-medium text-slate-700 ${isOnline ? 'cursor-pointer hover:bg-slate-50' : 'cursor-not-allowed opacity-60'}`}
+              className={`flex items-center gap-2 min-h-touch px-4 py-2.5 border border-slate-200/80 rounded-xl w-fit transition-colors text-sm font-medium text-slate-700 ${isOnline && !imageUploading ? 'cursor-pointer hover:bg-slate-50' : 'cursor-not-allowed opacity-60'}`}
               onClick={() => { imagesLengthRef.current = imagePreview.length; }}
             >
               <Upload className="w-5 h-5 text-slate-600" />
-              <span>{isOnline ? 'Upload images' : 'Upload (local only when offline)'}</span>
+              <span>{imageUploading ? 'Adding…' : isOnline ? 'Upload images' : 'Upload (local only when offline)'}</span>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
                 multiple
                 className="hidden"
-                disabled={!isOnline}
+                disabled={!isOnline || imageUploading}
                 aria-label="Upload product images"
               />
             </label>
