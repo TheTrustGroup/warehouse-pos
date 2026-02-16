@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { Product, type QuantityBySizeItem } from '../../types';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
 import { safeValidateProductForm } from '../../lib/validationSchemas';
@@ -77,6 +77,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const previousActiveRef = useRef<HTMLElement | null>(null);
   /** Current image count so handleImageUpload always sees latest (avoids stale closure). */
   const imagesLengthRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     imagesLengthRef.current = formData.images.length;
   }, [formData.images.length]);
@@ -207,59 +208,97 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       reader.readAsDataURL(file);
     });
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    e.target.value = '';
-
-    const currentLen = imagesLengthRef.current;
-    const toAdd = Math.min(MAX_PRODUCT_IMAGES - currentLen, files.length);
-    if (toAdd <= 0) {
-      if (currentLen >= MAX_PRODUCT_IMAGES) {
-        showToast('warning', `Maximum ${MAX_PRODUCT_IMAGES} images. Remove one to add more.`);
+  const processSelectedFiles = useCallback(
+    async (fileArray: File[]) => {
+      if (fileArray.length === 0) {
+        showToast('warning', 'No image received. Try selecting again or use Camera.');
+        return;
       }
-      return;
-    }
-
-    const newDataUrls: string[] = [];
-    for (let i = 0; i < toAdd; i++) {
-      const file = files[i];
-      const isImage = !file.type || file.type.startsWith('image/');
-      if (!isImage) {
-        showToast('error', `Skipped non-image: ${file.name}`);
-        continue;
-      }
-      let dataUrl: string;
-      try {
-        dataUrl = await readFileAsDataUrl(file);
-        if (!dataUrl || typeof dataUrl !== 'string') throw new Error('Empty result');
-      } catch (err) {
-        showToast('error', `Could not read image: ${file.name}`);
-        continue;
-      }
-      try {
-        const compressed = await compressImage(file, MAX_IMAGE_BASE64_LENGTH);
-        if (compressed && compressed.length <= MAX_IMAGE_BASE64_LENGTH) {
-          dataUrl = compressed;
+      const currentLen = imagesLengthRef.current;
+      const toAdd = Math.min(MAX_PRODUCT_IMAGES - currentLen, fileArray.length);
+      if (toAdd <= 0) {
+        if (currentLen >= MAX_PRODUCT_IMAGES) {
+          showToast('warning', `Maximum ${MAX_PRODUCT_IMAGES} images. Remove one to add more.`);
         }
-      } catch {
-        // Keep uncompressed dataUrl so preview and save still work
+        return;
       }
-      newDataUrls.push(dataUrl);
+
+      const newDataUrls: string[] = [];
+      for (let i = 0; i < toAdd; i++) {
+        const file = fileArray[i];
+        const isImage = !file.type || file.type.startsWith('image/');
+        if (!isImage) {
+          showToast('error', `Skipped non-image: ${file.name}`);
+          continue;
+        }
+        let dataUrl: string;
+        try {
+          dataUrl = await readFileAsDataUrl(file);
+          if (!dataUrl || typeof dataUrl !== 'string') throw new Error('Empty result');
+        } catch {
+          showToast('error', `Could not read image: ${file.name}`);
+          continue;
+        }
+        if (!product) {
+          try {
+            const compressed = await compressImage(file, MAX_IMAGE_BASE64_LENGTH);
+            if (compressed && compressed.length <= MAX_IMAGE_BASE64_LENGTH) {
+              dataUrl = compressed;
+            }
+          } catch {
+            // Keep uncompressed dataUrl so preview and save still work
+          }
+        }
+        // When editing, skip compression to avoid HEIC/canvas issues on mobile; preview and save use dataUrl as-is
+        newDataUrls.push(dataUrl);
+      }
+
+      if (newDataUrls.length === 0) return;
+
+      setFormData(prev => {
+        const combined = [...prev.images, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
+        return { ...prev, images: combined };
+      });
+      setImagePreview(prev => {
+        const combined = [...prev, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
+        return combined;
+      });
+      imagesLengthRef.current = Math.min(currentLen + newDataUrls.length, MAX_PRODUCT_IMAGES);
+    },
+    [showToast, product]
+  );
+
+  const processFilesRef = useRef(processSelectedFiles);
+  processFilesRef.current = processSelectedFiles;
+
+  // Native change listener so Safari/iOS reliably gets the event and we copy FileList before it can be cleared
+  useEffect(() => {
+    if (!isOpen) return;
+    let cleanup: (() => void) | undefined;
+    const handler = (e: Event) => {
+      const el = e.target as HTMLInputElement;
+      const fileArray = el.files ? Array.from(el.files) : [];
+      el.value = '';
+      processFilesRef.current(fileArray);
+    };
+    const attach = () => {
+      const input = fileInputRef.current;
+      if (!input) return false;
+      input.addEventListener('change', handler);
+      cleanup = () => input.removeEventListener('change', handler);
+      return true;
+    };
+    if (!attach()) {
+      const t = setTimeout(() => {
+        attach();
+      }, 50);
+      return () => {
+        clearTimeout(t);
+        cleanup?.();
+      };
     }
-
-    if (newDataUrls.length === 0) return;
-
-    setFormData(prev => {
-      const combined = [...prev.images, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
-      return { ...prev, images: combined };
-    });
-    setImagePreview(prev => {
-      const combined = [...prev, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
-      return combined;
-    });
-    imagesLengthRef.current = Math.min(currentLen + newDataUrls.length, MAX_PRODUCT_IMAGES);
-  };
+    return () => cleanup?.();
+  }, [isOpen]);
 
   const removeImage = (index: number) => {
     setFormData(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }));
@@ -899,12 +938,13 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
               <Upload className="w-5 h-5 text-slate-600" />
               <span>{isOnline ? 'Upload images' : 'Upload (local only when offline)'}</span>
               <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={handleImageUpload}
                 className="hidden"
                 disabled={!isOnline}
+                aria-label="Upload product images"
               />
             </label>
           </div>
