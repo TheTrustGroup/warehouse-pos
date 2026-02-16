@@ -112,8 +112,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     };
   }, [isOpen, product]);
 
-  // Only sync form to product when the modal opens (not on every re-render while open).
-  // This prevents the form from resetting when background refresh or context updates change product/currentWarehouseId.
+  // Only sync form when the modal *first* opens (isOpen: false -> true). Do not re-run when product/currentWarehouseId change while open, or we wipe the user's newly added images.
   useEffect(() => {
     if (!isOpen) {
       wasOpenRef.current = false;
@@ -123,10 +122,12 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     wasOpenRef.current = true;
     if (!justOpened) return;
 
-    if (product) {
-      const qtyBySize = (product.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
-      const validImages = Array.isArray(product.images)
-        ? product.images.filter(
+    const currentProduct = product;
+    const warehouseId = currentWarehouseId;
+    if (currentProduct) {
+      const qtyBySize = (currentProduct.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
+      const validImages = Array.isArray(currentProduct.images)
+        ? currentProduct.images.filter(
             (img): img is string =>
               typeof img === 'string' &&
               img.length > 0 &&
@@ -134,28 +135,28 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
           )
         : [];
       setFormData({
-        sku: product.sku,
-        barcode: product.barcode,
-        name: product.name,
-        description: product.description,
-        category: getCategoryDisplay(product.category),
-        tags: product.tags,
-        quantity: product.quantity,
-        costPrice: product.costPrice,
-        sellingPrice: product.sellingPrice,
-        reorderLevel: product.reorderLevel,
-        warehouseId: (product as any).warehouseId ?? currentWarehouseId,
-        location: product.location && typeof product.location === 'object'
-          ? { warehouse: (product.location as any).warehouse ?? 'Main Store', aisle: (product.location as any).aisle ?? '', rack: (product.location as any).rack ?? '', bin: (product.location as any).bin ?? '' }
+        sku: currentProduct.sku,
+        barcode: currentProduct.barcode,
+        name: currentProduct.name,
+        description: currentProduct.description,
+        category: getCategoryDisplay(currentProduct.category),
+        tags: currentProduct.tags,
+        quantity: currentProduct.quantity,
+        costPrice: currentProduct.costPrice,
+        sellingPrice: currentProduct.sellingPrice,
+        reorderLevel: currentProduct.reorderLevel,
+        warehouseId: (currentProduct as any).warehouseId ?? warehouseId,
+        location: currentProduct.location && typeof currentProduct.location === 'object'
+          ? { warehouse: (currentProduct.location as any).warehouse ?? 'Main Store', aisle: (currentProduct.location as any).aisle ?? '', rack: (currentProduct.location as any).rack ?? '', bin: (currentProduct.location as any).bin ?? '' }
           : { warehouse: 'Main Store', aisle: '', rack: '', bin: '' },
-        supplier: product.supplier && typeof product.supplier === 'object'
-          ? { name: (product.supplier as any).name ?? '', contact: (product.supplier as any).contact ?? '', email: (product.supplier as any).email ?? '' }
+        supplier: currentProduct.supplier && typeof currentProduct.supplier === 'object'
+          ? { name: (currentProduct.supplier as any).name ?? '', contact: (currentProduct.supplier as any).contact ?? '', email: (currentProduct.supplier as any).email ?? '' }
           : { name: '', contact: '', email: '' },
         images: validImages,
-        expiryDate: product.expiryDate,
-        variants: product.variants || {},
-        createdBy: product.createdBy,
-        sizeKind: (product.sizeKind ?? 'na') as SizeKind,
+        expiryDate: currentProduct.expiryDate,
+        variants: currentProduct.variants || {},
+        createdBy: currentProduct.createdBy,
+        sizeKind: (currentProduct.sizeKind ?? 'na') as SizeKind,
         quantityBySize: qtyBySize.length > 0 ? qtyBySize : [],
       });
       setImagePreview(validImages);
@@ -172,7 +173,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         costPrice: 0,
         sellingPrice: 0,
         reorderLevel: 0,
-        warehouseId: currentWarehouseId,
+        warehouseId,
         location: { warehouse: 'Main Store', aisle: '', rack: '', bin: '' },
         supplier: { name: '', contact: '', email: '' },
         images: [],
@@ -185,7 +186,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       setImagePreview([]);
       imagesLengthRef.current = 0;
     }
-  }, [isOpen, product, currentWarehouseId]);
+    // Intentionally only isOpen: re-run only when modal opens, not when product/warehouse refs change while open.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !isOnline) return;
@@ -889,7 +892,10 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
                 </div>
               ))}
             </div>
-            <label className={`flex items-center gap-2 min-h-touch px-4 py-2.5 border border-slate-200/80 rounded-xl w-fit transition-colors text-sm font-medium text-slate-700 ${isOnline ? 'cursor-pointer hover:bg-slate-50' : 'cursor-not-allowed opacity-60'}`}>
+            <label
+              className={`flex items-center gap-2 min-h-touch px-4 py-2.5 border border-slate-200/80 rounded-xl w-fit transition-colors text-sm font-medium text-slate-700 ${isOnline ? 'cursor-pointer hover:bg-slate-50' : 'cursor-not-allowed opacity-60'}`}
+              onClick={() => { imagesLengthRef.current = imagePreview.length; }}
+            >
               <Upload className="w-5 h-5 text-slate-600" />
               <span>{isOnline ? 'Upload images' : 'Upload (local only when offline)'}</span>
               <input
