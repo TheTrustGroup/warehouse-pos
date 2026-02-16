@@ -13,7 +13,9 @@ Make every click, flow, and component feel professional and robust—like the wo
 | **Errors** | Show a toast or inline message with a clear, user-friendly message. Offer "Retry" where applicable. | ✅ InventoryContext, Login, OrderContext. ⚠️ Some `.catch(() => {})` (e.g. Dashboard fetch) swallow errors—surface a non-intrusive toast or inline error. |
 | **Destructive actions** | Always confirm before delete/irreversible action. Use a consistent confirmation pattern (modal preferred over `confirm()` for consistency). | ✅ Delete product (confirm). ⚠️ Several places use `confirm()`; consider a shared `<ConfirmDialog>` for consistent look and accessibility. |
 
-**Delete and cross-device:** Product delete requires **admin** role (API returns 403 otherwise). After a successful delete, the list updates immediately on the device that deleted (optimistic). Other devices/tabs see the change within ~30 seconds (background poll when tab is visible) or when the user refreshes or uses "Sync to server" / "Retry loading products".
+**Delete and cross-device:** Product delete requires **admin** role (API returns 403 otherwise). After a successful delete, the list updates immediately on the device that deleted (optimistic). Other devices see the change within **~10 seconds** (automatic background poll when the Inventory tab is visible), or **immediately** if the user clicks the **Refresh list** button (next to "Updated X ago") or switches away and back to the tab.
+
+**Edits:** Product edits (name, price, image, etc.) are saved to the server and reflected on the **current device** right away. Other devices get the updated product on the next automatic poll (~10s) or when they use **Refresh list** or return to the tab.
 
 **Recommendation:** Add a small `ConfirmDialog` component (title, message, Confirm/Cancel) and use it everywhere you currently use `confirm()`. Ensures consistent styling and works better with screen readers.
 

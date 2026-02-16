@@ -597,8 +597,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   }, [currentWarehouseId]);
 
-  // Real-time: poll when tab visible so all devices see server truth (adds/edits/deletes). Bypass cache so deletes on one device appear on others.
-  useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }), intervalMs: 25_000 });
+  // Real-time: poll when tab visible so all devices see server truth (adds/edits/deletes). 10s keeps cross-device latency acceptable for production.
+  const INVENTORY_POLL_MS = 10_000;
+  useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }), intervalMs: INVENTORY_POLL_MS });
 
   // When user returns to this tab, refetch from server so changes from other devices (e.g. deletes) show immediately.
   useEffect(() => {

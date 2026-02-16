@@ -281,11 +281,25 @@ export function Inventory() {
               </>
             )}
           </p>
-          {s.lastSyncAt && (
-            <p className="text-slate-400 text-xs mt-0.5" aria-live="polite">
-              Updated {formatRelativeTime(s.lastSyncAt)}
-            </p>
-          )}
+          <div className="flex items-center gap-2 mt-0.5">
+            {s.lastSyncAt && (
+              <p className="text-slate-400 text-xs" aria-live="polite">
+                Updated {formatRelativeTime(s.lastSyncAt)}
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => s.refreshProducts({ bypassCache: true, silent: true })}
+              disabled={s.isLoading || s.isBackgroundRefreshing}
+              className="min-h-touch min-w-touch p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
+              title="Refresh list (see changes from other devices)"
+              aria-label="Refresh list"
+            >
+              <RefreshCw className={`w-4 h-4 ${s.isBackgroundRefreshing ? 'animate-spin' : ''}`} aria-hidden />
+            </Button>
+          </div>
         </div>
         {s.canCreate && (
           <Button variant="primary" onClick={handleAddProduct} disabled={readOnlyMode} title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined} className="flex items-center justify-center gap-2 w-full sm:w-auto disabled:opacity-60 disabled:cursor-not-allowed" aria-label="Add product">
