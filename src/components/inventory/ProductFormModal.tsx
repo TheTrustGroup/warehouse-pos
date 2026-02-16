@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Product, type QuantityBySizeItem } from '../../types';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
 import { safeValidateProductForm } from '../../lib/validationSchemas';
@@ -76,6 +76,33 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const didInitialFocusRef = useRef(false);
   /** Track last focused form field so we can restore focus when mobile browser or re-render steals it. */
   const lastFocusedInModalRef = useRef<HTMLElement | null>(null);
+  /** Refs for uncontrolled text fields so we don't re-render on keystroke (keeps mobile keyboard open). */
+  const nameRef = useRef<HTMLInputElement>(null);
+  const skuRef = useRef<HTMLInputElement>(null);
+  const barcodeRef = useRef<HTMLInputElement>(null);
+  const categoryRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+
+  /** Initial values for uncontrolled inputs; stable when modal is open so no remount. */
+  const initialTextValues = useMemo(() => {
+    if (!isOpen) return null;
+    if (product) {
+      return {
+        name: product.name,
+        sku: product.sku,
+        barcode: product.barcode ?? '',
+        category: getCategoryDisplay(product.category),
+        description: product.description ?? '',
+      };
+    }
+    return {
+      name: '',
+      sku: generateSKU(),
+      barcode: '',
+      category: '',
+      description: '',
+    };
+  }, [isOpen, product]);
 
   // Only sync form to product when the modal opens (not on every re-render while open).
   // This prevents the form from resetting when background refresh or context updates change product/currentWarehouseId.
@@ -191,12 +218,17 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       showToast('error', 'Add at least one size row to save.');
       return;
     }
+    const name = nameRef.current?.value ?? formData.name;
+    const sku = skuRef.current?.value ?? formData.sku;
+    const barcode = barcodeRef.current?.value ?? formData.barcode;
+    const category = categoryRef.current?.value ?? formData.category;
+    const description = descriptionRef.current?.value ?? formData.description;
     const toValidate = {
-      name: formData.name,
-      sku: formData.sku,
-      barcode: formData.barcode,
-      description: formData.description,
-      category: formData.category,
+      name,
+      sku,
+      barcode,
+      description,
+      category,
       quantity: formData.sizeKind === 'sized' ? validSizeRows.reduce((s, r) => s + (r.quantity || 0), 0) : formData.quantity,
       costPrice: formData.costPrice,
       sellingPrice: formData.sellingPrice,
@@ -211,7 +243,6 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       showToast('error', validated.message);
       return;
     }
-    // When warehouses exist, require a warehouse so the product is assigned to the correct location.
     const effectiveWarehouseId = (formData.warehouseId?.trim() || currentWarehouseId?.trim() || '').trim() || undefined;
     if (warehouses.length > 0 && !effectiveWarehouseId) {
       showToast('error', 'Please select a warehouse.');
@@ -221,6 +252,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     try {
       const payload = {
         ...formData,
+        name,
+        sku,
+        barcode,
+        category,
+        description,
         quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize,
         ...(effectiveWarehouseId && { warehouseId: effectiveWarehouseId }),
       };
@@ -338,6 +374,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         </div>
 
         <form
+          key={product?.id ?? 'new'}
           onSubmit={handleSubmit}
           className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto flex-1 min-h-0"
           autoComplete="off"
@@ -361,11 +398,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
                 Product name *
               </label>
               <input
+                ref={nameRef}
                 type="text"
                 required
                 autoComplete="off"
-                value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                defaultValue={initialTextValues?.name ?? ''}
                 className="input-field"
               />
             </div>
@@ -375,11 +412,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
                 SKU *
               </label>
               <input
+                ref={skuRef}
                 type="text"
                 required
                 autoComplete="off"
-                value={formData.sku}
-                onChange={(e) => setFormData(prev => ({ ...prev, sku: e.target.value }))}
+                defaultValue={initialTextValues?.sku ?? ''}
                 className="input-field"
               />
             </div>
@@ -389,10 +426,10 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
                 Barcode
               </label>
               <input
+                ref={barcodeRef}
                 type="text"
                 autoComplete="off"
-                value={formData.barcode}
-                onChange={(e) => setFormData(prev => ({ ...prev, barcode: e.target.value }))}
+                defaultValue={initialTextValues?.barcode ?? ''}
                 className="input-field"
               />
             </div>
@@ -402,13 +439,13 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
                 Category *
               </label>
               <input
+                ref={categoryRef}
                 type="text"
                 required
                 autoComplete="off"
-                value={formData.category}
-                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                className="input-field"
+                defaultValue={initialTextValues?.category ?? ''}
                 placeholder="e.g., Electronics, Office"
+                className="input-field"
               />
             </div>
           </div>
@@ -418,11 +455,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
               Description
             </label>
             <textarea
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              ref={descriptionRef}
               className="input-field"
               rows={3}
               autoComplete="off"
+              defaultValue={initialTextValues?.description ?? ''}
             />
           </div>
 
