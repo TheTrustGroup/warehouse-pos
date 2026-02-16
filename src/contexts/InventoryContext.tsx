@@ -22,6 +22,7 @@ import { useAuth } from './AuthContext';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
 import { parseProductsResponse } from '../lib/apiSchemas';
 import { useInventory as useOfflineInventory } from '../hooks/useInventory';
+import { getProductImages, setProductImages } from '../lib/productImagesStore';
 
 /** Per-warehouse cache key so we can show the right list immediately on login/refresh. */
 function productsCacheKey(warehouseId: string): string {
@@ -175,6 +176,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const products = useMemo(
     (): Product[] => (offlineEnabled ? (offline.products ?? []) : apiOnlyProducts),
     [offlineEnabled, offline.products, apiOnlyProducts]
+  );
+  /** Merge in client-saved images so they stay visible even when API/refresh omits them. */
+  const productsWithLocalImages = useMemo(
+    () =>
+      products.map((p) => ({
+        ...p,
+        images: getProductImages(p.id) ?? (Array.isArray(p.images) ? p.images : []),
+      })),
+    [products]
   );
   const isLoading = offlineEnabled ? offline.isLoading : apiOnlyLoading;
   const unsyncedCountFromHook = offline.unsyncedCount ?? 0;
@@ -744,6 +754,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     try {
       if (offlineEnabled) {
         const id = await offline.addProduct(productData);
+        const imgs = Array.isArray(productData.images) ? productData.images : [];
+        if (imgs.length > 0) setProductImages(id, imgs);
         const addedProduct: Product = { ...productData, id, createdAt: new Date(), updatedAt: new Date() } as Product;
         lastAddedProductRef.current = { product: addedProduct, at: Date.now() };
         logInventoryCreate({ productId: id, sku: productData.sku ?? '', listLength: products.length + 1 });
@@ -795,6 +807,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         ? normalizeProduct(created as any)
         : ({ ...tempProduct, _pending: undefined, id: tempId } as Product);
       const resolvedId = normalized.id ?? tempId;
+      if (Array.isArray(normalized.images) && normalized.images.length > 0) setProductImages(resolvedId, normalized.images);
       lastAddedProductRef.current = { product: normalized, at: Date.now() };
       setApiOnlyProductsState((prev) => prev.map((p) => (p.id === tempId ? normalized : p)));
       cacheRef.current[effectiveWarehouseId] = { data: [normalized, ...apiOnlyProducts.filter((p) => p.id !== tempId)], ts: Date.now() };
@@ -848,6 +861,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     try {
       if (offlineEnabled) {
         await offline.updateProduct(id, updates);
+        const images = Array.isArray(updates.images) ? updates.images : [];
+        if (images.length > 0) setProductImages(id, images);
         logInventoryUpdate({ productId: id, sku: product.sku });
         showToast('success', 'Product updated. Syncing to server when online.');
         return;
@@ -884,6 +899,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           ? normalized
           : { ...normalized, images: Array.isArray(updated.images) ? updated.images : [] };
       const newList = products.map((p) => (p.id === id ? withImages : p));
+      if (Array.isArray(withImages.images) && withImages.images.length > 0) {
+        setProductImages(id, withImages.images);
+      }
       setApiOnlyProductsState(newList);
       cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
       lastUpdatedProductRef.current = { product: withImages, at: Date.now() };
@@ -1065,7 +1083,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   return (
     <InventoryContext.Provider value={{
-      products,
+      products: productsWithLocalImages,
       isLoading,
       error,
       addProduct,
