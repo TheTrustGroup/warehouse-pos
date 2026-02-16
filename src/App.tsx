@@ -17,7 +17,6 @@ import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
 import { Button } from './components/ui/Button';
 import { Layout } from './components/layout/Layout';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
-import { KeyboardShortcuts } from './components/ui/KeyboardShortcuts';
 import { DebugPanel } from './components/debug/DebugPanel';
 import { BrowserCheck } from './components/BrowserCheck';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -281,7 +280,6 @@ function App() {
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
-            <KeyboardShortcuts />
             <DebugPanel />
             </BrowserRouter>
           </AuthProvider>

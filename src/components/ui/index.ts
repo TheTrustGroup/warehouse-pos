@@ -15,4 +15,3 @@ export { LoadingSpinner, PageLoader, SkeletonCard } from './LoadingSpinner';
 export { Toast } from './Toast';
 export { ErrorBoundary } from './ErrorBoundary';
 export { RouteErrorBoundary } from './RouteErrorBoundary';
-export { KeyboardShortcuts } from './KeyboardShortcuts';

@@ -72,6 +72,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const wasOpenRef = useRef(false);
   const modalContentRef = useRef<HTMLDivElement>(null);
   const previousActiveRef = useRef<HTMLElement | null>(null);
+  /** Only focus first field when modal first opens; avoid re-running on every render (unstable onClose) so typing doesn't lose focus / dismiss keyboard. */
+  const didInitialFocusRef = useRef(false);
 
   // Only sync form to product when the modal opens (not on every re-render while open).
   // This prevents the form from resetting when background refresh or context updates change product/currentWarehouseId.
@@ -234,7 +236,10 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      didInitialFocusRef.current = false;
+      return;
+    }
     const lock = () => document.body.classList.add('scroll-lock');
     const unlock = () => document.body.classList.remove('scroll-lock');
     lock();
@@ -266,17 +271,22 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       }
     };
     window.addEventListener('keydown', onKeyDown);
-    const raf = requestAnimationFrame(() => {
-      const root = modalContentRef.current;
-      if (!root) return;
-      const focusable = root.querySelectorAll<HTMLElement>(
-        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
-      );
-      const first = Array.from(focusable).find((el) => el.tabIndex >= 0 || /^(INPUT|SELECT|TEXTAREA|BUTTON|A)$/.test(el.tagName));
-      if (first) first.focus();
-    });
+    // Only focus first field when modal first opens; avoid re-running when effect re-runs (e.g. unstable onClose) so typing doesn't steal focus / dismiss keyboard.
+    let rafId = 0;
+    if (!didInitialFocusRef.current) {
+      rafId = requestAnimationFrame(() => {
+        didInitialFocusRef.current = true;
+        const root = modalContentRef.current;
+        if (!root) return;
+        const focusable = root.querySelectorAll<HTMLElement>(
+          'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+        );
+        const first = Array.from(focusable).find((el) => el.tabIndex >= 0 || /^(INPUT|SELECT|TEXTAREA|BUTTON|A)$/.test(el.tagName));
+        if (first) first.focus();
+      });
+    }
     return () => {
-      cancelAnimationFrame(raf);
+      if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener('keydown', onKeyDown);
       unlock();
       const prev = previousActiveRef.current;
