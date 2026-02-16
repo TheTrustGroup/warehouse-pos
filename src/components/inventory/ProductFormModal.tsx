@@ -166,6 +166,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         quantityBySize: qtyBySize.length > 0 ? qtyBySize : [],
       });
       setImagePreview(validImages);
+      formDataImagesRef.current = validImages;
       imagesLengthRef.current = validImages.length;
     } else {
       setFormData({
@@ -190,6 +191,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         quantityBySize: [],
       });
       setImagePreview([]);
+      formDataImagesRef.current = [];
       imagesLengthRef.current = 0;
     }
     // Intentionally only isOpen: re-run only when modal opens, not when product/warehouse refs change while open.
@@ -260,15 +262,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
 
       if (newDataUrls.length === 0) return;
 
-      setFormData(prev => {
-        const combined = [...prev.images, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
-        return { ...prev, images: combined };
-      });
-      setImagePreview(prev => {
-        const combined = [...prev, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
-        return combined;
-      });
-      imagesLengthRef.current = Math.min(currentLen + newDataUrls.length, MAX_PRODUCT_IMAGES);
+      const combined = [...formDataImagesRef.current, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES);
+      formDataImagesRef.current = combined;
+      setFormData(prev => ({ ...prev, images: combined }));
+      setImagePreview(prev => [...prev, ...newDataUrls].slice(0, MAX_PRODUCT_IMAGES));
+      imagesLengthRef.current = combined.length;
     },
     [showToast, product]
   );
@@ -306,7 +304,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   }, [isOpen]);
 
   const removeImage = (index: number) => {
-    setFormData(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }));
+    const next = formData.images.filter((_, i) => i !== index);
+    formDataImagesRef.current = next;
+    setFormData(prev => ({ ...prev, images: next }));
     setImagePreview(prev => prev.filter((_, i) => i !== index));
   };
 
