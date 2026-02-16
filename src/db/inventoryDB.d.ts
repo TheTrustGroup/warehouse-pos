@@ -13,6 +13,7 @@ export function importFromBackup(backup: unknown, options?: { replace?: boolean 
 export function clearSyncQueue(): Promise<void>;
 export function clearAllLocalProductData(): Promise<void>;
 export function clearFailedQueueItems(): Promise<void>;
+export function retryAllFailedQueueItems(): Promise<number>;
 export function retryQueueItem(queueItemId: number): Promise<void>;
 export function undoAddProduct(productId: string): Promise<void>;
 export function setSyncError(productId: string, message: string): Promise<void>;

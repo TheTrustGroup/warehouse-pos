@@ -45,9 +45,10 @@ This guide covers common issues, how to clear data, force resync, browser compat
   3. **Network / timeouts** – Unstable connection or server taking too long.
 - **What we did:** The sync service now **omits large images** from the sync payload (keeps only small ones, up to 5 images) so the body stays under typical limits. Product metadata still syncs; you can add images again via Edit after sync.
 - **What to do:**
-  1. **Retry** the failed item(s) in the Sync queue. With the new payload, they may succeed.
-  2. If it still fails: check DevTools → Network for the `POST /api/products` request. If it’s red/canceled with no response, it’s likely CORS or body size; ensure CORS allows POST and the backend body limit is sufficient.
-  3. Backend logs: check for 413 (payload too large) or CORS preflight failures.
+  1. **Retry all** (or retry each item) in the Sync queue. Retry all now resets failed items to pending and runs sync again.
+  2. **Brave browser:** If sync or "Retry all" seems to do nothing or always shows "Load failed", try: Brave Shields → set to "Standard" or "Allow all" for this site; or allow cross-site cookies for the API domain. Then click Retry all again.
+  3. If it still fails: check DevTools → Network for the `POST /api/products` request. If it’s red/canceled with no response, it’s likely CORS or body size; ensure CORS allows POST and the backend body limit is sufficient.
+  4. Backend logs: check for 413 (payload too large) or CORS preflight failures.
 
 ### "Server is temporarily unavailable" or "Using last saved data"
 

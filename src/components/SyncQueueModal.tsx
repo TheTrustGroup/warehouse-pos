@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, retryQueueItem, clearFailedQueueItems } from '../db/inventoryDB';
+import { db, retryQueueItem, retryAllFailedQueueItems, clearFailedQueueItems } from '../db/inventoryDB';
 import { syncService } from '../services/syncService';
 import { Button } from './ui/Button';
 import { X, RefreshCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
@@ -49,6 +49,7 @@ export function SyncQueueModal({ isOpen, onClose }: SyncQueueModalProps) {
   const handleRetryAll = async () => {
     setRetryingAll(true);
     try {
+      await retryAllFailedQueueItems();
       await syncService.processSyncQueue();
     } finally {
       setRetryingAll(false);

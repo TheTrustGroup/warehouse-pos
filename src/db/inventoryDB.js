@@ -497,6 +497,22 @@ export async function retryQueueItem(queueItemId) {
 }
 
 /**
+ * Reset all failed (and stuck syncing) queue items to pending so "Retry all" picks them up.
+ * @returns {Promise<number>} Number of items reset
+ */
+export async function retryAllFailedQueueItems() {
+  const failed = await db.syncQueue.where('status').equals('failed').toArray();
+  const syncing = await db.syncQueue.where('status').equals('syncing').toArray();
+  for (const item of failed) {
+    await db.syncQueue.update(item.id, { status: 'pending', attempts: 0, error: null });
+  }
+  for (const item of syncing) {
+    await db.syncQueue.update(item.id, { status: 'pending', error: null });
+  }
+  return failed.length + syncing.length;
+}
+
+/**
  * Delete all failed items from the sync queue.
  * @returns {Promise<number>} Number of items removed
  */
