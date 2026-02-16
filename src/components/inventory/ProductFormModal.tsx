@@ -75,6 +75,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const wasOpenRef = useRef(false);
   const modalContentRef = useRef<HTMLDivElement>(null);
   const previousActiveRef = useRef<HTMLElement | null>(null);
+  /** Current image count so handleImageUpload always sees latest (avoids stale closure). */
+  const imagesLengthRef = useRef(0);
+  useEffect(() => {
+    imagesLengthRef.current = formData.images.length;
+  }, [formData.images.length]);
   /** Only focus first field when modal first opens; avoid re-running on every render (unstable onClose) so typing doesn't lose focus / dismiss keyboard. */
   const didInitialFocusRef = useRef(false);
   /** Track last focused form field so we can restore focus when mobile browser or re-render steals it. */
@@ -121,7 +126,12 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     if (product) {
       const qtyBySize = (product.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
       const validImages = Array.isArray(product.images)
-        ? product.images.filter((img): img is string => typeof img === 'string' && img.length > 0)
+        ? product.images.filter(
+            (img): img is string =>
+              typeof img === 'string' &&
+              img.length > 0 &&
+              (img.startsWith('data:') || img.startsWith('http://') || img.startsWith('https://'))
+          )
         : [];
       setFormData({
         sku: product.sku,
@@ -189,7 +199,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     if (!files) return;
     e.target.value = '';
 
-    const toAdd = Math.min(MAX_PRODUCT_IMAGES - formData.images.length, files.length);
+    const currentLen = imagesLengthRef.current;
+    const toAdd = Math.min(MAX_PRODUCT_IMAGES - currentLen, files.length);
     if (toAdd <= 0) {
       showToast('warning', `Maximum ${MAX_PRODUCT_IMAGES} images. Remove one to add more.`);
       return;
@@ -207,6 +218,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
           if (prev.length >= MAX_PRODUCT_IMAGES) return prev;
           return [...prev, dataUrl];
         });
+        imagesLengthRef.current = currentLen + i + 1;
       } catch (err) {
         showToast('error', `Could not add image: ${file.name}`);
       }
