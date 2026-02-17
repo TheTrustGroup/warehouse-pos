@@ -103,6 +103,7 @@ function getCachedProductsForWarehouse(warehouseId: string): Product[] {
 }
 import { loadProductsFromDb, saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
 import { reportError } from '../lib/errorReporting';
+import { prodDebug } from '../lib/prodDebug';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { isOfflineEnabled } from '../lib/offlineFeatureFlag';
 import { mirrorProductsFromApi } from '../db/inventoryDB';
@@ -332,6 +333,23 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    * @param options.bypassCache - If true, always fetch from server (e.g. when opening Inventory page for fresh data).
    */
   const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => {
+    // #region agent log
+    try {
+      const stack = new Error().stack ?? '';
+      prodDebug({
+        location: 'InventoryContext.tsx:loadProducts',
+        message: 'fetchProducts/loadProducts called',
+        data: {
+          silent: options?.silent === true,
+          bypassCache: options?.bypassCache === true,
+          stack: stack.slice(0, 500),
+        },
+        hypothesisId: 'refetch',
+      });
+    } catch {
+      /* no-op */
+    }
+    // #endregion
     const silent = options?.silent === true;
     const bypassCache = options?.bypassCache === true;
     const timeoutMs = options?.timeoutMs;
@@ -901,9 +919,25 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const normalized = fromApi && (fromApi as { id?: string }).id
         ? normalizeProduct(fromApi as any)
         : updated;
+      const apiHasImages = Array.isArray(normalized.images) && normalized.images.length > 0;
+      const usedFallback = !apiHasImages && (payloadImages.length > 0 || (Array.isArray(updated.images) && updated.images.length > 0));
+      // #region agent log
+      prodDebug({
+        location: 'InventoryContext.tsx:updateProduct',
+        message: 'Product update response',
+        data: {
+          productId: id,
+          apiResponseHasImages: apiHasImages,
+          apiImageCount: Array.isArray(normalized.images) ? normalized.images.length : 0,
+          payloadImagesCount: payloadImages.length,
+          usedImagesFallback: usedFallback,
+        },
+        hypothesisId: 'apiResponse',
+      });
+      // #endregion
       // Keep images from our update if API response omits them (e.g. backend doesn't return base64)
       const withImages =
-        Array.isArray(normalized.images) && normalized.images.length > 0
+        apiHasImages
           ? normalized
           : { ...normalized, images: payloadImages.length > 0 ? payloadImages : (Array.isArray(updated.images) ? updated.images : []) };
       const newList = products.map((p) => (p.id === id ? withImages : p));

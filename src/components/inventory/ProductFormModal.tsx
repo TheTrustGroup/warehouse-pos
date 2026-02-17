@@ -10,6 +10,7 @@ import { API_BASE_URL } from '../../lib/api';
 import { apiGet } from '../../lib/apiClient';
 import { compressImage, MAX_IMAGE_BASE64_LENGTH } from '../../lib/imageUtils';
 import { setProductImages } from '../../lib/productImagesStore';
+import { prodDebug } from '../../lib/prodDebug';
 import { Button } from '../ui/Button';
 import { X, Upload, Plus, Trash2, CloudOff } from 'lucide-react';
 
@@ -84,6 +85,53 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   /** When true, init effect must not overwrite imagePreview/formData.images (user just added image). */
   const imageUploadingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevProductRef = useRef<Product | null | undefined>(undefined);
+  // #region agent log
+  useEffect(() => {
+    prodDebug({
+      location: 'ProductFormModal.tsx:mount',
+      message: 'ProductFormModal mounted',
+      data: { isEdit: !!product, productId: product?.id ?? null },
+      hypothesisId: 'remount',
+    });
+    return () => {
+      prodDebug({
+        location: 'ProductFormModal.tsx:unmount',
+        message: 'ProductFormModal unmounted',
+        data: { productId: product?.id ?? null },
+        hypothesisId: 'remount',
+      });
+    };
+  }, []);
+  useEffect(() => {
+    const prev = prevProductRef.current;
+    const refChanged = prev !== product;
+    if (refChanged && (prev !== undefined || product != null)) {
+      prodDebug({
+        location: 'ProductFormModal.tsx:productProp',
+        message: 'Product prop reference changed',
+        data: {
+          productId: product?.id ?? null,
+          prevId: prev?.id ?? null,
+          refIdentityChanged: refChanged,
+        },
+        hypothesisId: 'objectRef',
+      });
+    }
+    prevProductRef.current = product;
+  }, [product]);
+  useEffect(() => {
+    prodDebug({
+      location: 'ProductFormModal.tsx:formState',
+      message: 'Form state or imagePreview changed',
+      data: {
+        imagesLength: formData.images?.length ?? 0,
+        imagePreviewLength: imagePreview?.length ?? 0,
+      },
+      hypothesisId: 'formReset',
+    });
+  }, [formData.images, imagePreview]);
+  // #endregion
   useEffect(() => {
     imagesLengthRef.current = formData.images.length;
   }, [formData.images.length]);
@@ -228,6 +276,14 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
 
   const processSelectedFiles = useCallback(
     async (fileArray: File[]) => {
+      // #region agent log
+      prodDebug({
+        location: 'ProductFormModal.tsx:imageUpload',
+        message: 'File selected / upload started',
+        data: { fileCount: fileArray?.length ?? 0 },
+        hypothesisId: 'apiLifecycle',
+      });
+      // #endregion
       if (fileArray.length === 0) {
         showToast('warning', 'No image received. Try selecting again or use Camera.');
         return;
@@ -287,6 +343,15 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
           newDataUrls.push(dataUrl);
         }
 
+        // #region agent log
+        prodDebug({
+          location: 'ProductFormModal.tsx:imageUpload',
+          message: 'Preview URL created',
+          data: { previewCount: newDataUrls.length },
+          hypothesisId: 'apiLifecycle',
+        });
+        // #endregion
+
         if (newDataUrls.length === 0) {
           setImagePreview((prev) => prev.slice(0, -newPreviewCount));
           imagesLengthRef.current = Math.max(0, imagesLengthRef.current - newPreviewCount);
@@ -301,6 +366,14 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         formDataImagesRef.current = combined;
         setFormData((prev) => ({ ...prev, images: combined }));
         imagesLengthRef.current = combined.length;
+        // #region agent log
+        prodDebug({
+          location: 'ProductFormModal.tsx:imageUpload',
+          message: 'Upload success (preview and form state updated)',
+          data: { combinedLength: combined.length },
+          hypothesisId: 'apiLifecycle',
+        });
+        // #endregion
       } finally {
         objectUrls.forEach((url) => URL.revokeObjectURL(url));
         imageUploadingRef.current = false;
@@ -423,6 +496,14 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       if (product?.id && payloadImages.length > 0) {
         setProductImages(product.id, payloadImages);
       }
+      // #region agent log
+      prodDebug({
+        location: 'ProductFormModal.tsx:submit',
+        message: 'Product update submit (payload)',
+        data: { productId: product?.id ?? null, payloadImagesCount: payloadImages.length },
+        hypothesisId: 'apiLifecycle',
+      });
+      // #endregion
       await Promise.resolve(onSubmit(payload));
       onClose();
     } catch {
