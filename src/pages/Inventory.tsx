@@ -81,7 +81,13 @@ export function Inventory() {
         await s.updateProduct(s.editingProduct.id, productData);
         s.setIsModalOpen(false);
         s.setEditingProduct(null);
-      } catch {
+      } catch (error) {
+        if ((error as { status?: number })?.status === 404) {
+          s.setIsModalOpen(false);
+          s.setEditingProduct(null);
+          s.refreshProducts({ bypassCache: true });
+          return;
+        }
         throw undefined;
       }
       return;

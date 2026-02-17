@@ -4,9 +4,11 @@
  */
 
 import { useState, useMemo } from 'react';
-import { Database, Download, AlertTriangle, CheckCircle } from 'lucide-react';
-import { getStoredData, isStorageAvailable } from '../../lib/storage';
+import { Database, Download, AlertTriangle, CheckCircle, Trash2 } from 'lucide-react';
+import { getStoredData, isStorageAvailable, removeStoredData } from '../../lib/storage';
 import { Button } from '../ui/Button';
+
+const PRODUCT_IMAGES_KEY = 'product_images_v1';
 
 const INVENTORY_KEY_PREFIX = 'warehouse_products';
 const LEGACY_KEY = 'warehouse_products';
@@ -47,13 +49,53 @@ function formatBytes(n: number): string {
 
 export function LocalStorageCacheView() {
   const [lastRefreshed, setLastRefreshed] = useState<number>(Date.now());
+  const [clearing, setClearing] = useState<'list' | 'images' | null>(null);
 
-  const { available, entries, totalProducts } = useMemo(() => {
+  const { available, entries, totalProducts, hasProductImages } = useMemo(() => {
     const available = isStorageAvailable();
     const entries = getInventoryCacheEntries();
     const totalProducts = entries.reduce((sum, e) => sum + e.count, 0);
-    return { available, entries, totalProducts };
+    const hasProductImages =
+      available &&
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem(PRODUCT_IMAGES_KEY) != null;
+    return { available, entries, totalProducts, hasProductImages };
   }, [lastRefreshed]);
+
+  const handleClearProductListCache = () => {
+    if (
+      !confirm(
+        'Clear product list cache (warehouse_products)? The app will refetch from the server when you open Inventory or tap "Refresh list". Continue?'
+      )
+    )
+      return;
+    setClearing('list');
+    try {
+      entries.forEach((e) => removeStoredData(e.key));
+      if (typeof localStorage !== 'undefined') {
+        if (!entries.some((e) => e.key === LEGACY_KEY)) removeStoredData(LEGACY_KEY);
+      }
+      setLastRefreshed(Date.now());
+    } finally {
+      setClearing(null);
+    }
+  };
+
+  const handleClearProductImagesCache = () => {
+    if (
+      !confirm(
+        'Clear product images cache? Images will be refetched or re-uploaded when you edit products. Continue?'
+      )
+    )
+      return;
+    setClearing('images');
+    try {
+      removeStoredData(PRODUCT_IMAGES_KEY);
+      setLastRefreshed(Date.now());
+    } finally {
+      setClearing(null);
+    }
+  };
 
   const handleExport = (entry: CacheEntry) => {
     const blob = new Blob([JSON.stringify(entry.raw, null, 2)], { type: 'application/json' });
@@ -181,6 +223,40 @@ export function LocalStorageCacheView() {
               </p>
             </div>
           )}
+
+          <div className="mt-6 pt-6 border-t border-slate-200">
+            <h3 className="text-sm font-semibold text-slate-800 mb-2">Clean cache for real data</h3>
+            <p className="text-sm text-slate-600 mb-3">
+              Use these when preparing for real data so old demo or dev cache does not linger. After clearing, open Inventory and use &quot;Refresh list&quot; to load from the server.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleClearProductListCache}
+                disabled={clearing !== null || entries.length === 0}
+                className="inline-flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                {clearing === 'list' ? 'Clearing…' : 'Clear product list cache'}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleClearProductImagesCache}
+                disabled={clearing !== null || !hasProductImages}
+                className="inline-flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                {clearing === 'images' ? 'Clearing…' : 'Clear product images cache'}
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              Offline mode: clear local products and sync queue from <strong>Admin dashboard</strong> (Clear local product data).
+            </p>
+          </div>
         </>
       )}
     </div>

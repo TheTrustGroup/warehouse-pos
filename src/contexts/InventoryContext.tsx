@@ -248,8 +248,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const lastAddedProductRef = useRef<{ product: Product; at: number } | null>(null);
   /** Recently updated product (with images) so any subsequent loadProducts (refresh/sync/mount) keeps the image. */
   const lastUpdatedProductRef = useRef<{ product: Product; at: number } | null>(null);
+  /** Ids deleted in the last window so in-flight loadProducts cannot re-add them (avoids delete "flashing back"). */
+  const recentlyDeletedIdsRef = useRef<Set<string>>(new Set());
   const RECENT_ADD_WINDOW_MS = 15_000;
   const RECENT_UPDATE_WINDOW_MS = 60_000;
+  const RECENT_DELETE_WINDOW_MS = 15_000;
 
   const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
     const params = new URLSearchParams();
@@ -460,6 +463,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             if (pin) listToSet = [pin, ...merged.filter((p) => p.id !== recent.product.id)];
           }
         }
+        listToSet = listToSet.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
         setProducts(listToSet);
         if (!silent) setError(null);
         setLastSyncAt(new Date());
@@ -924,11 +928,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const status = (err as { status?: number })?.status;
       const msg =
-        status === 401
-          ? 'Session expired. Please log in again.'
-          : err instanceof Error
-            ? err.message
-            : 'Failed to update product';
+        status === 404
+          ? 'Product was deleted on another device. The list will refresh.'
+          : status === 401
+            ? 'Session expired. Please log in again.'
+            : err instanceof Error
+              ? err.message
+              : 'Failed to update product';
       showToast('error', msg);
       throw err;
     } finally {
@@ -953,6 +959,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         await apiDelete(API_BASE_URL, productByIdPath('/api/products', id));
       }
       logInventoryDelete({ productId: id });
+      recentlyDeletedIdsRef.current.add(id);
+      setTimeout(() => recentlyDeletedIdsRef.current.delete(id), RECENT_DELETE_WINDOW_MS);
       setProducts((prev) => prev.filter((p) => p.id !== id));
       loadProducts(undefined, { bypassCache: true, silent: true }).catch(() => {});
     } catch (err) {
@@ -1014,6 +1022,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     }
+    ids.forEach((id) => {
+      recentlyDeletedIdsRef.current.add(id);
+      setTimeout(() => recentlyDeletedIdsRef.current.delete(id), RECENT_DELETE_WINDOW_MS);
+    });
     setProducts((prev) => prev.filter((p) => !idSet.has(p.id)));
     loadProducts(undefined, { bypassCache: true, silent: true }).catch(() => {});
   };

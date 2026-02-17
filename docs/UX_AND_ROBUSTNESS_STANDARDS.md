@@ -2,6 +2,8 @@
 
 Make every click, flow, and component feel professional and robust—like the work of an engineer who knows the system. Use this as a **checklist** when building or reviewing features.
 
+**Going live with real data?** See **[SLATE_READY_FOR_REAL_DATA.md](./SLATE_READY_FOR_REAL_DATA.md)** for backend, cache, and verification steps so data is recorded correctly and known issues do not recur.
+
 ---
 
 ## 1. Feedback on every action
