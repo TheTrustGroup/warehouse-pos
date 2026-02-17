@@ -18,7 +18,7 @@ import { formatCurrency } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 
 export function Dashboard() {
-  const { products } = useInventory();
+  const { products, isLoading: productsLoading } = useInventory();
   const { user } = useAuth();
   const { stores, currentStore } = useStore();
   const { warehouses, currentWarehouse } = useWarehouse();
@@ -91,7 +91,7 @@ export function Dashboard() {
     const totalStockValue = products.reduce((sum, p) => sum + (q(p) * cost(p)), 0);
     const lowStockItems = products.filter(p => q(p) > 0 && q(p) <= reorder(p)).length;
     const outOfStockItems = products.filter(p => q(p) === 0).length;
-    
+
     return {
       totalProducts,
       totalStockValue,
@@ -103,6 +103,8 @@ export function Dashboard() {
       topProducts: [],
     };
   }, [products, todaySales, todayTransactions]);
+
+  const inventoryStatsReady = !productsLoading;
 
   const salesData = useMemo(() => [], []);
 
@@ -238,39 +240,46 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Stats Grid — hide for admin until dashboard data loaded to avoid showing zeros */}
+      {/* Stats Grid — hide for admin until dashboard data loaded; inventory stats show — until products loaded */}
       {(!isAdmin || !dashboardLoading) && (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in-up">
-        <StatCard
-          title="Total Stock Value"
-          value={stats.totalStockValue}
-          icon={DollarSign}
-          format="currency"
-          color="blue"
-          trend={{ value: 12.5, isPositive: true }}
-        />
-        <StatCard
-          title="Total Products"
-          value={stats.totalProducts}
-          icon={Package}
-          format="number"
-          color="green"
-        />
-        <StatCard
-          title="Low Stock Items"
-          value={stats.lowStockItems}
-          icon={AlertTriangle}
-          format="number"
-          color="amber"
-        />
-        <StatCard
-          title="Today's Sales"
-          value={stats.todaySales}
-          icon={ShoppingBag}
-          format="currency"
-          color="green"
-          trend={{ value: 8.2, isPositive: true }}
-        />
+      <div className="animate-fade-in-up">
+        {currentWarehouse && (
+          <p className="text-sm text-slate-500 mb-3 font-medium">
+            Inventory stats for: <span className="text-slate-700">{currentWarehouse.name}</span>
+          </p>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard
+            title="Total Stock Value"
+            value={inventoryStatsReady ? stats.totalStockValue : '—'}
+            icon={DollarSign}
+            format={inventoryStatsReady ? 'currency' : 'text'}
+            color="blue"
+            trend={inventoryStatsReady ? { value: 12.5, isPositive: true } : undefined}
+          />
+          <StatCard
+            title="Total Products"
+            value={inventoryStatsReady ? stats.totalProducts : '—'}
+            icon={Package}
+            format={inventoryStatsReady ? 'number' : 'text'}
+            color="green"
+          />
+          <StatCard
+            title="Low Stock Items"
+            value={inventoryStatsReady ? stats.lowStockItems : '—'}
+            icon={AlertTriangle}
+            format={inventoryStatsReady ? 'number' : 'text'}
+            color="amber"
+          />
+          <StatCard
+            title="Today's Sales"
+            value={stats.todaySales}
+            icon={ShoppingBag}
+            format="currency"
+            color="green"
+            trend={{ value: 8.2, isPositive: true }}
+          />
+        </div>
       </div>
       )}
 

@@ -29,7 +29,9 @@ export function prodDebug(payload: {
     if (typeof console !== 'undefined' && console.info) {
       console.info('[ProdDebug]', payload.message, payload.data ?? '');
     }
-    if (typeof fetch !== 'undefined') {
+    // Only send to local ingest when not on HTTPS (avoids mixed-content errors and blocked fetches in production)
+    const canUseIngest = typeof window !== 'undefined' && typeof window.location?.origin === 'string' && !window.location.origin.startsWith('https://');
+    if (canUseIngest && typeof fetch !== 'undefined') {
       fetch(INGEST_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

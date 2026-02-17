@@ -829,10 +829,40 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.timeEnd('API Request');
         console.time('State Update');
       }
-      const normalized = (created as { id?: string }).id
+      let normalized = (created as { id?: string }).id
         ? normalizeProduct(created as any)
         : ({ ...tempProduct, _pending: undefined, id: tempId } as Product);
       const resolvedId = normalized.id ?? tempId;
+      // Preserve form data when API omits or returns zero so every detail entered is recorded in state
+      const qApi = Number(normalized.quantity ?? 0) || 0;
+      const qForm = Number(productData.quantity ?? 0) || 0;
+      if (qForm > 0 && qApi === 0) {
+        normalized = { ...normalized, quantity: qForm } as Product;
+      }
+      if (Number(productData.costPrice ?? 0) > 0 && Number(normalized.costPrice ?? 0) === 0) {
+        normalized = { ...normalized, costPrice: Number(productData.costPrice) } as Product;
+      }
+      if (Number(productData.sellingPrice ?? 0) > 0 && Number(normalized.sellingPrice ?? 0) === 0) {
+        normalized = { ...normalized, sellingPrice: Number(productData.sellingPrice) } as Product;
+      }
+      if (Number(productData.reorderLevel ?? 0) >= 0 && normalized.reorderLevel === undefined) {
+        normalized = { ...normalized, reorderLevel: Number(productData.reorderLevel ?? 0) } as Product;
+      }
+      if (productData.location && typeof productData.location === 'object' && normalized.location && Object.values(normalized.location).every((v) => !v)) {
+        normalized = { ...normalized, location: productData.location } as Product;
+      }
+      if (productData.supplier && typeof productData.supplier === 'object' && normalized.supplier && Object.values(normalized.supplier).every((v) => !v)) {
+        normalized = { ...normalized, supplier: productData.supplier } as Product;
+      }
+      if (Array.isArray(productData.quantityBySize) && productData.quantityBySize.length > 0 && (!Array.isArray(normalized.quantityBySize) || normalized.quantityBySize.length === 0)) {
+        normalized = { ...normalized, quantityBySize: productData.quantityBySize } as Product;
+      }
+      if (productData.sizeKind && !normalized.sizeKind) {
+        normalized = { ...normalized, sizeKind: productData.sizeKind } as Product;
+      }
+      if (productData.warehouseId?.trim()) {
+        normalized = { ...normalized, warehouseId: productData.warehouseId.trim() } as Product;
+      }
       if (Array.isArray(normalized.images) && normalized.images.length > 0) setProductImages(resolvedId, normalized.images);
       lastAddedProductRef.current = { product: normalized, at: Date.now() };
       setApiOnlyProductsState((prev) => prev.map((p) => (p.id === tempId ? normalized : p)));
