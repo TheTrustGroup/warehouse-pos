@@ -361,6 +361,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setProducts(cached.data);
       setIsLoading(false);
       setError(null);
+      // #region agent log
+      const sample = cached.data[0];
+      prodDebug({
+        location: 'InventoryContext.tsx:loadProducts',
+        message: 'Products from memory cache',
+        data: { warehouseId: wid, source: 'memoryCache', productCount: cached.data.length, sampleQuantity: sample ? Number((sample as Product).quantity ?? 0) : null },
+        hypothesisId: 'stockPerWarehouse',
+      });
+      // #endregion
     }
     try {
       if (silent) setBackgroundRefreshing(true);
@@ -483,6 +492,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         listToSet = listToSet.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
         setProducts(listToSet);
+        // #region agent log
+        const sampleApi = listToSet[0];
+        prodDebug({
+          location: 'InventoryContext.tsx:loadProducts',
+          message: 'Products from API',
+          data: { warehouseId: wid, source: 'api', productCount: listToSet.length, sampleQuantity: sampleApi ? Number((sampleApi as Product).quantity ?? 0) : null },
+          hypothesisId: 'stockPerWarehouse',
+        });
+        // #endregion
         if (!silent) setError(null);
         setLastSyncAt(new Date());
         cacheRef.current[wid] = { data: listToSet, ts: Date.now() };
@@ -528,7 +546,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (isIndexedDBAvailable()) {
         const fromDb = await loadProductsFromDb<any>();
         if (fromDb.length > 0) {
-          setProducts(fromDb.map((p: any) => normalizeProduct(p)));
+          const fallbackList = fromDb.map((p: any) => normalizeProduct(p));
+          setProducts(fallbackList);
+          // #region agent log
+          const sampleFb = fallbackList[0];
+          prodDebug({
+            location: 'InventoryContext.tsx:loadProducts',
+            message: 'Products from fallback (API failed)',
+            data: { warehouseId: effectiveWarehouseId, source: 'fallbackIndexedDB', productCount: fallbackList.length, sampleQuantity: sampleFb ? Number((sampleFb as Product).quantity ?? 0) : null },
+            hypothesisId: 'stockPerWarehouse',
+          });
+          // #endregion
           if (!silent) {
             setError(null);
             const now = Date.now();
@@ -547,6 +575,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         localProducts = getAllCachedProducts();
       }
       setProducts(localProducts);
+      // #region agent log
+      const sampleLocal = localProducts[0];
+      prodDebug({
+        location: 'InventoryContext.tsx:loadProducts',
+        message: 'Products from fallback (API failed)',
+        data: { warehouseId: effectiveWarehouseId, source: 'fallbackLocalStorage', productCount: localProducts.length, sampleQuantity: sampleLocal ? Number((sampleLocal as Product).quantity ?? 0) : null },
+        hypothesisId: 'stockPerWarehouse',
+      });
+      // #endregion
       if (localProducts.length > 0 && !silent) {
         setError(null);
         const now = Date.now();
@@ -589,6 +626,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       setError(null);
       hadCache = true;
+      // #region agent log
+      const sampleInit = productsFromCache[0];
+      prodDebug({
+        location: 'InventoryContext.tsx:mount',
+        message: 'Initial products from localStorage cache',
+        data: { warehouseId: effectiveWarehouseId, source: 'localStorage', productCount: productsFromCache.length, sampleQuantity: sampleInit ? Number((sampleInit as Product).quantity ?? 0) : null },
+        hypothesisId: 'stockPerWarehouse',
+      });
+      // #endregion
     }
 
     (async () => {

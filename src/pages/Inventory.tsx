@@ -287,6 +287,11 @@ export function Inventory() {
               </>
             )}
           </p>
+          {s.currentWarehouse && (
+            <p className="text-xs text-slate-500 mt-0.5">
+              Stock is per warehouse. Viewing: <strong className="text-slate-600">{s.currentWarehouse.name}</strong>. If numbers don’t match another device or browser, check the warehouse above or tap Refresh.
+            </p>
+          )}
           <div className="flex items-center gap-2 mt-0.5">
             {s.lastSyncAt && (
               <p className="text-slate-400 text-xs" aria-live="polite">
