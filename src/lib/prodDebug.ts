@@ -1,11 +1,9 @@
 /**
  * Production-only diagnostic logging. Safe, removable, no secrets.
- * Gate: runs only in production build (NODE_ENV or Vite PROD).
+ * Gate: runs only in production build (Vite PROD).
  * Sends to debug ingest and logs structured data to console.
  */
-const PROD_DEBUG =
-  (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') ||
-  (typeof import.meta !== 'undefined' && !!import.meta.env?.PROD);
+const PROD_DEBUG = typeof import.meta !== 'undefined' && !!import.meta.env?.PROD;
 
 const INGEST_URL = 'http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239';
 
