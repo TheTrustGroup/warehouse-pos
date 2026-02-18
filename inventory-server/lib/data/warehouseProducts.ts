@@ -170,15 +170,6 @@ export async function getWarehouseProducts(
 
   const sizedIds = productRows.filter((r) => (r.size_kind ?? 'na') === 'sized').map((r) => r.id);
   const bySizeMap = sizedIds.length > 0 ? await getQuantitiesBySizeForProducts(wid, sizedIds) : new Map<string, QuantityBySizeEntry[]>();
-  // #region agent log
-  try {
-    const { debugLog } = await import('@/lib/debugLog');
-    const firstRow = productRows[0];
-    const firstSizedId = sizedIds[0];
-    const firstBySize = firstSizedId ? bySizeMap.get(firstSizedId) : undefined;
-    debugLog({ location: 'warehouseProducts.ts:getWarehouseProducts', message: 'List build (sizedIds, bySizeMap)', data: { rowCount: productRows.length, sizedIdsCount: sizedIds.length, firstRowSizeKind: firstRow?.size_kind, firstSizedId, firstBySizeLength: firstBySize?.length ?? 0 }, hypothesisId: 'H4' });
-  } catch { /* no-op */ }
-  // #endregion
 
   let merged: Record<string, unknown>[];
   if (pos) {
@@ -381,14 +372,24 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
   const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: currentVersion + 1 }, id, ts);
 
   const supabase = getSupabase();
-  const pQuantity = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
-  const pQuantityBySize =
+  let pQuantity = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
+  let pQuantityBySize =
     hasSized && quantityBySizeRaw
       ? quantityBySizeRaw.map((e) => ({
           sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
           quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
         })).filter((e) => e.sizeCode)
       : null;
+  // Safeguard: if client sends quantityBySize that sums to 0 but product had/has quantity, preserve total (avoid accidental zeroing when editing to add sizes)
+  if (pQuantityBySize && pQuantityBySize.length > 0) {
+    const sum = pQuantityBySize.reduce((s, e) => s + e.quantity, 0);
+    const existingQty = Number(existing.quantity ?? 0) || 0;
+    const bodyQty = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
+    if (sum === 0 && (existingQty > 0 || (bodyQty != null && bodyQty > 0))) {
+      pQuantityBySize = null;
+      pQuantity = bodyQty != null ? bodyQty : existingQty;
+    }
+  }
 
   const { data: rpcData, error: rpcError } = await supabase.rpc('update_warehouse_product_atomic', {
     p_id: id,
@@ -442,23 +443,34 @@ async function updateWarehouseProductLegacy(
     err.status = 409;
     throw err;
   }
+  let preservedQty: number | null = null;
   if (hasSized && quantityBySizeRaw?.length) {
     const entries: QuantityBySizeEntry[] = quantityBySizeRaw.map((e) => ({
       sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
       quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
     })).filter((e) => e.sizeCode);
-    await setQuantitiesBySize(wid, id, entries);
-    await setQuantity(wid, id, entries.reduce((s, e) => s + e.quantity, 0));
+    const sum = entries.reduce((s, e) => s + e.quantity, 0);
+    const existingQty = Number(existing.quantity ?? 0) || 0;
+    const bodyQty = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
+    if (sum === 0 && (existingQty > 0 || (bodyQty != null && bodyQty > 0))) {
+      preservedQty = bodyQty != null ? bodyQty : existingQty;
+      await setQuantity(wid, id, preservedQty);
+    } else {
+      await setQuantitiesBySize(wid, id, entries);
+      await setQuantity(wid, id, sum);
+    }
   } else if (typeof (body as { quantity?: number }).quantity === 'number') {
     await setQuantity(wid, id, (body as { quantity: number }).quantity);
   }
-  const qty = hasSized && quantityBySizeRaw
-    ? quantityBySizeRaw.reduce((s, e) => s + Math.max(0, Math.floor(Number(e.quantity) ?? 0)), 0)
-    : typeof (body as { quantity?: number }).quantity === 'number'
-      ? (body as { quantity: number }).quantity
-      : await getQuantity(wid, id);
+  const qty = preservedQty != null
+    ? preservedQty
+    : hasSized && quantityBySizeRaw
+      ? quantityBySizeRaw.reduce((s, e) => s + Math.max(0, Math.floor(Number(e.quantity) ?? 0)), 0)
+      : typeof (body as { quantity?: number }).quantity === 'number'
+        ? (body as { quantity: number }).quantity
+        : await getQuantity(wid, id);
   const outRow = data as WarehouseProductRow;
-  if (hasSized && quantityBySizeRaw) {
+  if (hasSized && quantityBySizeRaw && preservedQty == null) {
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
     const quantityBySize = quantityBySizeRaw.map((e) => ({
       sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',

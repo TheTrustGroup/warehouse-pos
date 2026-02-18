@@ -7,8 +7,6 @@ import { initObservability, startHealthPings } from './lib/observability';
 import { initErrorHandlers } from './lib/initErrorHandlers';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import { isOfflineEnabled } from './lib/offlineFeatureFlag';
-import { prodDebug } from './lib/prodDebug';
-
 // Error reporting: set VITE_SENTRY_DSN and wire Sentry.captureException(err, { extra: ctx }) here.
 // Only send to Sentry when getErrorReportingConsent() is true (user consent in Settings/Admin).
 initObservability({
@@ -29,17 +27,6 @@ if (typeof window !== 'undefined') {
   if (typeof __APP_BUILD_VERSION__ !== 'undefined') {
     console.info('[App] Build version:', __APP_BUILD_VERSION__);
   }
-  // #region agent log
-  prodDebug({
-    location: 'main.tsx:startup',
-    message: 'App startup',
-    data: {
-      buildVersion: typeof __APP_BUILD_VERSION__ !== 'undefined' ? __APP_BUILD_VERSION__ : 'unknown',
-      env: typeof import.meta !== 'undefined' && import.meta.env ? (import.meta.env.MODE ?? 'unknown') : 'unknown',
-    },
-    hypothesisId: 'build',
-  });
-  // #endregion
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

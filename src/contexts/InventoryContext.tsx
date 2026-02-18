@@ -103,7 +103,6 @@ function getCachedProductsForWarehouse(warehouseId: string): Product[] {
 }
 import { loadProductsFromDb, saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
 import { reportError } from '../lib/errorReporting';
-import { prodDebug } from '../lib/prodDebug';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { isOfflineEnabled } from '../lib/offlineFeatureFlag';
 import { mirrorProductsFromApi } from '../db/inventoryDB';
@@ -336,23 +335,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    * @param options.bypassCache - If true, always fetch from server (e.g. when opening Inventory page for fresh data).
    */
   const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => {
-    // #region agent log
-    try {
-      const stack = new Error().stack ?? '';
-      prodDebug({
-        location: 'InventoryContext.tsx:loadProducts',
-        message: 'fetchProducts/loadProducts called',
-        data: {
-          silent: options?.silent === true,
-          bypassCache: options?.bypassCache === true,
-          stack: stack.slice(0, 500),
-        },
-        hypothesisId: 'refetch',
-      });
-    } catch {
-      /* no-op */
-    }
-    // #endregion
     const silent = options?.silent === true;
     const bypassCache = options?.bypassCache === true;
     const timeoutMs = options?.timeoutMs;
@@ -364,15 +346,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setProducts(cached.data);
       setIsLoading(false);
       setError(null);
-      // #region agent log
-      const sample = cached.data[0];
-      prodDebug({
-        location: 'InventoryContext.tsx:loadProducts',
-        message: 'Products from memory cache',
-        data: { warehouseId: wid, source: 'memoryCache', productCount: cached.data.length, sampleQuantity: sample ? Number((sample as Product).quantity ?? 0) : null },
-        hypothesisId: 'stockPerWarehouse',
-      });
-      // #endregion
     }
     try {
       if (silent) setBackgroundRefreshing(true);
@@ -402,16 +375,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           setError(parsed.message);
           return;
         }
-        // #region agent log
-        const rawFirst = parsed.items[0] as { quantityBySize?: unknown[]; sizeKind?: string } | undefined;
-        if (typeof window !== 'undefined' && !window.location.origin.startsWith('https')) { fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:loadProducts',message:'List API raw (before normalize)',data:{rawFirstQuantityBySizeLength:Array.isArray(rawFirst?.quantityBySize)?rawFirst?.quantityBySize?.length:0,rawFirstSizeKind:rawFirst?.sizeKind},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{}); }
-        // #endregion
         const apiProducts = parsed.items.map((p) => normalizeProduct(p));
-        // #region agent log
-        const first = apiProducts[0];
-        const firstSized = apiProducts.find((p) => (p.sizeKind === 'sized' || (Array.isArray(p.quantityBySize) && p.quantityBySize.length > 0)));
-        if (typeof window !== 'undefined' && !window.location.origin.startsWith('https')) { fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:loadProducts',message:'List API response after normalize',data:{firstProductId:first?.id,firstSizeKind:first?.sizeKind,firstQuantityBySizeLength:Array.isArray(first?.quantityBySize)?first?.quantityBySize?.length:0,firstSizedId:firstSized?.id,firstSizedQuantityBySizeLength:Array.isArray(firstSized?.quantityBySize)?firstSized?.quantityBySize?.length:0,totalProducts:apiProducts.length},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{}); }
-        // #endregion
         const apiIds = new Set(apiProducts.map((p) => p.id));
         // Keep products that exist only locally (e.g. added while offline or when API failed) so inventory never vanishes
         const localOnly: Product[] = [];
@@ -504,15 +468,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         listToSet = listToSet.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
         setProducts(listToSet);
-        // #region agent log
-        const sampleApi = listToSet[0];
-        prodDebug({
-          location: 'InventoryContext.tsx:loadProducts',
-          message: 'Products from API',
-          data: { warehouseId: wid, source: 'api', productCount: listToSet.length, sampleQuantity: sampleApi ? Number((sampleApi as Product).quantity ?? 0) : null },
-          hypothesisId: 'stockPerWarehouse',
-        });
-        // #endregion
         if (!silent) setError(null);
         setLastSyncAt(new Date());
         cacheRef.current[wid] = { data: listToSet, ts: Date.now() };
@@ -560,15 +515,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         if (fromDb.length > 0) {
           const fallbackList = fromDb.map((p: any) => normalizeProduct(p));
           setProducts(fallbackList);
-          // #region agent log
-          const sampleFb = fallbackList[0];
-          prodDebug({
-            location: 'InventoryContext.tsx:loadProducts',
-            message: 'Products from fallback (API failed)',
-            data: { warehouseId: effectiveWarehouseId, source: 'fallbackIndexedDB', productCount: fallbackList.length, sampleQuantity: sampleFb ? Number((sampleFb as Product).quantity ?? 0) : null },
-            hypothesisId: 'stockPerWarehouse',
-          });
-          // #endregion
           if (!silent) {
             setError(null);
             const now = Date.now();
@@ -587,15 +533,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         localProducts = getAllCachedProducts();
       }
       setProducts(localProducts);
-      // #region agent log
-      const sampleLocal = localProducts[0];
-      prodDebug({
-        location: 'InventoryContext.tsx:loadProducts',
-        message: 'Products from fallback (API failed)',
-        data: { warehouseId: effectiveWarehouseId, source: 'fallbackLocalStorage', productCount: localProducts.length, sampleQuantity: sampleLocal ? Number((sampleLocal as Product).quantity ?? 0) : null },
-        hypothesisId: 'stockPerWarehouse',
-      });
-      // #endregion
       if (localProducts.length > 0 && !silent) {
         setError(null);
         const now = Date.now();
@@ -638,15 +575,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       setError(null);
       hadCache = true;
-      // #region agent log
-      const sampleInit = productsFromCache[0];
-      prodDebug({
-        location: 'InventoryContext.tsx:mount',
-        message: 'Initial products from localStorage cache',
-        data: { warehouseId: effectiveWarehouseId, source: 'localStorage', productCount: productsFromCache.length, sampleQuantity: sampleInit ? Number((sampleInit as Product).quantity ?? 0) : null },
-        hypothesisId: 'stockPerWarehouse',
-      });
-      // #endregion
     }
 
     (async () => {
@@ -860,9 +788,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setApiOnlyProductsState((prev) => [tempProduct, ...prev]);
       const payload: Record<string, unknown> = productToPayload({ ...tempProduct, _pending: undefined } as Product);
       if (productData.warehouseId?.trim()) payload.warehouseId = productData.warehouseId.trim();
-      // #region agent log
-      if (typeof window !== 'undefined' && !window.location.origin.startsWith('https')) { fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:addProduct',message:'Payload before API call',data:{sizeKind:payload.sizeKind,quantityBySizeLength:Array.isArray(payload.quantityBySize)?payload.quantityBySize.length:0,hasQuantityBySize:Array.isArray(payload.quantityBySize)&&payload.quantityBySize.length>0,sample:Array.isArray(payload.quantityBySize)?payload.quantityBySize[0]:null},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{}); }
-      // #endregion
       if (import.meta.env?.DEV) {
         console.timeEnd('Data Preparation');
         console.time('API Request');
@@ -893,9 +818,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       let normalized = (created as { id?: string }).id
         ? normalizeProduct(created as any)
         : ({ ...tempProduct, _pending: undefined, id: tempId } as Product);
-      // #region agent log
-      if (typeof window !== 'undefined' && !window.location.origin.startsWith('https')) { fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:addProduct',message:'API response (created) before preserve',data:{normalizedSizeKind:normalized.sizeKind,normalizedQuantityBySizeLength:Array.isArray(normalized.quantityBySize)?normalized.quantityBySize.length:0,createdHasQuantityBySize:Array.isArray((created as any)?.quantityBySize)?(created as any).quantityBySize.length:0},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{}); }
-      // #endregion
       const resolvedId = normalized.id ?? tempId;
       // Preserve form data when API omits or returns zero so every detail entered is recorded in state
       const qApi = Number(normalized.quantity ?? 0) || 0;
@@ -1015,21 +937,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         ? normalizeProduct(fromApi as any)
         : updated;
       const apiHasImages = Array.isArray(normalized.images) && normalized.images.length > 0;
-      const usedFallback = !apiHasImages && (payloadImages.length > 0 || (Array.isArray(updated.images) && updated.images.length > 0));
-      // #region agent log
-      prodDebug({
-        location: 'InventoryContext.tsx:updateProduct',
-        message: 'Product update response',
-        data: {
-          productId: id,
-          apiResponseHasImages: apiHasImages,
-          apiImageCount: Array.isArray(normalized.images) ? normalized.images.length : 0,
-          payloadImagesCount: payloadImages.length,
-          usedImagesFallback: usedFallback,
-        },
-        hypothesisId: 'apiResponse',
-      });
-      // #endregion
       // Keep images from our update if API response omits them (e.g. backend doesn't return base64)
       const withImages =
         apiHasImages

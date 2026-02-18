@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getWarehouseProducts, createWarehouseProduct } from '@/lib/data/warehouseProducts';
 import { requireAuth, requireAdmin } from '@/lib/auth/session';
 import { logDurability } from '@/lib/data/durabilityLogger';
-import { debugLog } from '@/lib/debugLog';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,11 +31,6 @@ export async function GET(request: NextRequest) {
       outOfStock,
       pos,
     });
-    // #region agent log
-    const firstList = (result.data ?? [])[0] as { id?: string; sizeKind?: string; quantityBySize?: unknown[] } | undefined;
-    const firstSized = (result.data ?? []).find((p: { sizeKind?: string; quantityBySize?: unknown[] }) => p.sizeKind === 'sized' || (Array.isArray(p.quantityBySize) && p.quantityBySize.length > 0));
-    debugLog({ location: 'api/products/route.ts:GET', message: 'Product list API response', data: { firstId: firstList?.id, firstSizeKind: firstList?.sizeKind, firstQuantityBySizeLength: Array.isArray(firstList?.quantityBySize) ? firstList.quantityBySize.length : 0, firstSizedId: (firstSized as { id?: string })?.id, firstSizedQuantityBySizeLength: Array.isArray((firstSized as { quantityBySize?: unknown[] })?.quantityBySize) ? (firstSized as { quantityBySize: unknown[] }).quantityBySize.length : 0, total: result.data?.length ?? 0 }, hypothesisId: 'H4' });
-    // #endregion
     return NextResponse.json({ data: result.data, total: result.total });
   } catch (e) {
     console.error('[api/products GET]', e);
@@ -58,16 +52,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
   }
   const warehouseId = (body?.warehouseId as string) ?? undefined;
-  // #region agent log
-  const bodySizes = body?.quantityBySize as unknown[] | undefined;
-  debugLog({ location: 'api/products/route.ts:POST', message: 'Incoming request body (sizes)', data: { sizeKind: body?.sizeKind, quantityBySizeLength: Array.isArray(bodySizes) ? bodySizes.length : 0, hasQuantityBySize: Array.isArray(bodySizes) && bodySizes.length > 0 }, hypothesisId: 'H3' });
-  // #endregion
   try {
     const created = await createWarehouseProduct(body);
-    // #region agent log
-    const createdSizes = (created as { quantityBySize?: unknown[] })?.quantityBySize;
-    debugLog({ location: 'api/products/route.ts:POST', message: 'Created product (saved)', data: { createdId: (created as { id?: string })?.id, createdSizeKind: (created as { sizeKind?: string })?.sizeKind, createdQuantityBySizeLength: Array.isArray(createdSizes) ? createdSizes.length : 0 }, hypothesisId: 'H4' });
-    // #endregion
     const entityId = (created as { id?: string })?.id ?? '';
     logDurability({
       status: 'success',
