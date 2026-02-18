@@ -166,45 +166,37 @@ export async function getWarehouseProducts(
     return { data: [], total: count ?? 0 };
   }
   const ids = productRows.map((r) => r.id);
-  const quantities = await getQuantitiesForProducts(wid, ids);
-
   const sizedIds = productRows.filter((r) => (r.size_kind ?? 'na') === 'sized').map((r) => r.id);
-  const bySizeMap = sizedIds.length > 0 ? await getQuantitiesBySizeForProducts(wid, sizedIds) : new Map<string, QuantityBySizeEntry[]>();
+  // Parallelize to avoid sequential latency; do NOT per-product getQuantitiesBySize in a loop (N+1 → 10s+ list load)
+  const [quantities, bySizeMap, sizeLabelsList] = await Promise.all([
+    getQuantitiesForProducts(wid, ids),
+    sizedIds.length > 0 ? getQuantitiesBySizeForProducts(wid, sizedIds) : Promise.resolve(new Map<string, QuantityBySizeEntry[]>()),
+    pos ? Promise.resolve([] as { size_code: string; size_label: string }[]) : getSizeCodes(),
+  ]);
+  const sizeLabels = sizeLabelsList.length > 0 ? new Map(sizeLabelsList.map((s) => [s.size_code, s.size_label])) : new Map<string, string>();
 
   let merged: Record<string, unknown>[];
   if (pos) {
-    merged = await Promise.all(
-      productRows.map(async (row) => {
-        const qty = quantities.get(row.id) ?? 0;
-        let bySize = bySizeMap.get(row.id);
-        if ((row.size_kind ?? 'na') === 'sized' && (!bySize || bySize.length === 0)) {
-          bySize = await getQuantitiesBySize(wid, row.id);
-        }
-        const quantityBySize = bySize && bySize.length > 0 ? bySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity })) : undefined;
-        return posRowToApi(row, qty, quantityBySize);
-      })
-    );
+    merged = productRows.map((row) => {
+      const qty = quantities.get(row.id) ?? 0;
+      const bySize = bySizeMap.get(row.id);
+      const quantityBySize = bySize && bySize.length > 0 ? bySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity })) : undefined;
+      return posRowToApi(row, qty, quantityBySize);
+    });
   } else {
-    const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
-    merged = await Promise.all(
-      productRows.map(async (row) => {
-        const qty = quantities.get(row.id) ?? 0;
-        let bySize = bySizeMap.get(row.id);
-        // Fallback: for sized products with no bySize from bulk query, fetch per-product (handles read-after-write or bulk .in() gaps)
-        if ((row.size_kind ?? 'na') === 'sized' && (!bySize || bySize.length === 0)) {
-          bySize = await getQuantitiesBySize(wid, row.id);
-        }
-        const quantityBySize =
-          bySize && bySize.length > 0
-            ? bySize.map((e) => ({
-                sizeCode: e.sizeCode,
-                sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
-                quantity: e.quantity,
-              }))
-            : undefined;
-        return rowToApi(row, qty, quantityBySize);
-      })
-    );
+    merged = productRows.map((row) => {
+      const qty = quantities.get(row.id) ?? 0;
+      const bySize = bySizeMap.get(row.id);
+      const quantityBySize =
+        bySize && bySize.length > 0
+          ? bySize.map((e) => ({
+              sizeCode: e.sizeCode,
+              sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
+              quantity: e.quantity,
+            }))
+          : undefined;
+      return rowToApi(row, qty, quantityBySize);
+    });
   }
 
   if (lowStock || outOfStock) {
