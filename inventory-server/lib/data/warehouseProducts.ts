@@ -8,7 +8,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getDefaultWarehouseId } from './warehouses';
 import { getQuantitiesForProducts, getQuantity, ensureQuantity, setQuantity } from './warehouseInventory';
-import { getQuantitiesBySize, getQuantitiesBySizeForProducts, getProductIdsWithBySizeData, setQuantitiesBySize, type QuantityBySizeEntry } from './warehouseInventoryBySize';
+import { getQuantitiesBySize, getQuantitiesBySizeForProducts, setQuantitiesBySize, type QuantityBySizeEntry } from './warehouseInventoryBySize';
 import { getSizeCodes } from './sizeCodes';
 
 export interface ListProductsOptions {
@@ -124,6 +124,33 @@ function bodyToRow(body: Record<string, unknown>, id: string, ts: string): Recor
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 2000;
 
+/** Row from warehouse_inventory_by_size when embedded with size_codes (relational select). */
+type BySizeRow = {
+  size_code: string;
+  quantity: number;
+  size_codes: { size_label: string; size_order: number } | null;
+};
+
+/** Normalize embedded warehouse_inventory_by_size (with size_codes) into quantityBySize and sizes. Sorted by size_order. */
+function normalizeBySizeFromRelation(
+  bySizeRows: BySizeRow[] | null | undefined
+): { quantityBySize: Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>; sizes: Array<{ size: string; quantity: number }> } {
+  const list = Array.isArray(bySizeRows) ? bySizeRows : [];
+  const sorted = [...list].sort(
+    (a, b) => (a.size_codes?.size_order ?? 0) - (b.size_codes?.size_order ?? 0)
+  );
+  const quantityBySize = sorted.map((e) => ({
+    sizeCode: e.size_code,
+    sizeLabel: e.size_codes?.size_label ?? e.size_code,
+    quantity: Number(e.quantity),
+  }));
+  const sizes = sorted.map((e) => ({
+    size: e.size_codes?.size_label ?? e.size_code,
+    quantity: Number(e.quantity),
+  }));
+  return { quantityBySize, sizes };
+}
+
 /** GET warehouse products with optional pagination, search, and filters. Quantity is for the given warehouse. */
 export async function getWarehouseProducts(
   warehouseId?: string,
@@ -139,15 +166,17 @@ export async function getWarehouseProducts(
   const outOfStock = options.outOfStock === true;
   const pos = options.pos === true;
 
-  // POS list must include size_kind so we can identify sized products and fetch warehouse_inventory_by_size;
-  // otherwise sizedIds is empty, bySizeMap is never populated, and sizes never show in product list or POS.
-  const selectOpts = pos
-    ? { count: 'exact' as const }
-    : { count: 'exact' as const };
+  const defaultWid = getDefaultWarehouseId();
+  // Relational select: fetch products WITH per-size inventory and size labels/order in one query.
+  const listSelect = pos
+    ? 'id, name, sku, barcode, selling_price, reorder_level, updated_at, size_kind, warehouse_inventory_by_size(size_code, quantity, size_codes(size_label, size_order))'
+    : '*, warehouse_inventory_by_size(size_code, quantity, size_codes(size_label, size_order))';
+  const selectOpts = { count: 'exact' as const };
   let query = supabase
     .from(TABLE)
-    .select(pos ? 'id, name, sku, barcode, selling_price, reorder_level, updated_at, size_kind' : '*', selectOpts)
-    .order('updated_at', { ascending: false });
+    .select(listSelect, selectOpts)
+    .order('updated_at', { ascending: false })
+    .eq('warehouse_inventory_by_size.warehouse_id', wid);
 
   if (q) {
     const safe = q.replace(/'/g, "''").replace(/%/g, '\\%').replace(/\\/g, '\\\\');
@@ -162,51 +191,87 @@ export async function getWarehouseProducts(
   const { data: rows, error, count } = await query.range(offset, offset + limit - 1);
   if (error) throw error;
 
-  const productRows = (rows ?? []) as unknown as WarehouseProductRow[];
+  const productRows = (rows ?? []) as unknown as (WarehouseProductRow & { warehouse_inventory_by_size?: BySizeRow[] })[];
   if (productRows.length === 0) {
     return { data: [], total: count ?? 0 };
   }
-  const ids = productRows.map((r) => r.id);
-  const defaultWid = getDefaultWarehouseId();
-  // Include products marked sized in DB (size_kind or sizeKind) and products that have by_size rows (covers legacy or missed size_kind updates)
-  const sizedByKind = productRows.filter((r) => (r.size_kind ?? (r as { sizeKind?: string }).sizeKind ?? 'na') === 'sized').map((r) => r.id);
-  const warehouseIdsForBySize = wid !== defaultWid ? [wid, defaultWid] : [wid];
-  const [idsWithBySizeData, quantities, sizeLabelsList] = await Promise.all([
-    getProductIdsWithBySizeData(warehouseIdsForBySize, ids),
-    getQuantitiesForProducts(wid, ids),
-    pos ? Promise.resolve([] as { size_code: string; size_label: string }[]) : getSizeCodes(),
-  ]);
-  const sizedIds = Array.from(new Set([...sizedByKind, ...idsWithBySizeData]));
-  const bySizePromise = sizedIds.length > 0 ? getQuantitiesBySizeForProducts(wid, sizedIds) : Promise.resolve(new Map<string, QuantityBySizeEntry[]>());
-  const bySizeDefaultPromise = sizedIds.length > 0 && wid !== defaultWid ? getQuantitiesBySizeForProducts(defaultWid, sizedIds) : Promise.resolve(new Map<string, QuantityBySizeEntry[]>());
-  const [bySizeMap, bySizeDefaultMap] = await Promise.all([bySizePromise, bySizeDefaultPromise]);
-  const sizeLabels = sizeLabelsList.length > 0 ? new Map(sizeLabelsList.map((s) => [s.size_code, s.size_label])) : new Map<string, string>();
 
-  // For sized products, always pass by_size so list UI shows S/M/L. Use default warehouse's by_size when requested warehouse has none (e.g. Test Product only in default).
+  // Verify relational data present (for debugging sizes not showing).
+  if (process.env.NODE_ENV !== 'production' && productRows[0]) {
+    const first = productRows[0];
+    // eslint-disable-next-line no-console -- intentional debug log per validation requirements
+    console.log('[getWarehouseProducts] first product relational check:', {
+      id: first.id,
+      name: first.name,
+      hasWarehouseInventoryBySize: Array.isArray((first as { warehouse_inventory_by_size?: unknown }).warehouse_inventory_by_size),
+      bySizeLength: (first as { warehouse_inventory_by_size?: unknown[] }).warehouse_inventory_by_size?.length ?? 0,
+    });
+  }
+
+  const ids = productRows.map((r) => r.id);
+  const [quantities, fallbackBySizeData] = await Promise.all([
+    getQuantitiesForProducts(wid, ids),
+    // Fallback: products with no by_size in current warehouse may have data in default warehouse.
+    (async () => {
+      const withEmptyBySize = productRows.filter((row) => {
+        const bySize = (row as { warehouse_inventory_by_size?: BySizeRow[] }).warehouse_inventory_by_size;
+        return !Array.isArray(bySize) || bySize.length === 0;
+      });
+      const emptyIds = withEmptyBySize.map((r) => r.id).filter((id) => id);
+      if (emptyIds.length === 0 || wid === defaultWid) return new Map<string, QuantityBySizeEntry[]>();
+      return getQuantitiesBySizeForProducts(defaultWid, emptyIds);
+    })(),
+  ]);
+
+  const sizeLabelsFromCodes = await (pos ? Promise.resolve([] as { size_code: string; size_label: string }[]) : getSizeCodes());
+  const sizeLabels = sizeLabelsFromCodes.length > 0 ? new Map(sizeLabelsFromCodes.map((s) => [s.size_code, s.size_label])) : new Map<string, string>();
+
+  // Build merged list: use relational warehouse_inventory_by_size when present, else fallback by_size for default warehouse. Normalize into quantityBySize and sizes.
   let merged: Record<string, unknown>[];
   if (pos) {
     merged = productRows.map((row) => {
       const qty = quantities.get(row.id) ?? 0;
-      let bySize = bySizeMap.get(row.id) ?? [];
-      if (bySize.length === 0) bySize = bySizeDefaultMap.get(row.id) ?? [];
-      const quantityBySize = bySize.length > 0 ? bySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity })) : [];
-      return posRowToApi(row, qty, quantityBySize);
+      const bySizeRel = (row as { warehouse_inventory_by_size?: BySizeRow[] }).warehouse_inventory_by_size;
+      let quantityBySize: Array<{ sizeCode: string; quantity: number }>;
+      let sizes: Array<{ size: string; quantity: number }>;
+      if (Array.isArray(bySizeRel) && bySizeRel.length > 0) {
+        const norm = normalizeBySizeFromRelation(bySizeRel);
+        quantityBySize = norm.quantityBySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity }));
+        sizes = norm.sizes;
+      } else {
+        const fallback = fallbackBySizeData.get(row.id) ?? [];
+        quantityBySize = fallback.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity }));
+        sizes = fallback.map((e) => ({ size: sizeLabels.get(e.sizeCode) ?? e.sizeCode, quantity: e.quantity }));
+      }
+      const out = posRowToApi(row, qty, quantityBySize);
+      out.sizes = sizes;
+      return out;
     });
   } else {
     merged = productRows.map((row) => {
       const qty = quantities.get(row.id) ?? 0;
       const isSizedByKind = (row.size_kind ?? (row as { sizeKind?: string }).sizeKind ?? 'na') === 'sized';
-      let bySize = bySizeMap.get(row.id) ?? [];
-      if (bySize.length === 0) bySize = bySizeDefaultMap.get(row.id) ?? [];
-      const quantityBySizeMapped = bySize.map((e) => ({
-        sizeCode: e.sizeCode,
-        sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
-        quantity: e.quantity,
-      }));
-      // Show sizes when product is marked sized or when we have by_size rows (e.g. after edit that wrote by_size but size_kind was missed)
+      const bySizeRel = (row as { warehouse_inventory_by_size?: BySizeRow[] }).warehouse_inventory_by_size;
+      let quantityBySizeMapped: Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>;
+      let sizes: Array<{ size: string; quantity: number }>;
+      if (Array.isArray(bySizeRel) && bySizeRel.length > 0) {
+        const norm = normalizeBySizeFromRelation(bySizeRel);
+        quantityBySizeMapped = norm.quantityBySize;
+        sizes = norm.sizes;
+      } else {
+        const fallback = fallbackBySizeData.get(row.id) ?? [];
+        quantityBySizeMapped = fallback.map((e) => ({
+          sizeCode: e.sizeCode,
+          sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
+          quantity: e.quantity,
+        }));
+        sizes = fallback.map((e) => ({ size: sizeLabels.get(e.sizeCode) ?? e.sizeCode, quantity: e.quantity }));
+      }
       const hasBySizeData = quantityBySizeMapped.length > 0;
       const quantityBySize = (isSizedByKind || hasBySizeData) ? quantityBySizeMapped : undefined;
-      return rowToApi(row, qty, quantityBySize);
+      const out = rowToApi(row, qty, quantityBySize);
+      out.sizes = sizes;
+      return out;
     });
   }
 
@@ -368,7 +433,7 @@ async function createWarehouseProductLegacy(
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
     const quantityBySize = quantityBySizeRaw.map((e) => {
       const code = String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA';
-      return { sizeCode: code, sizeLabel: code, quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)) };
+      return { sizeCode: code, sizeLabel: sizeLabels.get(code) ?? code, quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)) };
     });
     return rowToApi(outRow, qty, quantityBySize);
   }
@@ -509,7 +574,7 @@ async function updateWarehouseProductLegacy(
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
     const quantityBySize = quantityBySizeRaw.map((e) => {
       const code = String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA';
-      return { sizeCode: code, sizeLabel: code, quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)) };
+      return { sizeCode: code, sizeLabel: sizeLabels.get(code) ?? code, quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)) };
     });
     return rowToApi(outRow, qty, quantityBySize);
   }
