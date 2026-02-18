@@ -168,22 +168,25 @@ export async function getWarehouseProducts(
   }
   const ids = productRows.map((r) => r.id);
   const sizedIds = productRows.filter((r) => (r.size_kind ?? 'na') === 'sized').map((r) => r.id);
-  // Parallelize to avoid sequential latency; do NOT per-product getQuantitiesBySize in a loop (N+1 → 10s+ list load)
-  const [quantities, bySizeMap, sizeLabelsList] = await Promise.all([
+  const defaultWid = getDefaultWarehouseId();
+  // Fetch by_size for requested warehouse; when different from default, also fetch default so we can show sizes in list when current warehouse has none
+  const bySizePromise = sizedIds.length > 0 ? getQuantitiesBySizeForProducts(wid, sizedIds) : Promise.resolve(new Map<string, QuantityBySizeEntry[]>());
+  const bySizeDefaultPromise = sizedIds.length > 0 && wid !== defaultWid ? getQuantitiesBySizeForProducts(defaultWid, sizedIds) : Promise.resolve(new Map<string, QuantityBySizeEntry[]>());
+  const [quantities, bySizeMap, bySizeDefaultMap, sizeLabelsList] = await Promise.all([
     getQuantitiesForProducts(wid, ids),
-    sizedIds.length > 0 ? getQuantitiesBySizeForProducts(wid, sizedIds) : Promise.resolve(new Map<string, QuantityBySizeEntry[]>()),
+    bySizePromise,
+    bySizeDefaultPromise,
     pos ? Promise.resolve([] as { size_code: string; size_label: string }[]) : getSizeCodes(),
   ]);
   const sizeLabels = sizeLabelsList.length > 0 ? new Map(sizeLabelsList.map((s) => [s.size_code, s.size_label])) : new Map<string, string>();
 
-  // For sized products, always pass by_size array (from warehouse_inventory_by_size) so list UI shows sizes.
-  // Previously we passed undefined when bySize was empty, and rowToApi omitted quantityBySize → sizes did not show.
+  // For sized products, always pass by_size so list UI shows S/M/L. Use default warehouse's by_size when requested warehouse has none (e.g. Test Product only in default).
   let merged: Record<string, unknown>[];
   if (pos) {
     merged = productRows.map((row) => {
       const qty = quantities.get(row.id) ?? 0;
-      const bySize = bySizeMap.get(row.id);
-      // Always pass array (never undefined) so POS and list UI always get quantityBySize; empty [] when no sizes.
+      let bySize = bySizeMap.get(row.id);
+      if ((!bySize || bySize.length === 0) && (row.size_kind ?? 'na') === 'sized') bySize = bySizeDefaultMap.get(row.id);
       const quantityBySize = bySize && bySize.length > 0 ? bySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity })) : [];
       return posRowToApi(row, qty, quantityBySize);
     });
@@ -191,7 +194,8 @@ export async function getWarehouseProducts(
     merged = productRows.map((row) => {
       const qty = quantities.get(row.id) ?? 0;
       const isSized = (row.size_kind ?? 'na') === 'sized';
-      const bySize = bySizeMap.get(row.id) ?? [];
+      let bySize = bySizeMap.get(row.id) ?? [];
+      if (isSized && bySize.length === 0) bySize = bySizeDefaultMap.get(row.id) ?? [];
       const quantityBySizeMapped = bySize.map((e) => ({
         sizeCode: e.sizeCode,
         sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
