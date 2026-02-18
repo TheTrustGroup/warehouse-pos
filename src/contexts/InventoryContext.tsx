@@ -316,7 +316,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   /** Normalize product from API or localStorage: dates, location, images array, and numeric fields so list and totals are accurate. */
-  /** Explicitly preserve sizeKind and quantityBySize so sizes are never dropped (critical for product list and POS). */
+  /** Always set sizeKind and quantityBySize so Sizes column/card never show blank for One size / Multiple sizes. */
   const normalizeProduct = (p: any): Product =>
     normalizeProductLocation({
       ...p,
@@ -328,8 +328,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
       updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
       expiryDate: p.expiryDate ? new Date(p.expiryDate) : null,
-      ...((p.sizeKind != null || p.size_kind != null) && { sizeKind: (p.sizeKind ?? p.size_kind ?? 'na') as 'na' | 'one_size' | 'sized' }),
-      ...(Array.isArray(p.quantityBySize) && p.quantityBySize.length > 0 && { quantityBySize: p.quantityBySize }),
+      sizeKind: (p.sizeKind ?? p.size_kind ?? 'na') as 'na' | 'one_size' | 'sized',
+      quantityBySize: Array.isArray(p.quantityBySize) ? p.quantityBySize : [],
     });
 
   /**
