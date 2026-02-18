@@ -124,38 +124,32 @@ function bodyToRow(body: Record<string, unknown>, id: string, ts: string): Recor
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 2000;
 
-/** Row from warehouse_inventory_by_size when fetched separately with size_codes join. Supabase may return size_codes as object or single-element array. */
+/** Row from warehouse_inventory_by_size when fetched without embed (no FK to size_codes in DB). */
 type BySizeRow = {
   product_id: string;
   size_code: string;
   quantity: number;
-  size_codes: { size_label: string; size_order: number } | { size_label: string; size_order: number }[] | null;
 };
 
-function sizeCodeOrder(sc: BySizeRow['size_codes']): number {
-  if (!sc) return 0;
-  const one = Array.isArray(sc) ? sc[0] : sc;
-  return one?.size_order ?? 0;
-}
-function sizeCodeLabel(sc: BySizeRow['size_codes'], fallback: string): string {
-  if (!sc) return fallback;
-  const one = Array.isArray(sc) ? sc[0] : sc;
-  return one?.size_label ?? fallback;
-}
+/** Map: size_code -> { size_label, size_order } from size_codes table. */
+type SizeCodeMap = Map<string, { size_label: string; size_order: number }>;
 
-/** Normalize a list of by-size rows (for one product) into quantityBySize and sizes. Sorted by size_order. */
+/** Normalize by-size rows into quantityBySize and sizes. Sorted by size_order from sizeCodeMap; label from map or fallback to size_code. */
 function normalizeBySizeRows(
-  bySizeRows: BySizeRow[] | null | undefined
+  bySizeRows: BySizeRow[] | null | undefined,
+  sizeCodeMap: SizeCodeMap
 ): { quantityBySize: Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>; sizes: Array<{ size: string; quantity: number }> } {
   const list = Array.isArray(bySizeRows) ? bySizeRows : [];
-  const sorted = [...list].sort((a, b) => sizeCodeOrder(a.size_codes) - sizeCodeOrder(b.size_codes));
+  const sorted = [...list].sort(
+    (a, b) => (sizeCodeMap.get(a.size_code)?.size_order ?? 0) - (sizeCodeMap.get(b.size_code)?.size_order ?? 0)
+  );
   const quantityBySize = sorted.map((e) => ({
     sizeCode: e.size_code,
-    sizeLabel: sizeCodeLabel(e.size_codes, e.size_code),
+    sizeLabel: sizeCodeMap.get(e.size_code)?.size_label ?? e.size_code,
     quantity: Number(e.quantity),
   }));
   const sizes = sorted.map((e) => ({
-    size: sizeCodeLabel(e.size_codes, e.size_code),
+    size: sizeCodeMap.get(e.size_code)?.size_label ?? e.size_code,
     quantity: Number(e.quantity),
   }));
   return { quantityBySize, sizes };
@@ -206,10 +200,10 @@ export async function getWarehouseProducts(
 
   const ids = productRows.map((r) => r.id);
 
-  // STEP 2: Fetch warehouse_inventory_by_size separately, scoped by warehouse_id (Supabase does NOT filter nested relations by parent filter).
+  // STEP 2: Fetch warehouse_inventory_by_size separately, scoped by warehouse_id. No size_codes embed (FK was dropped for custom sizes).
   const { data: sizeInventoryRows, error: sizeError } = await supabase
     .from('warehouse_inventory_by_size')
-    .select('product_id, size_code, quantity, size_codes(size_label, size_order)')
+    .select('product_id, size_code, quantity')
     .eq('warehouse_id', wid)
     .in('product_id', ids);
   if (sizeError) throw sizeError;
@@ -231,15 +225,21 @@ export async function getWarehouseProducts(
     sizeInventoryByProduct.set(row.product_id, list);
   }
 
-  const quantities = await getQuantitiesForProducts(wid, ids);
+  const [quantities, sizeCodesList] = await Promise.all([
+    getQuantitiesForProducts(wid, ids),
+    pos ? Promise.resolve([] as { size_code: string; size_label: string; size_order: number }[]) : getSizeCodes(),
+  ]);
+  const sizeCodeMap: SizeCodeMap = new Map(
+    sizeCodesList.map((s) => [s.size_code, { size_label: s.size_label, size_order: s.size_order }])
+  );
 
-  // STEP 3: Merge inventory into products by product_id; sizes from size_codes.size_label + quantity, sorted by size_order.
+  // STEP 3: Merge inventory into products by product_id; sizes from sizeCodeMap (label + order), sorted by size_order.
   let merged: Record<string, unknown>[];
   if (pos) {
     merged = productRows.map((row) => {
       const qty = quantities.get(row.id) ?? 0;
       const bySizeRows = sizeInventoryByProduct.get(row.id) ?? [];
-      const norm = normalizeBySizeRows(bySizeRows);
+      const norm = normalizeBySizeRows(bySizeRows, sizeCodeMap);
       const quantityBySize = norm.quantityBySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity }));
       const sizes = norm.sizes;
       const out = posRowToApi(row, qty, quantityBySize);
@@ -251,7 +251,7 @@ export async function getWarehouseProducts(
       const qty = quantities.get(row.id) ?? 0;
       const isSizedByKind = (row.size_kind ?? (row as { sizeKind?: string }).sizeKind ?? 'na') === 'sized';
       const bySizeRows = sizeInventoryByProduct.get(row.id) ?? [];
-      const norm = normalizeBySizeRows(bySizeRows);
+      const norm = normalizeBySizeRows(bySizeRows, sizeCodeMap);
       const quantityBySizeMapped = norm.quantityBySize;
       const sizes = norm.sizes;
       const hasBySizeData = quantityBySizeMapped.length > 0;
