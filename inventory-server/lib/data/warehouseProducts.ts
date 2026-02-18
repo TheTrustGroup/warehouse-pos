@@ -8,7 +8,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getDefaultWarehouseId } from './warehouses';
 import { getQuantitiesForProducts, getQuantity, ensureQuantity, setQuantity } from './warehouseInventory';
-import { getQuantitiesBySize, getQuantitiesBySizeForProducts, setQuantitiesBySize, type QuantityBySizeEntry } from './warehouseInventoryBySize';
+import { getQuantitiesBySize, getQuantitiesBySizeForProducts, getProductIdsWithBySizeData, setQuantitiesBySize, type QuantityBySizeEntry } from './warehouseInventoryBySize';
 import { getSizeCodes } from './sizeCodes';
 
 export interface ListProductsOptions {
@@ -64,7 +64,7 @@ function rowToApi(
   quantity: number = 0,
   quantityBySize?: Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>
 ): Record<string, unknown> {
-  const sizeKind = (row.size_kind ?? 'na') as string;
+  const sizeKind = (row.size_kind ?? (row as { sizeKind?: string }).sizeKind ?? 'na') as string;
   const out: Record<string, unknown> = {
     id: row.id,
     sku: row.sku,
@@ -167,17 +167,19 @@ export async function getWarehouseProducts(
     return { data: [], total: count ?? 0 };
   }
   const ids = productRows.map((r) => r.id);
-  const sizedIds = productRows.filter((r) => (r.size_kind ?? 'na') === 'sized').map((r) => r.id);
   const defaultWid = getDefaultWarehouseId();
-  // Fetch by_size for requested warehouse; when different from default, also fetch default so we can show sizes in list when current warehouse has none
-  const bySizePromise = sizedIds.length > 0 ? getQuantitiesBySizeForProducts(wid, sizedIds) : Promise.resolve(new Map<string, QuantityBySizeEntry[]>());
-  const bySizeDefaultPromise = sizedIds.length > 0 && wid !== defaultWid ? getQuantitiesBySizeForProducts(defaultWid, sizedIds) : Promise.resolve(new Map<string, QuantityBySizeEntry[]>());
-  const [quantities, bySizeMap, bySizeDefaultMap, sizeLabelsList] = await Promise.all([
+  // Include products marked sized in DB (size_kind or sizeKind) and products that have by_size rows (covers legacy or missed size_kind updates)
+  const sizedByKind = productRows.filter((r) => (r.size_kind ?? (r as { sizeKind?: string }).sizeKind ?? 'na') === 'sized').map((r) => r.id);
+  const warehouseIdsForBySize = wid !== defaultWid ? [wid, defaultWid] : [wid];
+  const [idsWithBySizeData, quantities, sizeLabelsList] = await Promise.all([
+    getProductIdsWithBySizeData(warehouseIdsForBySize, ids),
     getQuantitiesForProducts(wid, ids),
-    bySizePromise,
-    bySizeDefaultPromise,
     pos ? Promise.resolve([] as { size_code: string; size_label: string }[]) : getSizeCodes(),
   ]);
+  const sizedIds = Array.from(new Set([...sizedByKind, ...idsWithBySizeData]));
+  const bySizePromise = sizedIds.length > 0 ? getQuantitiesBySizeForProducts(wid, sizedIds) : Promise.resolve(new Map<string, QuantityBySizeEntry[]>());
+  const bySizeDefaultPromise = sizedIds.length > 0 && wid !== defaultWid ? getQuantitiesBySizeForProducts(defaultWid, sizedIds) : Promise.resolve(new Map<string, QuantityBySizeEntry[]>());
+  const [bySizeMap, bySizeDefaultMap] = await Promise.all([bySizePromise, bySizeDefaultPromise]);
   const sizeLabels = sizeLabelsList.length > 0 ? new Map(sizeLabelsList.map((s) => [s.size_code, s.size_label])) : new Map<string, string>();
 
   // For sized products, always pass by_size so list UI shows S/M/L. Use default warehouse's by_size when requested warehouse has none (e.g. Test Product only in default).
@@ -185,23 +187,25 @@ export async function getWarehouseProducts(
   if (pos) {
     merged = productRows.map((row) => {
       const qty = quantities.get(row.id) ?? 0;
-      let bySize = bySizeMap.get(row.id);
-      if ((!bySize || bySize.length === 0) && (row.size_kind ?? 'na') === 'sized') bySize = bySizeDefaultMap.get(row.id);
-      const quantityBySize = bySize && bySize.length > 0 ? bySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity })) : [];
+      let bySize = bySizeMap.get(row.id) ?? [];
+      if (bySize.length === 0) bySize = bySizeDefaultMap.get(row.id) ?? [];
+      const quantityBySize = bySize.length > 0 ? bySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity })) : [];
       return posRowToApi(row, qty, quantityBySize);
     });
   } else {
     merged = productRows.map((row) => {
       const qty = quantities.get(row.id) ?? 0;
-      const isSized = (row.size_kind ?? 'na') === 'sized';
+      const isSizedByKind = (row.size_kind ?? (row as { sizeKind?: string }).sizeKind ?? 'na') === 'sized';
       let bySize = bySizeMap.get(row.id) ?? [];
-      if (isSized && bySize.length === 0) bySize = bySizeDefaultMap.get(row.id) ?? [];
+      if (bySize.length === 0) bySize = bySizeDefaultMap.get(row.id) ?? [];
       const quantityBySizeMapped = bySize.map((e) => ({
         sizeCode: e.sizeCode,
         sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
         quantity: e.quantity,
       }));
-      const quantityBySize = isSized ? quantityBySizeMapped : (quantityBySizeMapped.length > 0 ? quantityBySizeMapped : undefined);
+      // Show sizes when product is marked sized or when we have by_size rows (e.g. after edit that wrote by_size but size_kind was missed)
+      const hasBySizeData = quantityBySizeMapped.length > 0;
+      const quantityBySize = (isSizedByKind || hasBySizeData) ? quantityBySizeMapped : undefined;
       return rowToApi(row, qty, quantityBySize);
     });
   }
@@ -249,8 +253,9 @@ export async function getWarehouseProductById(id: string, warehouseId?: string):
   const row = data as WarehouseProductRow;
   const wid = (warehouseId?.trim?.() && warehouseId) ? warehouseId : getDefaultWarehouseId();
   const qty = await getQuantity(wid, id);
-  if ((row.size_kind ?? 'na') === 'sized') {
-    const bySize = await getQuantitiesBySize(wid, id);
+  const isSizedByKind = (row.size_kind ?? (row as { sizeKind?: string }).sizeKind ?? 'na') === 'sized';
+  const bySize = await getQuantitiesBySize(wid, id);
+  if (isSizedByKind || bySize.length > 0) {
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
     const quantityBySize = bySize.map((e) => ({
       sizeCode: e.sizeCode,
@@ -388,6 +393,8 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
   const hasSized = Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0;
   const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: currentVersion + 1 }, id, ts);
 
+  // When client sends quantityBySize with rows, always persist size_kind = 'sized' so list fetch includes product in sizedIds and shows sizes.
+  if (hasSized) (row as { size_kind: string }).size_kind = 'sized';
   // Structural safeguard: when we are not updating by_size (hasSized is false), never overwrite size_kind with 'na' for a product that is already sized (avoids partial updates wiping sizes).
   const existingSizeKind = (existing as { sizeKind?: string }).sizeKind ?? (existing as { size_kind?: string }).size_kind;
   if (!hasSized && (existingSizeKind === 'sized' || existingSizeKind === 'one_size') && (row as { size_kind?: string }).size_kind === 'na') {
@@ -453,7 +460,7 @@ async function updateWarehouseProductLegacy(
   const supabase = getSupabase();
   const nextVersion = currentVersion + 1;
   const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: nextVersion }, id, ts);
-  // Preserve size_kind when not updating sizes (same safeguard as atomic path)
+  if (hasSized) (row as { size_kind: string }).size_kind = 'sized';
   const existingSizeKind = (existing as { sizeKind?: string }).sizeKind ?? (existing as { size_kind?: string }).size_kind;
   if (!hasSized && (existingSizeKind === 'sized' || existingSizeKind === 'one_size') && (row as { size_kind?: string }).size_kind === 'na') {
     (row as { size_kind: string }).size_kind = existingSizeKind as string;

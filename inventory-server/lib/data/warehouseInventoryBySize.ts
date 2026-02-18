@@ -65,6 +65,29 @@ export async function getQuantitiesBySizeForProducts(
 }
 
 /**
+ * Return product IDs that have at least one row in warehouse_inventory_by_size for the given warehouse(s).
+ * Used so list can show sizes even when warehouse_products.size_kind was not set to 'sized' (e.g. legacy data or missed update).
+ */
+export async function getProductIdsWithBySizeData(
+  warehouseIds: string[],
+  productIds: string[]
+): Promise<Set<string>> {
+  if (warehouseIds.length === 0 || productIds.length === 0) return new Set();
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('product_id')
+    .in('warehouse_id', warehouseIds)
+    .in('product_id', productIds);
+  if (error) throw error;
+  const set = new Set<string>();
+  for (const row of (data ?? []) as { product_id: string }[]) {
+    set.add(row.product_id);
+  }
+  return set;
+}
+
+/**
  * Set quantities by size for (warehouse, product). Replaces all rows for this (warehouse, product).
  * Does NOT update warehouse_inventory total; caller must set that to sum(quantity) for POS.
  */

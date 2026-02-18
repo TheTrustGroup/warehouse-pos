@@ -43,7 +43,8 @@ export function ProductSizes({
 }: ProductSizesProps) {
   const kind = (sizeKind ?? 'na') as string;
   const list = normalizeQuantityBySize(quantityBySize);
-  const hasSizes = kind === 'sized' && list.length > 0;
+  /** Show pills when we have per-size data (from API or cache), so sizes display even if sizeKind was not persisted as 'sized'. */
+  const hasSizes = list.length > 0;
   const oneSize = kind === 'one_size';
 
   const content = hasSizes ? (
