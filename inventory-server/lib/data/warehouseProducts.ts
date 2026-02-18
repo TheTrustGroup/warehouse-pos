@@ -156,6 +156,7 @@ function normalizeBySizeRows(
 }
 
 /** GET warehouse products with optional pagination, search, and filters. Quantity is for the given warehouse. */
+/** Prefers DB RPC get_products_with_sizes when available (single source of truth for sizes); falls back to two-query + merge. */
 export async function getWarehouseProducts(
   warehouseId?: string,
   options: ListProductsOptions = {}
@@ -170,7 +171,48 @@ export async function getWarehouseProducts(
   const outOfStock = options.outOfStock === true;
   const pos = options.pos === true;
 
-  // STEP 1: Fetch products only (no nested relation — warehouse_products is global; inventory is per-warehouse).
+  // Last-resort path: DB RPC returns products with sizes in one shot (no API merge; sizes guaranteed from DB).
+  const { data: rpcRows, error: rpcError } = await supabase.rpc('get_products_with_sizes', {
+    p_warehouse_id: wid,
+    p_limit: limit,
+    p_offset: offset,
+    p_search: q || null,
+    p_category: category || null,
+  });
+  if (!rpcError && Array.isArray(rpcRows) && rpcRows.length > 0) {
+    const row = rpcRows[0] as { data?: unknown[]; total?: number };
+    let data: Record<string, unknown>[] = Array.isArray(row.data) ? (row.data as Record<string, unknown>[]) : [];
+    const total = typeof row.total === 'number' ? row.total : data.length;
+    if (pos && data.length > 0) {
+      data = data.map((p) => {
+        const quantityBySize = (p.quantityBySize as Array<{ sizeCode: string; quantity: number }>) ?? [];
+        return {
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          barcode: p.barcode,
+          sellingPrice: p.sellingPrice,
+          reorderLevel: p.reorderLevel,
+          quantity: p.quantity,
+          updatedAt: p.updatedAt,
+          quantityBySize,
+          sizes: (p.sizes as Array<{ size: string; quantity: number }>) ?? [],
+        };
+      });
+    }
+    if (lowStock || outOfStock) {
+      data = data.filter((p) => {
+        const qty = Number((p as { quantity?: number }).quantity ?? 0);
+        const reorder = Number((p as { reorderLevel?: number }).reorderLevel ?? 0);
+        if (outOfStock && qty === 0) return true;
+        if (lowStock && qty > 0 && qty <= reorder) return true;
+        return false;
+      });
+    }
+    return { data, total: total ?? undefined };
+  }
+
+  // Fallback: two-query + merge (when RPC not deployed or errors).
   const listSelect = pos
     ? 'id, name, sku, barcode, selling_price, reorder_level, updated_at, size_kind'
     : '*';
@@ -200,7 +242,6 @@ export async function getWarehouseProducts(
 
   const ids = productRows.map((r) => r.id);
 
-  // STEP 2: Fetch warehouse_inventory_by_size separately, scoped by warehouse_id. No size_codes embed (FK was dropped for custom sizes).
   const { data: sizeInventoryRows, error: sizeError } = await supabase
     .from('warehouse_inventory_by_size')
     .select('product_id, size_code, quantity')
@@ -209,7 +250,6 @@ export async function getWarehouseProducts(
   if (sizeError) throw sizeError;
   const sizeInventory: BySizeRow[] = (sizeInventoryRows ?? []) as unknown as BySizeRow[];
 
-  // STEP 4: Diagnostic logging — verify warehouse filter changes the dataset when switching warehouse.
   if (process.env.NODE_ENV !== 'production') {
     // eslint-disable-next-line no-console -- intentional: verify warehouse filter changes size inventory
     console.log('[getWarehouseProducts] Selected Warehouse:', wid);
@@ -217,7 +257,6 @@ export async function getWarehouseProducts(
     console.log('[getWarehouseProducts] Size inventory row count:', sizeInventory.length, sizeInventory.length ? '(sample product_id: ' + sizeInventory[0].product_id + ')' : '');
   }
 
-  // Build map: product_id -> by-size rows (for merge).
   const sizeInventoryByProduct = new Map<string, BySizeRow[]>();
   for (const row of sizeInventory) {
     const list = sizeInventoryByProduct.get(row.product_id) ?? [];
@@ -233,7 +272,6 @@ export async function getWarehouseProducts(
     sizeCodesList.map((s) => [s.size_code, { size_label: s.size_label, size_order: s.size_order }])
   );
 
-  // STEP 3: Merge inventory into products by product_id; sizes from sizeCodeMap (label + order), sorted by size_order.
   let merged: Record<string, unknown>[];
   if (pos) {
     merged = productRows.map((row) => {
