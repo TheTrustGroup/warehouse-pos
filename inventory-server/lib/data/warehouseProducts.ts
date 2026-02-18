@@ -188,13 +188,13 @@ export async function getWarehouseProducts(
       const qty = quantities.get(row.id) ?? 0;
       const bySize = bySizeMap.get(row.id);
       const quantityBySize =
-        bySize && bySize.length > 0
-          ? bySize.map((e) => ({
-              sizeCode: e.sizeCode,
-              sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
-              quantity: e.quantity,
-            }))
-          : undefined;
+          bySize && bySize.length > 0
+            ? bySize.map((e) => ({
+                sizeCode: e.sizeCode,
+                sizeLabel: e.sizeCode,
+                quantity: e.quantity,
+              }))
+            : undefined;
       return rowToApi(row, qty, quantityBySize);
     });
   }
@@ -248,7 +248,7 @@ export async function getWarehouseProductById(id: string, warehouseId?: string):
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
     const quantityBySize = bySize.map((e) => ({
       sizeCode: e.sizeCode,
-      sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
+      sizeLabel: e.sizeCode,
       quantity: e.quantity,
     }));
     return rowToApi(row, qty, quantityBySize);
@@ -338,11 +338,10 @@ async function createWarehouseProductLegacy(
     : Number(body.quantity) ?? 0;
   if (hasSized && quantityBySizeRaw) {
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
-    const quantityBySize = quantityBySizeRaw.map((e) => ({
-      sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
-      sizeLabel: sizeLabels.get(String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase()) ?? e.sizeCode,
-      quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
-    }));
+    const quantityBySize = quantityBySizeRaw.map((e) => {
+      const code = String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA';
+      return { sizeCode: code, sizeLabel: code, quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)) };
+    });
     return rowToApi(outRow, qty, quantityBySize);
   }
   return rowToApi(outRow, qty);
@@ -464,11 +463,10 @@ async function updateWarehouseProductLegacy(
   const outRow = data as WarehouseProductRow;
   if (hasSized && quantityBySizeRaw && preservedQty == null) {
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
-    const quantityBySize = quantityBySizeRaw.map((e) => ({
-      sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
-      sizeLabel: sizeLabels.get(String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase()) ?? e.sizeCode,
-      quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
-    }));
+    const quantityBySize = quantityBySizeRaw.map((e) => {
+      const code = String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA';
+      return { sizeCode: code, sizeLabel: code, quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)) };
+    });
     return rowToApi(outRow, qty, quantityBySize);
   }
   return rowToApi(outRow, qty);

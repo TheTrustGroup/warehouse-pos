@@ -229,13 +229,13 @@ export function ProductTableView({
                   </td>
                   <td className="px-4 py-3 align-middle">
                     {product.sizeKind === 'one_size' ? (
-                      <span className="text-sm text-slate-500">One size</span>
+                      <span className="text-sm text-slate-600">One size</span>
                     ) : (product.sizeKind === 'sized' || (Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0)) ? (
                       Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0 ? (
-                        <div className="text-sm text-slate-700 flex flex-wrap gap-x-2 gap-y-1">
+                        <div className="flex flex-wrap gap-1.5">
                           {product.quantityBySize.map((s) => (
-                            <span key={s.sizeCode} className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-800">
-                              {s.sizeLabel ?? s.sizeCode}: <strong className="ml-0.5">{s.quantity}</strong>
+                            <span key={s.sizeCode} className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 text-sm font-medium">
+                              {s.sizeLabel ?? s.sizeCode} <span className="text-slate-500 font-normal ml-0.5">×{s.quantity}</span>
                             </span>
                           ))}
                         </div>

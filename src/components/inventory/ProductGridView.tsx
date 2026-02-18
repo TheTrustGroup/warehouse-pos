@@ -76,12 +76,14 @@ export function ProductGridView({
     return { label: 'In Stock', color: 'border-green-200 bg-green-50' };
   };
 
-  /* Grid: consistent gap-5, no animation delay (calm, predictable) */
+  /* Grid: consistent gap, fixed card structure (Apple-like: clear hierarchy, no overlap) */
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {products.map((product) => {
         const status = getStockStatus(product);
         const isSelected = selectedIds.includes(product.id);
+        const hasSizes = product.sizeKind === 'sized' && Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0;
+        const oneSize = product.sizeKind === 'one_size';
 
         return (
           <motion.div
@@ -90,7 +92,7 @@ export function ProductGridView({
             {...hover}
             {...morph}
             onClick={(e) => handleCardClick(e, product.id)}
-            className={`solid-card group cursor-pointer relative overflow-hidden min-h-[380px] ${
+            className={`solid-card rounded-xl group cursor-pointer relative overflow-hidden flex flex-col min-h-[400px] ${
               canSelect && isSelected ? 'ring-2 ring-primary-500 ring-offset-2' : ''
             }`}
           >
@@ -169,61 +171,81 @@ export function ProductGridView({
                 )}
               </div>
             )}
-            {Array.isArray(product.images) && product.images[0] ? (
-              <img 
-                src={product.images[0]} 
-                alt={product.name}
-                loading="lazy"
-                className="w-full h-40 object-cover rounded-xl mb-4 group-hover:scale-105 transition-transform duration-300 shadow-md"
-              />
-            ) : (
-              <div className="w-full h-48 bg-slate-100 rounded-lg mb-4 flex items-center justify-center border border-slate-200/50">
-                <Package className="w-16 h-16 text-slate-400" />
-              </div>
-            )}
-
-            <div className="space-y-3">
-              <div>
-                <h3 className="font-semibold text-lg text-slate-900 mb-1.5">{product.name}</h3>
-                <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed">{product.description}</p>
-              </div>
-
-              <div className="flex items-center justify-between text-sm py-2 px-3 bg-slate-50/80 rounded-lg border border-slate-200/50">
-                <span className="text-slate-500 font-medium">SKU:</span>
-                <span className="font-semibold text-slate-900">{product.sku}</span>
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-2xl font-bold gradient-text tracking-tight">
-                  {formatCurrency(product.sellingPrice)}
-                </span>
-                <span className={`badge ${
-                  status.label === 'In Stock'
-                    ? 'badge-success'
-                    : status.label === 'Low Stock'
-                    ? 'badge-warning'
-                    : 'badge-error'
-                }`}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                  {Number(product.quantity ?? 0) || 0} left
-                </span>
-              </div>
-              {(product.sizeKind === 'sized' || (product.quantityBySize?.length)) && product.quantityBySize && product.quantityBySize.length > 0 && (
-                <div className="text-xs text-slate-500 flex flex-wrap gap-x-2 gap-y-0.5">
-                  {product.quantityBySize.map((s) => (
-                    <span key={s.sizeCode}>{s.sizeLabel ?? s.sizeCode}: {s.quantity}</span>
-                  ))}
+            {/* Fixed aspect image area — consistent card height */}
+            <div className="w-full aspect-square max-h-52 bg-slate-100 rounded-t-xl overflow-hidden shrink-0">
+              {Array.isArray(product.images) && product.images[0] ? (
+                <img
+                  src={product.images[0]}
+                  alt={product.name}
+                  loading="lazy"
+                  className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center border-0 border-b border-slate-200/50">
+                  <Package className="w-14 h-14 text-slate-400" />
                 </div>
               )}
+            </div>
+
+            <div className="p-4 flex flex-col flex-1 min-h-0">
+              <h3 className="font-semibold text-slate-900 truncate mb-0.5" title={product.name}>{product.name}</h3>
+              {product.description ? (
+                <p className="text-sm text-slate-500 line-clamp-2 leading-snug mb-3">{product.description}</p>
+              ) : (
+                <div className="mb-3" />
+              )}
+
+              <div className="flex items-center justify-between text-sm py-2 px-3 rounded-lg bg-slate-50/80 border border-slate-200/50 mb-3">
+                <span className="text-slate-500">SKU</span>
+                <span className="font-medium text-slate-900 tabular-nums">{product.sku}</span>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <span className="text-xl font-bold text-slate-900 tracking-tight">
+                  {formatCurrency(product.sellingPrice)}
+                </span>
+                <span className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium ${
+                  status.label === 'In Stock'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                    : status.label === 'Low Stock'
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                    : 'bg-red-50 text-red-700 border border-red-200/60'
+                }`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-current" aria-hidden />
+                  {Number(product.quantity ?? 0) || 0} in stock
+                </span>
+              </div>
+
+              {/* Size row: always show so list reflects size type */}
+              <div className="pt-2 border-t border-slate-200/60">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Size</p>
+                {hasSizes ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {product.quantityBySize!.map((s) => (
+                      <span
+                        key={s.sizeCode}
+                        className="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-slate-800 text-xs font-medium"
+                      >
+                        {s.sizeLabel ?? s.sizeCode} <span className="text-slate-500 font-normal ml-0.5">×{s.quantity}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : oneSize ? (
+                  <span className="text-sm text-slate-600">One size</span>
+                ) : (
+                  <span className="text-sm text-slate-400">—</span>
+                )}
+              </div>
+
               {status.label !== 'In Stock' && (
-                <div className="flex items-center gap-2 text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
+                <div className="flex items-center gap-2 text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200/60 mt-3">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                   <span className="text-xs font-semibold">{status.label}</span>
                 </div>
               )}
 
               {(canEdit || canDelete) && (
-                <div className="flex gap-2 pt-3 border-t border-slate-200/50">
+                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200/60">
                   {canEdit && (
                     <Button
                       type="button"
