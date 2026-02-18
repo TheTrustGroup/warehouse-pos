@@ -94,6 +94,7 @@ begin
       where wibs.warehouse_id = p_warehouse_id and wibs.product_id = wp.id
     ) sizes_json on true
   )
+  -- When product has quantity but no rows in warehouse_inventory_by_size (e.g. table added later), show "One size: N" so Size column is never empty.
   select jsonb_agg(
     jsonb_build_object(
       'id', id,
@@ -116,8 +117,16 @@ begin
       'updatedAt', updated_at,
       'version', version,
       'sizeKind', size_kind,
-      'quantityBySize', coalesce(quantity_by_size, '[]'::jsonb),
-      'sizes', coalesce(sizes_arr, '[]'::jsonb)
+      'quantityBySize', case
+        when coalesce(quantity_by_size, '[]'::jsonb) = '[]'::jsonb and quantity > 0 then
+          jsonb_build_array(jsonb_build_object('sizeCode', 'One size', 'sizeLabel', 'One size', 'quantity', quantity))
+        else coalesce(quantity_by_size, '[]'::jsonb)
+      end,
+      'sizes', case
+        when coalesce(sizes_arr, '[]'::jsonb) = '[]'::jsonb and quantity > 0 then
+          jsonb_build_array(jsonb_build_object('size', 'One size', 'quantity', quantity))
+        else coalesce(sizes_arr, '[]'::jsonb)
+      end
     )
   ) into v_products
   from with_inv;

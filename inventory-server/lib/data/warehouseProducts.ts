@@ -171,7 +171,7 @@ export async function getWarehouseProducts(
   const outOfStock = options.outOfStock === true;
   const pos = options.pos === true;
 
-  // Last-resort path: DB RPC returns products with sizes in one shot (no API merge; sizes guaranteed from DB).
+  // Brute-force: only path that can return list with sizes is the DB RPC (no PostgREST embed = no PGRST200).
   const { data: rpcRows, error: rpcError } = await supabase.rpc('get_products_with_sizes', {
     p_warehouse_id: wid,
     p_limit: limit,
@@ -179,6 +179,17 @@ export async function getWarehouseProducts(
     p_search: q || null,
     p_category: category || null,
   });
+
+  const rpcMissing =
+    rpcError &&
+    (rpcError.code === '42883' ||
+      /function.*does not exist|could not find the function|relation.*does not exist/i.test(String(rpcError.message)));
+  if (rpcMissing) {
+    throw new Error(
+      'Product list requires DB migration. In Supabase SQL Editor run: inventory-server/supabase/migrations/20250218100000_get_products_with_sizes_rpc.sql'
+    );
+  }
+
   if (!rpcError && Array.isArray(rpcRows) && rpcRows.length > 0) {
     const row = rpcRows[0] as { data?: unknown[]; total?: number };
     let data: Record<string, unknown>[] = Array.isArray(row.data) ? (row.data as Record<string, unknown>[]) : [];
@@ -212,7 +223,7 @@ export async function getWarehouseProducts(
     return { data, total: total ?? undefined };
   }
 
-  // Fallback: two-query + merge (when RPC not deployed or errors).
+  // Fallback only when RPC exists but returned an error other than "missing" (e.g. timeout). No embed on by_size.
   const listSelect = pos
     ? 'id, name, sku, barcode, selling_price, reorder_level, updated_at, size_kind'
     : '*';
