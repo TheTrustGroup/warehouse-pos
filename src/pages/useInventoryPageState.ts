@@ -23,7 +23,7 @@ export function useInventoryPageState() {
   const { hasPermission } = useAuth();
   const { currentWarehouse, currentWarehouseId, setCurrentWarehouseId, warehouses, isWarehouseBoundToSession } = useWarehouse();
   const { showToast } = useToast();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isSyncing, setIsSyncing] = useState(false);
   const [undoStack, setUndoStack] = useState<Array<{ productId: string; at: number }>>([]);
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
@@ -39,10 +39,18 @@ export function useInventoryPageState() {
   useEffect(() => {
     const q = searchParams.get('q');
     const filterParam = searchParams.get('filter');
+    const action = searchParams.get('action');
     if (q) setSearchQuery(q);
     if (filterParam === 'lowStock') setFilters({ lowStock: true });
     else if (filterParam === 'outOfStock') setFilters({ outOfStock: true });
-  }, [searchParams]);
+    if (action === 'add') {
+      setEditingProduct(null);
+      setIsModalOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('action');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Silent refresh on mount so we don't show "Loading products..." again (CriticalDataContext already ran phase 2).
   useEffect(() => {
