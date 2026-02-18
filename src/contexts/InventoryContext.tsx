@@ -354,7 +354,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setError(null);
     }
     try {
-      if (silent) setBackgroundRefreshing(true);
+      if (!silent) {
+        if (!cacheValid) setBackgroundRefreshing(true);
+      }
       if (!silent && !cacheValid) {
         setIsLoading(true);
         setError(null);
@@ -478,15 +480,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           }
         }
         listToSet = listToSet.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
-        // During silent refresh, skip setState when list is equivalent to avoid list jitter on mobile
+        // During silent refresh, skip setState when list is equivalent (order-independent) to avoid list jitter on mobile
         const current = productsRef.current;
-        const sameLength = current.length === listToSet.length;
-        const sameIdsOrder = sameLength && listToSet.every((p, i) => current[i]?.id === p.id);
-        const sameData = sameIdsOrder && listToSet.every((p, i) => {
-          const a = current[i];
+        const currentById = new Map(current.map((p) => [p.id, p]));
+        const sameIds = current.length === listToSet.length && listToSet.every((p) => currentById.has(p.id));
+        const sameData = sameIds && listToSet.every((p) => {
+          const a = currentById.get(p.id);
           if (!a) return false;
-          const aUtc = a.updatedAt instanceof Date ? a.updatedAt.getTime() : 0;
-          const bUtc = p.updatedAt instanceof Date ? p.updatedAt.getTime() : 0;
+          const aUtc = a.updatedAt instanceof Date ? a.updatedAt.getTime() : Number(a.updatedAt) || 0;
+          const bUtc = p.updatedAt instanceof Date ? p.updatedAt.getTime() : Number(p.updatedAt) || 0;
           if (aUtc !== bUtc || Number(a.quantity ?? 0) !== Number(p.quantity ?? 0)) return false;
           if ((a.sizeKind ?? 'na') !== (p.sizeKind ?? 'na')) return false;
           const aSizes = Array.isArray(a.quantityBySize) ? a.quantityBySize : [];

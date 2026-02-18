@@ -228,16 +228,20 @@ export function ProductTableView({
                     </div>
                   </td>
                   <td className="px-4 py-3 align-middle">
-                    {(product.sizeKind === 'sized' || (Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0)) ? (
-                      <div className="text-sm text-slate-700 flex flex-wrap gap-x-2 gap-y-1">
-                        {product.quantityBySize!.map((s) => (
-                          <span key={s.sizeCode} className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-800">
-                            {s.sizeLabel ?? s.sizeCode}: <strong className="ml-0.5">{s.quantity}</strong>
-                          </span>
-                        ))}
-                      </div>
-                    ) : product.sizeKind === 'one_size' ? (
+                    {product.sizeKind === 'one_size' ? (
                       <span className="text-sm text-slate-500">One size</span>
+                    ) : (product.sizeKind === 'sized' || (Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0)) ? (
+                      Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0 ? (
+                        <div className="text-sm text-slate-700 flex flex-wrap gap-x-2 gap-y-1">
+                          {product.quantityBySize.map((s) => (
+                            <span key={s.sizeCode} className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-800">
+                              {s.sizeLabel ?? s.sizeCode}: <strong className="ml-0.5">{s.quantity}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-slate-500">Sized</span>
+                      )
                     ) : (
                       <span className="text-sm text-slate-400">—</span>
                     )}
