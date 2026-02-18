@@ -364,6 +364,12 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
   const hasSized = Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0;
   const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: currentVersion + 1 }, id, ts);
 
+  // Structural safeguard: when we are not updating by_size (hasSized is false), never overwrite size_kind with 'na' for a product that is already sized (avoids partial updates wiping sizes).
+  const existingSizeKind = (existing as { sizeKind?: string }).sizeKind ?? (existing as { size_kind?: string }).size_kind;
+  if (!hasSized && (existingSizeKind === 'sized' || existingSizeKind === 'one_size') && (row as { size_kind?: string }).size_kind === 'na') {
+    (row as { size_kind: string }).size_kind = existingSizeKind as string;
+  }
+
   const supabase = getSupabase();
   let pQuantity = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
   let pQuantityBySize =
@@ -423,6 +429,11 @@ async function updateWarehouseProductLegacy(
   const supabase = getSupabase();
   const nextVersion = currentVersion + 1;
   const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: nextVersion }, id, ts);
+  // Preserve size_kind when not updating sizes (same safeguard as atomic path)
+  const existingSizeKind = (existing as { sizeKind?: string }).sizeKind ?? (existing as { size_kind?: string }).size_kind;
+  if (!hasSized && (existingSizeKind === 'sized' || existingSizeKind === 'one_size') && (row as { size_kind?: string }).size_kind === 'na') {
+    (row as { size_kind: string }).size_kind = existingSizeKind as string;
+  }
   const { data, error } = await supabase
     .from(TABLE)
     .update({ ...row, version: nextVersion })

@@ -1,4 +1,5 @@
 -- Seed: Main Store (store) + DC (its warehouse); Main town (store + warehouse).
+-- Reminder: DC and Main Store are the same location; Main Town is the separate location.
 -- POS logins (see POS_CREDENTIALS.md):
 --   Main Store/DC: cashier@extremedeptkidz.com
 --   Main Town:     maintown_cashier@extremedeptkidz.com
