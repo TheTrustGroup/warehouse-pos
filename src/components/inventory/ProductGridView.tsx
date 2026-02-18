@@ -79,7 +79,12 @@ export function ProductGridView({
   /* Grid: consistent gap-5, no animation delay (calm, predictable) */
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-      {products.map((product) => {
+      {products.map((product, index) => {
+        // #region agent log
+        if (index === 0 && product) {
+          fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProductGridView.tsx:render',message:'Product list item (first)',data:{productId:product.id,sizeKind:product.sizeKind,quantityBySizeLength:Array.isArray(product.quantityBySize)?product.quantityBySize.length:0,hasQuantityBySize:Array.isArray(product.quantityBySize)&&(product.quantityBySize?.length??0)>0},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+        }
+        // #endregion
         const status = getStockStatus(product);
         const isSelected = selectedIds.includes(product.id);
 

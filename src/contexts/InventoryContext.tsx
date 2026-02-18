@@ -311,6 +311,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   /** Normalize product from API or localStorage: dates, location, images array, and numeric fields so list and totals are accurate. */
+  /** Explicitly preserve sizeKind and quantityBySize so sizes are never dropped (critical for product list and POS). */
   const normalizeProduct = (p: any): Product =>
     normalizeProductLocation({
       ...p,
@@ -322,6 +323,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
       updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
       expiryDate: p.expiryDate ? new Date(p.expiryDate) : null,
+      ...(p.sizeKind != null && { sizeKind: p.sizeKind }),
+      ...(Array.isArray(p.quantityBySize) && p.quantityBySize.length > 0 && { quantityBySize: p.quantityBySize }),
     });
 
   /**
@@ -399,7 +402,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           setError(parsed.message);
           return;
         }
+        // #region agent log
+        const rawFirst = parsed.items[0] as { quantityBySize?: unknown[]; sizeKind?: string } | undefined;
+        fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:loadProducts',message:'List API raw (before normalize)',data:{rawFirstQuantityBySizeLength:Array.isArray(rawFirst?.quantityBySize)?rawFirst?.quantityBySize?.length:0,rawFirstSizeKind:rawFirst?.sizeKind},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
         const apiProducts = parsed.items.map((p) => normalizeProduct(p));
+        // #region agent log
+        const first = apiProducts[0];
+        const firstSized = apiProducts.find((p) => (p.sizeKind === 'sized' || (Array.isArray(p.quantityBySize) && p.quantityBySize.length > 0)));
+        fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:loadProducts',message:'List API response after normalize',data:{firstProductId:first?.id,firstSizeKind:first?.sizeKind,firstQuantityBySizeLength:Array.isArray(first?.quantityBySize)?first?.quantityBySize?.length:0,firstSizedId:firstSized?.id,firstSizedQuantityBySizeLength:Array.isArray(firstSized?.quantityBySize)?firstSized?.quantityBySize?.length:0,totalProducts:apiProducts.length},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
         const apiIds = new Set(apiProducts.map((p) => p.id));
         // Keep products that exist only locally (e.g. added while offline or when API failed) so inventory never vanishes
         const localOnly: Product[] = [];
@@ -848,6 +860,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setApiOnlyProductsState((prev) => [tempProduct, ...prev]);
       const payload: Record<string, unknown> = productToPayload({ ...tempProduct, _pending: undefined } as Product);
       if (productData.warehouseId?.trim()) payload.warehouseId = productData.warehouseId.trim();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:addProduct',message:'Payload before API call',data:{sizeKind:payload.sizeKind,quantityBySizeLength:Array.isArray(payload.quantityBySize)?payload.quantityBySize.length:0,hasQuantityBySize:Array.isArray(payload.quantityBySize)&&payload.quantityBySize.length>0,sample:Array.isArray(payload.quantityBySize)?payload.quantityBySize[0]:null},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       if (import.meta.env?.DEV) {
         console.timeEnd('Data Preparation');
         console.time('API Request');
@@ -878,6 +893,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       let normalized = (created as { id?: string }).id
         ? normalizeProduct(created as any)
         : ({ ...tempProduct, _pending: undefined, id: tempId } as Product);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:addProduct',message:'API response (created) before preserve',data:{normalizedSizeKind:normalized.sizeKind,normalizedQuantityBySizeLength:Array.isArray(normalized.quantityBySize)?normalized.quantityBySize.length:0,createdHasQuantityBySize:Array.isArray((created as any)?.quantityBySize)?(created as any).quantityBySize.length:0},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+      // #endregion
       const resolvedId = normalized.id ?? tempId;
       // Preserve form data when API omits or returns zero so every detail entered is recorded in state
       const qApi = Number(normalized.quantity ?? 0) || 0;
@@ -900,10 +918,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (productData.supplier && typeof productData.supplier === 'object' && normalized.supplier && Object.values(normalized.supplier).every((v) => !v)) {
         normalized = { ...normalized, supplier: productData.supplier } as Product;
       }
-      if (Array.isArray(productData.quantityBySize) && productData.quantityBySize.length > 0 && (!Array.isArray(normalized.quantityBySize) || normalized.quantityBySize.length === 0)) {
+      // Always apply form sizes when user submitted with sizes so list/cache never show new product without sizes (fix: sizes not showing after add)
+      if (Array.isArray(productData.quantityBySize) && productData.quantityBySize.length > 0) {
         normalized = { ...normalized, quantityBySize: productData.quantityBySize } as Product;
       }
-      if (productData.sizeKind && !normalized.sizeKind) {
+      if (productData.sizeKind) {
         normalized = { ...normalized, sizeKind: productData.sizeKind } as Product;
       }
       if (productData.warehouseId?.trim()) {
@@ -1016,11 +1035,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         apiHasImages
           ? normalized
           : { ...normalized, images: payloadImages.length > 0 ? payloadImages : (Array.isArray(updated.images) ? updated.images : []) };
-      const newList = products.map((p) => (p.id === id ? withImages : p));
+      // Keep sizes from form when user edited with sizes so list shows them (same as addProduct)
+      let finalProduct = withImages;
+      if (Array.isArray(updates.quantityBySize) && updates.quantityBySize.length > 0) {
+        finalProduct = { ...finalProduct, quantityBySize: updates.quantityBySize } as Product;
+      }
+      if (updates.sizeKind) {
+        finalProduct = { ...finalProduct, sizeKind: updates.sizeKind } as Product;
+      }
+      const newList = products.map((p) => (p.id === id ? finalProduct : p));
       if (payloadImages.length > 0) setProductImages(id, payloadImages);
       setApiOnlyProductsState(newList);
       cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
-      lastUpdatedProductRef.current = { product: withImages, at: Date.now() };
+      lastUpdatedProductRef.current = { product: finalProduct, at: Date.now() };
       if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), newList);
       if (isIndexedDBAvailable()) {
         saveProductsToDb(newList).catch((e) => {
