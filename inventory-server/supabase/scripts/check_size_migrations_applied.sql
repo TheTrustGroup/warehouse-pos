@@ -35,3 +35,7 @@ select
 -- 6. Optional: run these only if the above checks are true (otherwise they will error)
 -- select count(*) as size_codes_count from size_codes;
 -- select count(*) as warehouse_inventory_by_size_count from warehouse_inventory_by_size;
+
+-- 7. Verify sizes in DB: product list shows sizes from warehouse_inventory_by_size + warehouse_products.size_kind (no single "sizes" column).
+-- If this returns rows with non-null size_kind and by_size rows, SELECT/list will return quantityBySize; if empty, check insert/update sends quantityBySize and size_kind.
+-- select wp.id, wp.name, wp.size_kind, (select jsonb_agg(jsonb_build_object('size_code', wibs.size_code, 'quantity', wibs.quantity)) from warehouse_inventory_by_size wibs where wibs.product_id = wp.id and wibs.warehouse_id = (select id from warehouses limit 1)) as by_size from warehouse_products wp limit 5;

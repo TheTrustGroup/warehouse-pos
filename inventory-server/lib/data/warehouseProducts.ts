@@ -87,9 +87,8 @@ function rowToApi(
     version: row.version ?? 0,
     sizeKind,
   };
-  if (quantityBySize && quantityBySize.length > 0) {
-    out.quantityBySize = quantityBySize;
-  }
+  // Structural correction: API always returns quantityBySize as array, never null/undefined (product list + POS rely on this).
+  out.quantityBySize = Array.isArray(quantityBySize) ? quantityBySize : [];
   return out;
 }
 
@@ -140,12 +139,14 @@ export async function getWarehouseProducts(
   const outOfStock = options.outOfStock === true;
   const pos = options.pos === true;
 
+  // POS list must include size_kind so we can identify sized products and fetch warehouse_inventory_by_size;
+  // otherwise sizedIds is empty, bySizeMap is never populated, and sizes never show in product list or POS.
   const selectOpts = pos
     ? { count: 'exact' as const }
     : { count: 'exact' as const };
   let query = supabase
     .from(TABLE)
-    .select(pos ? 'id, name, sku, barcode, selling_price, reorder_level, updated_at' : '*', selectOpts)
+    .select(pos ? 'id, name, sku, barcode, selling_price, reorder_level, updated_at, size_kind' : '*', selectOpts)
     .order('updated_at', { ascending: false });
 
   if (q) {
@@ -175,26 +176,28 @@ export async function getWarehouseProducts(
   ]);
   const sizeLabels = sizeLabelsList.length > 0 ? new Map(sizeLabelsList.map((s) => [s.size_code, s.size_label])) : new Map<string, string>();
 
+  // For sized products, always pass by_size array (from warehouse_inventory_by_size) so list UI shows sizes.
+  // Previously we passed undefined when bySize was empty, and rowToApi omitted quantityBySize → sizes did not show.
   let merged: Record<string, unknown>[];
   if (pos) {
     merged = productRows.map((row) => {
       const qty = quantities.get(row.id) ?? 0;
       const bySize = bySizeMap.get(row.id);
-      const quantityBySize = bySize && bySize.length > 0 ? bySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity })) : undefined;
+      // Always pass array (never undefined) so POS and list UI always get quantityBySize; empty [] when no sizes.
+      const quantityBySize = bySize && bySize.length > 0 ? bySize.map((e) => ({ sizeCode: e.sizeCode, quantity: e.quantity })) : [];
       return posRowToApi(row, qty, quantityBySize);
     });
   } else {
     merged = productRows.map((row) => {
       const qty = quantities.get(row.id) ?? 0;
-      const bySize = bySizeMap.get(row.id);
-      const quantityBySize =
-          bySize && bySize.length > 0
-            ? bySize.map((e) => ({
-                sizeCode: e.sizeCode,
-                sizeLabel: e.sizeCode,
-                quantity: e.quantity,
-              }))
-            : undefined;
+      const isSized = (row.size_kind ?? 'na') === 'sized';
+      const bySize = bySizeMap.get(row.id) ?? [];
+      const quantityBySizeMapped = bySize.map((e) => ({
+        sizeCode: e.sizeCode,
+        sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
+        quantity: e.quantity,
+      }));
+      const quantityBySize = isSized ? quantityBySizeMapped : (quantityBySizeMapped.length > 0 ? quantityBySizeMapped : undefined);
       return rowToApi(row, qty, quantityBySize);
     });
   }
@@ -216,8 +219,9 @@ export async function getWarehouseProducts(
 function posRowToApi(
   row: WarehouseProductRow,
   quantity: number,
-  quantityBySize?: Array<{ sizeCode: string; quantity: number }>
+  quantityBySize: Array<{ sizeCode: string; quantity: number }> = []
 ): Record<string, unknown> {
+  // Normalize: API always returns quantityBySize as array, never null (POS and list rely on this).
   const out: Record<string, unknown> = {
     id: row.id,
     name: row.name,
@@ -227,10 +231,8 @@ function posRowToApi(
     reorderLevel: row.reorder_level ?? 0,
     quantity,
     updatedAt: row.updated_at,
+    quantityBySize: Array.isArray(quantityBySize) ? quantityBySize : [],
   };
-  if (quantityBySize && quantityBySize.length > 0) {
-    out.quantityBySize = quantityBySize;
-  }
   return out;
 }
 
@@ -248,7 +250,7 @@ export async function getWarehouseProductById(id: string, warehouseId?: string):
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
     const quantityBySize = bySize.map((e) => ({
       sizeCode: e.sizeCode,
-      sizeLabel: e.sizeCode,
+      sizeLabel: sizeLabels.get(e.sizeCode) ?? e.sizeCode,
       quantity: e.quantity,
     }));
     return rowToApi(row, qty, quantityBySize);
