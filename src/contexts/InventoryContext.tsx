@@ -702,8 +702,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       createdAt: toIso(product.createdAt),
       updatedAt: toIso(product.updatedAt),
       ...(product.version !== undefined && { version: product.version }),
-      ...(product.sizeKind && { sizeKind: product.sizeKind }),
-      ...(product.quantityBySize && product.quantityBySize.length > 0 && { quantityBySize: product.quantityBySize }),
+      sizeKind: product.sizeKind ?? 'na',
+      ...(Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0 && { quantityBySize: product.quantityBySize }),
     };
   };
 
@@ -974,14 +974,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         apiHasImages
           ? normalized
           : { ...normalized, images: payloadImages.length > 0 ? payloadImages : (Array.isArray(updated.images) ? updated.images : []) };
-      // Keep sizes from form when user edited with sizes so list shows them (same as addProduct)
-      let finalProduct = withImages;
-      if (Array.isArray(updates.quantityBySize) && updates.quantityBySize.length > 0) {
-        finalProduct = { ...finalProduct, quantityBySize: updates.quantityBySize } as Product;
-      }
-      if (updates.sizeKind) {
-        finalProduct = { ...finalProduct, sizeKind: updates.sizeKind } as Product;
-      }
+      // Always apply form's size type and sizes to list so Sizes column shows immediately (don't rely on API response)
+      const sizeKind = updates.sizeKind ?? (withImages as Product).sizeKind ?? 'na';
+      const quantityBySize = Array.isArray(updates.quantityBySize)
+        ? updates.quantityBySize
+        : (Array.isArray((withImages as Product).quantityBySize) ? (withImages as Product).quantityBySize : []);
+      const finalProduct = { ...withImages, sizeKind, quantityBySize } as Product;
       const newList = products.map((p) => (p.id === id ? finalProduct : p));
       if (payloadImages.length > 0) setProductImages(id, payloadImages);
       setApiOnlyProductsState(newList);
