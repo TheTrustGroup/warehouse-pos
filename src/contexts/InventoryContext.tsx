@@ -175,6 +175,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const loadProductsRef = useRef<(signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => Promise<void>>(() => Promise.resolve());
   const offlineRef = useRef(offline);
   offlineRef.current = offline;
+  /** Mirror of current products for equivalence check during silent refresh (avoids setState when nothing changed → no jitter). */
+  const productsRef = useRef<Product[]>([]);
 
   const products = useMemo(
     (): Product[] => (offlineEnabled ? (offline.products ?? []) : apiOnlyProducts),
@@ -191,6 +193,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   );
   const isLoading = offlineEnabled ? offline.isLoading : apiOnlyLoading;
   const unsyncedCountFromHook = offline.unsyncedCount ?? 0;
+
+  useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
 
   /** When offline disabled: update API-only state. When enabled: no-op (list from Dexie). */
   const setProducts = useCallback(
@@ -322,7 +328,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
       updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
       expiryDate: p.expiryDate ? new Date(p.expiryDate) : null,
-      ...(p.sizeKind != null && { sizeKind: p.sizeKind }),
+      ...((p.sizeKind != null || p.size_kind != null) && { sizeKind: (p.sizeKind ?? p.size_kind ?? 'na') as 'na' | 'one_size' | 'sized' }),
       ...(Array.isArray(p.quantityBySize) && p.quantityBySize.length > 0 && { quantityBySize: p.quantityBySize }),
     });
 
@@ -398,15 +404,20 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           }
         }
         let merged = [...apiProducts, ...localOnly];
-        // Preserve images from cache when API returns product without images (e.g. after update, silent refresh would otherwise wipe them)
+        // Preserve images and sizes from cache when API returns product without them (e.g. after update, silent refresh would otherwise wipe)
         const cached = cacheRef.current[wid]?.data;
         if (cached?.length) {
           merged = merged.map((p) => {
             const c = cached.find((x: Product) => x.id === p.id);
-            if (c && Array.isArray(c.images) && c.images.length > 0 && (!p.images || p.images.length === 0)) {
-              return { ...p, images: c.images };
+            if (!c) return p;
+            let next = p;
+            if (Array.isArray(c.images) && c.images.length > 0 && (!p.images || p.images.length === 0)) {
+              next = { ...next, images: c.images };
             }
-            return p;
+            if ((c.sizeKind === 'sized' || (Array.isArray(c.quantityBySize) && c.quantityBySize.length > 0)) && !(Array.isArray(next.quantityBySize) && next.quantityBySize.length > 0)) {
+              next = { ...next, sizeKind: c.sizeKind ?? next.sizeKind, quantityBySize: Array.isArray(c.quantityBySize) ? c.quantityBySize : [] };
+            }
+            return next;
           });
         }
         // If we just updated a product (with images), any loadProducts that runs afterward must keep that version so the image does not vanish
@@ -467,9 +478,28 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           }
         }
         listToSet = listToSet.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
-        setProducts(listToSet);
-        if (!silent) setError(null);
-        setLastSyncAt(new Date());
+        // During silent refresh, skip setState when list is equivalent to avoid list jitter on mobile
+        const current = productsRef.current;
+        const sameLength = current.length === listToSet.length;
+        const sameIdsOrder = sameLength && listToSet.every((p, i) => current[i]?.id === p.id);
+        const sameData = sameIdsOrder && listToSet.every((p, i) => {
+          const a = current[i];
+          if (!a) return false;
+          const aUtc = a.updatedAt instanceof Date ? a.updatedAt.getTime() : 0;
+          const bUtc = p.updatedAt instanceof Date ? p.updatedAt.getTime() : 0;
+          if (aUtc !== bUtc || Number(a.quantity ?? 0) !== Number(p.quantity ?? 0)) return false;
+          if ((a.sizeKind ?? 'na') !== (p.sizeKind ?? 'na')) return false;
+          const aSizes = Array.isArray(a.quantityBySize) ? a.quantityBySize : [];
+          const bSizes = Array.isArray(p.quantityBySize) ? p.quantityBySize : [];
+          if (aSizes.length !== bSizes.length) return false;
+          return aSizes.every((s, j) => (bSizes[j] && s.sizeCode === bSizes[j].sizeCode && s.quantity === bSizes[j].quantity));
+        });
+        const skipStateUpdate = silent && sameData;
+        if (!skipStateUpdate) {
+          setProducts(listToSet);
+          if (!silent) setError(null);
+          setLastSyncAt(new Date());
+        }
         cacheRef.current[wid] = { data: listToSet, ts: Date.now() };
         if (isIndexedDBAvailable()) {
           saveProductsToDb(listToSet).catch((e) => {
