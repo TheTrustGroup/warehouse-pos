@@ -292,6 +292,8 @@ export async function mirrorProductsFromApi(apiProducts) {
         syncStatus: 'synced',
         serverId: p.id,
         lastModified: ts,
+        sizeKind: p.sizeKind ?? p.size_kind ?? 'na',
+        quantityBySize: Array.isArray(p.quantityBySize) ? p.quantityBySize : [],
       };
     }).filter(Boolean);
     if (records.length > 0) {

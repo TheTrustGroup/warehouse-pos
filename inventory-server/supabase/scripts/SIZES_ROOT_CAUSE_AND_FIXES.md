@@ -62,3 +62,12 @@ So the “sizes never show” failure is not due to a missing `sizes` column, tw
 - **`check_size_migrations_applied.sql`** — Confirms tables, `size_kind`, and RPCs exist.
 
 No unrelated refactors; fixes are warehouse consistency, migrations, and payload (size_kind/quantityBySize).
+
+---
+
+## Patch-style updates and sync (prevent silent wipe)
+
+- **Backend:** Update always builds row from `{ ...existing, ...body }` and has a safeguard: when not updating sizes (`!hasSized`), `size_kind` is never set to `'na'` if the existing product is `sized`/`one_size`. RPC uses `COALESCE(p_row->>'size_kind', ..., size_kind)` so omitted fields do not overwrite.
+- **Sync payload:** `buildProductPayload()` in `syncService.js` includes `sizeKind` and `quantityBySize` so an UPDATE sync never sends a payload that could be interpreted as “clear sizes”; server merges with existing anyway.
+- **Offline mirror:** `mirrorProductsFromApi()` in `inventoryDB.js` stores `sizeKind` and `quantityBySize` when copying API products into IndexedDB so the Sizes column shows correctly when using offline list.
+- **DB default:** `warehouse_products.size_kind` is `NOT NULL DEFAULT 'na'` (migration); there is no single `sizes` column to default.

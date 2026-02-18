@@ -26,7 +26,8 @@ interface SizeCodeOption {
 interface ProductFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }) => void | Promise<void>;
+  /** When editing, pass editingProductId so the parent always updates that product (never creates a duplicate). */
+  onSubmit: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }, editingProductId?: string | null) => void | Promise<void>;
   product?: Product | null;
   /** Phase 5: when true, form is read-only (last saved data). Submit disabled. */
   readOnlyMode?: boolean;
@@ -423,7 +424,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       if (product?.id && payloadImages.length > 0) {
         setProductImages(product.id, payloadImages);
       }
-      await Promise.resolve(onSubmit(payload));
+      await Promise.resolve(onSubmit(payload, product?.id ?? null));
       onClose();
     } catch {
       // Parent shows toast; keep modal open

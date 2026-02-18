@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Product } from '../../types';
 import { formatCurrency } from '../../lib/utils';
+import { hasSizedQuantityBySize, isOneSize } from '../../lib/sizeConstants';
 import { ProductSyncBadge } from '../ProductSyncBadge';
 import { Package, Edit, Trash2, AlertTriangle, CloudOff, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -82,8 +83,8 @@ export function ProductGridView({
       {products.map((product) => {
         const status = getStockStatus(product);
         const isSelected = selectedIds.includes(product.id);
-        const hasSizes = product.sizeKind === 'sized' && Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0;
-        const oneSize = product.sizeKind === 'one_size';
+        const hasSizes = hasSizedQuantityBySize(product);
+        const oneSize = isOneSize(product);
 
         return (
           <motion.div

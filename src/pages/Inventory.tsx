@@ -75,10 +75,15 @@ export function Inventory() {
     }
   };
 
-  const handleSubmitProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (s.editingProduct) {
+  /** editingProductId: when the modal submits in edit mode, it passes the product id so we always update that product (never create a duplicate). */
+  const handleSubmitProduct = async (
+    productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>,
+    editingProductId?: string | null
+  ) => {
+    const idToUpdate = editingProductId ?? s.editingProduct?.id;
+    if (idToUpdate) {
       try {
-        await s.updateProduct(s.editingProduct.id, productData);
+        await s.updateProduct(idToUpdate, productData);
         s.setIsModalOpen(false);
         s.setEditingProduct(null);
       } catch (error) {

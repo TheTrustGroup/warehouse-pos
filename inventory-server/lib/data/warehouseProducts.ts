@@ -262,8 +262,25 @@ export async function getWarehouseProductById(id: string, warehouseId?: string):
   return rowToApi(row, qty);
 }
 
+/** Reusable validation: size type "sized" requires at least one size row. Use before create/update. */
+function validateSizeKindAndQuantityBySize(
+  sizeKind: unknown,
+  quantityBySize: unknown
+): void {
+  const kind = String(sizeKind ?? 'na').toLowerCase();
+  const list = Array.isArray(quantityBySize) ? quantityBySize : [];
+  const hasValidRows = list.some((e: unknown) => e && typeof e === 'object' && String((e as { sizeCode?: string }).sizeCode ?? '').trim() !== '');
+  if (kind === 'sized' && !hasValidRows) {
+    const err = new Error('When size type is Multiple sizes, add at least one size row (e.g. S, M, L with quantities).') as Error & { status?: number };
+    err.status = 400;
+    throw err;
+  }
+}
+
 /** POST: create one. Uses atomic RPC when available (product + inventory + by_size in one transaction); fallback to legacy path. */
 export async function createWarehouseProduct(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  validateSizeKindAndQuantityBySize(body.sizeKind ?? body.size_kind, body.quantityBySize);
+
   const supabase = getSupabase();
   const id: string = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : crypto.randomUUID();
   const ts = now();
@@ -361,6 +378,9 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
     err.status = 404;
     throw err;
   }
+  const merged = { ...existing, ...body };
+  validateSizeKindAndQuantityBySize(merged.sizeKind ?? merged.size_kind, merged.quantityBySize);
+
   const currentVersion = Number(existing.version ?? 0);
   const ts = now();
   const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();

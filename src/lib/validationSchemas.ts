@@ -54,7 +54,11 @@ export const productFormSchema = z
     sizeKind: z.enum(['na', 'one_size', 'sized']).default('na'),
     quantityBySize: z.array(z.object({ sizeCode: z.string(), quantity: z.coerce.number().min(0).finite() })).default([]),
   })
-  .refine((d) => d.sellingPrice >= 0 && d.costPrice >= 0, { message: 'Prices must be non-negative', path: ['sellingPrice'] });
+  .refine((d) => d.sellingPrice >= 0 && d.costPrice >= 0, { message: 'Prices must be non-negative', path: ['sellingPrice'] })
+  .refine(
+    (d) => d.sizeKind !== 'sized' || (Array.isArray(d.quantityBySize) && d.quantityBySize.some((r) => (r.sizeCode ?? '').trim() !== '')),
+    { message: 'When size type is Multiple sizes, add at least one size row.', path: ['quantityBySize'] }
+  );
 
 export type ProductFormDataValidated = z.infer<typeof productFormSchema>;
 

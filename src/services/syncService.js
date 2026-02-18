@@ -64,6 +64,9 @@ function buildProductPayload(data) {
     createdAt: data.createdAt ?? new Date().toISOString(),
     updatedAt: data.updatedAt ?? new Date().toISOString(),
     ...(data.warehouseId && { warehouseId: data.warehouseId }),
+    // PATCH-style: include size fields so sync UPDATE never implicitly wipes sizes (server merges with existing; this keeps payload explicit)
+    sizeKind: data.sizeKind ?? data.size_kind ?? 'na',
+    quantityBySize: Array.isArray(data.quantityBySize) ? data.quantityBySize : [],
   };
 }
 
