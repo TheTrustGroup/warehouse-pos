@@ -122,6 +122,7 @@ export function ProductTableView({
               >
                 <span className="inline-flex items-center gap-1">Stock {sortField === 'quantity' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
               </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Sizes</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Price</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Location</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Supplier</th>
@@ -224,14 +225,22 @@ export function ProductTableView({
                           {status.label}
                         </span>
                       </div>
-                      {(product.sizeKind === 'sized' || (product.quantityBySize && product.quantityBySize.length > 0)) && product.quantityBySize && product.quantityBySize.length > 0 && (
-                        <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
-                          {product.quantityBySize.map((s) => (
-                            <span key={s.sizeCode}>{s.sizeLabel ?? s.sizeCode}: {s.quantity}</span>
-                          ))}
-                        </div>
-                      )}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 align-middle">
+                    {(product.sizeKind === 'sized' || (Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0)) ? (
+                      <div className="text-sm text-slate-700 flex flex-wrap gap-x-2 gap-y-1">
+                        {product.quantityBySize!.map((s) => (
+                          <span key={s.sizeCode} className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-800">
+                            {s.sizeLabel ?? s.sizeCode}: <strong className="ml-0.5">{s.quantity}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    ) : product.sizeKind === 'one_size' ? (
+                      <span className="text-sm text-slate-500">One size</span>
+                    ) : (
+                      <span className="text-sm text-slate-400">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 align-middle">
                     <div>

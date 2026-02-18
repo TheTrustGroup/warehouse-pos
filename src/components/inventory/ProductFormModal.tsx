@@ -499,7 +499,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       // #region agent log
       const sizesInPayload = payload.quantityBySize ?? [];
       const sizesStructure = Array.isArray(sizesInPayload) ? { isArray: true, length: sizesInPayload.length, firstItemKeys: sizesInPayload[0] ? Object.keys(sizesInPayload[0]) : [] } : { isArray: false };
-      fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProductFormModal.tsx:handleSubmit',message:'Form submission payload (sizes)',data:{sizeKind:payload.sizeKind,quantityBySizeLength:sizesInPayload.length,sizesStructure,sample:Array.isArray(sizesInPayload)&&sizesInPayload[0]?sizesInPayload[0]:null},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+      if (typeof window !== 'undefined' && !window.location.origin.startsWith('https')) { fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProductFormModal.tsx:handleSubmit',message:'Form submission payload (sizes)',data:{sizeKind:payload.sizeKind,quantityBySizeLength:sizesInPayload.length,sizesStructure,sample:Array.isArray(sizesInPayload)&&sizesInPayload[0]?sizesInPayload[0]:null},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{}); }
       // #endregion
       await Promise.resolve(onSubmit(payload));
       onClose();

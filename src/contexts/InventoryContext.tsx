@@ -404,13 +404,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         // #region agent log
         const rawFirst = parsed.items[0] as { quantityBySize?: unknown[]; sizeKind?: string } | undefined;
-        fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:loadProducts',message:'List API raw (before normalize)',data:{rawFirstQuantityBySizeLength:Array.isArray(rawFirst?.quantityBySize)?rawFirst?.quantityBySize?.length:0,rawFirstSizeKind:rawFirst?.sizeKind},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+        if (typeof window !== 'undefined' && !window.location.origin.startsWith('https')) { fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:loadProducts',message:'List API raw (before normalize)',data:{rawFirstQuantityBySizeLength:Array.isArray(rawFirst?.quantityBySize)?rawFirst?.quantityBySize?.length:0,rawFirstSizeKind:rawFirst?.sizeKind},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{}); }
         // #endregion
         const apiProducts = parsed.items.map((p) => normalizeProduct(p));
         // #region agent log
         const first = apiProducts[0];
         const firstSized = apiProducts.find((p) => (p.sizeKind === 'sized' || (Array.isArray(p.quantityBySize) && p.quantityBySize.length > 0)));
-        fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:loadProducts',message:'List API response after normalize',data:{firstProductId:first?.id,firstSizeKind:first?.sizeKind,firstQuantityBySizeLength:Array.isArray(first?.quantityBySize)?first?.quantityBySize?.length:0,firstSizedId:firstSized?.id,firstSizedQuantityBySizeLength:Array.isArray(firstSized?.quantityBySize)?firstSized?.quantityBySize?.length:0,totalProducts:apiProducts.length},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+        if (typeof window !== 'undefined' && !window.location.origin.startsWith('https')) { fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:loadProducts',message:'List API response after normalize',data:{firstProductId:first?.id,firstSizeKind:first?.sizeKind,firstQuantityBySizeLength:Array.isArray(first?.quantityBySize)?first?.quantityBySize?.length:0,firstSizedId:firstSized?.id,firstSizedQuantityBySizeLength:Array.isArray(firstSized?.quantityBySize)?firstSized?.quantityBySize?.length:0,totalProducts:apiProducts.length},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{}); }
         // #endregion
         const apiIds = new Set(apiProducts.map((p) => p.id));
         // Keep products that exist only locally (e.g. added while offline or when API failed) so inventory never vanishes
@@ -861,7 +861,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const payload: Record<string, unknown> = productToPayload({ ...tempProduct, _pending: undefined } as Product);
       if (productData.warehouseId?.trim()) payload.warehouseId = productData.warehouseId.trim();
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:addProduct',message:'Payload before API call',data:{sizeKind:payload.sizeKind,quantityBySizeLength:Array.isArray(payload.quantityBySize)?payload.quantityBySize.length:0,hasQuantityBySize:Array.isArray(payload.quantityBySize)&&payload.quantityBySize.length>0,sample:Array.isArray(payload.quantityBySize)?payload.quantityBySize[0]:null},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      if (typeof window !== 'undefined' && !window.location.origin.startsWith('https')) { fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:addProduct',message:'Payload before API call',data:{sizeKind:payload.sizeKind,quantityBySizeLength:Array.isArray(payload.quantityBySize)?payload.quantityBySize.length:0,hasQuantityBySize:Array.isArray(payload.quantityBySize)&&payload.quantityBySize.length>0,sample:Array.isArray(payload.quantityBySize)?payload.quantityBySize[0]:null},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{}); }
       // #endregion
       if (import.meta.env?.DEV) {
         console.timeEnd('Data Preparation');
@@ -894,7 +894,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         ? normalizeProduct(created as any)
         : ({ ...tempProduct, _pending: undefined, id: tempId } as Product);
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:addProduct',message:'API response (created) before preserve',data:{normalizedSizeKind:normalized.sizeKind,normalizedQuantityBySizeLength:Array.isArray(normalized.quantityBySize)?normalized.quantityBySize.length:0,createdHasQuantityBySize:Array.isArray((created as any)?.quantityBySize)?(created as any).quantityBySize.length:0},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+      if (typeof window !== 'undefined' && !window.location.origin.startsWith('https')) { fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'InventoryContext.tsx:addProduct',message:'API response (created) before preserve',data:{normalizedSizeKind:normalized.sizeKind,normalizedQuantityBySizeLength:Array.isArray(normalized.quantityBySize)?normalized.quantityBySize.length:0,createdHasQuantityBySize:Array.isArray((created as any)?.quantityBySize)?(created as any).quantityBySize.length:0},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{}); }
       // #endregion
       const resolvedId = normalized.id ?? tempId;
       // Preserve form data when API omits or returns zero so every detail entered is recorded in state
