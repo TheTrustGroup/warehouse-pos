@@ -26,7 +26,9 @@ export function useInventoryPageState() {
   const [searchParams] = useSearchParams();
   const [isSyncing, setIsSyncing] = useState(false);
   const [undoStack, setUndoStack] = useState<Array<{ productId: string; at: number }>>([]);
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'grid' : 'table'
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<ProductFilters>({});
   const [selectedIds, setSelectedIds] = useState<string[]>([]);

@@ -20,30 +20,38 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---- Design tokens: 8pt grid + mobile-first spacing & typography ---- */
+/* ---- Design tokens: 4px base grid + mobile-first spacing & typography ---- */
 :root {
-  /* 8pt grid: base unit 8px; use for all spacing (Phase 6) */
+  /* 4px base system: 4,8,12,16,20,24,32,40 (Phase 6 + structural audit) */
+  --grid-4: 4px;
   --grid-8: 8px;
+  --grid-12: 12px;
   --grid-16: 16px;
+  --grid-20: 20px;
   --grid-24: 24px;
   --grid-32: 32px;
   --grid-40: 40px;
   --grid-48: 48px;
-  /* Spacing rhythm (aligned to 8pt grid) */
+  /* Spacing rhythm */
   --space-section: 1.5rem;   /* 24px: between major sections */
   --space-block: 1rem;       /* 16px: between related blocks */
   --space-inline: 0.75rem;   /* 12px: between inline elements */
-  --touch-min: 44px;         /* Minimum hit area (WCAG, thumb reach); ≥44px for primary actions */
-  --input-height: 44px;      /* Input/select min-height; no cramped fields */
-  --radius-base: 10px;
-  --radius-lg: 12px;
-  /* Typography: one scale. Use text-xs/sm/base/lg/xl/2xl only; headings avoid overpowering on small screens */
+  --touch-min: 44px;         /* Minimum hit area (WCAG); ≥44px for primary actions */
+  --input-height: 44px;      /* Input/select min-height */
+  /* Unified radius: 8px globally for cards, buttons, inputs (structural audit) */
+  --radius-base: 8px;
+  --radius-lg: 8px;
+  --radius-card: 8px;
+  /* Typography hierarchy: H1 28/600, H2 20/600, Body 14–16, Meta 12–13 muted */
+  --text-meta: 0.75rem;      /* 12–13px muted */
   --text-xs: 0.75rem;        /* 12px labels, captions */
-  --text-sm: 0.875rem;       /* 14px body secondary, helper */
-  --text-base: 1rem;         /* 16px body (no zoom required) */
+  --text-sm: 0.875rem;       /* 14px body */
+  --text-base: 1rem;         /* 16px body */
   --text-lg: 1.125rem;       /* 18px card titles */
-  --text-xl: 1.25rem;        /* 20px page section titles */
-  --text-2xl: 1.5rem;        /* 24px page title (mobile max for H1) */
+  --text-h2: 1.25rem;        /* 20px section (H2) */
+  --text-h1: 1.75rem;        /* 28px page title (H1) */
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
   /* Safe area: iOS notch/home indicator; fixed elements respect these */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -140,10 +148,10 @@
   .input-field.border-red-500 {
     border-color: #ef4444;
   }
-  /* Select wrapper: keep dropdown above content, prevent clipping in scroll containers */
+  /* Select wrapper: above sticky table header (z-10) so dropdown isn't covered; below modals (50) */
   .input-select-wrapper {
     position: relative;
-    z-index: 10;
+    z-index: 20;
     isolation: isolate;
   }
   .input-select-wrapper .input-field {
@@ -190,10 +198,12 @@
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
-    @apply rounded-2xl;
+    border-radius: var(--radius-card, 8px);
   }
   .table-container {
-    @apply overflow-hidden rounded-2xl border border-slate-200/80;
+    overflow: hidden;
+    border-radius: var(--radius-card, 8px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
     background-color: #fff;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -208,10 +218,19 @@
     -webkit-backdrop-filter: none;
   }
 
-  /* Stability: consistent row height so list doesn't collapse during fetch; skeleton matches (Phase 2/3). */
+  /* Stability: desktop table row 72px; consistent so list doesn't collapse during fetch (Phase 2/3). */
   .table-row {
     @apply border-b border-slate-200/40 transition-colors duration-150;
     min-height: 72px;
+  }
+  /* Mobile grid card: consistent min-height to avoid layout jump (96–110px content block; card uses min-h). */
+  .inventory-card-content {
+    padding: var(--grid-16);
+  }
+  @media (min-width: 640px) {
+    .inventory-card-content {
+      padding: var(--grid-24);
+    }
   }
 
   .table-row:hover,

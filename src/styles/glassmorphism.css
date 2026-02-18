@@ -36,10 +36,10 @@
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
   }
 
-  /* Phase 6: default padding ≥16px so cards never feel cramped; components may override with p-* */
+  /* Phase 6: 8px radius globally; default padding ≥16px (structural audit) */
   .solid-card {
-    border-radius: 1rem;
-    padding: 1rem; /* 16px — 8pt grid; adequate padding, no edge-touch */
+    border-radius: var(--radius-card, 8px);
+    padding: 1rem; /* 16px — adequate padding, no edge-touch */
     background-color: #fff;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;

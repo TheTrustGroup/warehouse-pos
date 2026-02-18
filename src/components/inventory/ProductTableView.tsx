@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Product } from '../../types';
 import { formatCurrency, getCategoryDisplay, getLocationDisplay } from '../../lib/utils';
-import { hasSizedQuantityBySize, isOneSize } from '../../lib/sizeConstants';
+import { ProductSizesFromProduct } from './ProductSizes';
 import { Button } from '../ui/Button';
 import { ProductSyncBadge } from '../ProductSyncBadge';
 import { Pencil, Trash2, Eye, Package, RefreshCw } from 'lucide-react';
@@ -228,22 +228,8 @@ export function ProductTableView({
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 align-middle">
-                    {isOneSize(product) ? (
-                      <span className="text-sm text-slate-600">One size</span>
-                    ) : hasSizedQuantityBySize(product) ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {product.quantityBySize!.map((s) => (
-                          <span key={s.sizeCode} className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 text-sm font-medium">
-                            {s.sizeLabel ?? s.sizeCode} <span className="text-slate-500 font-normal ml-0.5">×{s.quantity}</span>
-                          </span>
-                        ))}
-                      </div>
-                    ) : product.sizeKind === 'sized' ? (
-                      <span className="text-sm text-slate-500">Sized</span>
-                    ) : (
-                      <span className="text-sm text-slate-400">—</span>
-                    )}
+                  <td className="px-4 py-3 align-middle min-w-0">
+                    <ProductSizesFromProduct product={product} variant="compact" />
                   </td>
                   <td className="px-4 py-3 align-middle">
                     <div>

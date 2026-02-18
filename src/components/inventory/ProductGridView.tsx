@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Product } from '../../types';
 import { formatCurrency } from '../../lib/utils';
-import { hasSizedQuantityBySize, isOneSize } from '../../lib/sizeConstants';
+import { ProductSizesFromProduct } from './ProductSizes';
 import { ProductSyncBadge } from '../ProductSyncBadge';
 import { Package, Edit, Trash2, AlertTriangle, CloudOff, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -83,8 +83,6 @@ export function ProductGridView({
       {products.map((product) => {
         const status = getStockStatus(product);
         const isSelected = selectedIds.includes(product.id);
-        const hasSizes = hasSizedQuantityBySize(product);
-        const oneSize = isOneSize(product);
 
         return (
           <motion.div
@@ -93,7 +91,7 @@ export function ProductGridView({
             {...hover}
             {...morph}
             onClick={(e) => handleCardClick(e, product.id)}
-            className={`solid-card rounded-xl group cursor-pointer relative overflow-hidden flex flex-col min-h-[400px] ${
+            className={`solid-card rounded-lg group cursor-pointer relative overflow-x-hidden overflow-y-visible flex flex-col min-h-[400px] ${
               canSelect && isSelected ? 'ring-2 ring-primary-500 ring-offset-2' : ''
             }`}
           >
@@ -173,7 +171,7 @@ export function ProductGridView({
               </div>
             )}
             {/* Fixed aspect image area — consistent card height */}
-            <div className="w-full aspect-square max-h-52 bg-slate-100 rounded-t-xl overflow-hidden shrink-0">
+            <div className="w-full aspect-square max-h-52 bg-slate-100 rounded-t-lg overflow-hidden shrink-0">
               {Array.isArray(product.images) && product.images[0] ? (
                 <img
                   src={product.images[0]}
@@ -188,7 +186,7 @@ export function ProductGridView({
               )}
             </div>
 
-            <div className="p-4 flex flex-col flex-1 min-h-0">
+            <div className="inventory-card-content flex flex-col flex-1 min-h-0 overflow-visible">
               <h3 className="font-semibold text-slate-900 truncate mb-0.5" title={product.name}>{product.name}</h3>
               {product.description ? (
                 <p className="text-sm text-slate-500 line-clamp-2 leading-snug mb-3">{product.description}</p>
@@ -217,26 +215,8 @@ export function ProductGridView({
                 </span>
               </div>
 
-              {/* Size row: always show so list reflects size type */}
-              <div className="pt-2 border-t border-slate-200/60">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Size</p>
-                {hasSizes ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {product.quantityBySize!.map((s) => (
-                      <span
-                        key={s.sizeCode}
-                        className="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-slate-800 text-xs font-medium"
-                      >
-                        {s.sizeLabel ?? s.sizeCode} <span className="text-slate-500 font-normal ml-0.5">×{s.quantity}</span>
-                      </span>
-                    ))}
-                  </div>
-                ) : oneSize ? (
-                  <span className="text-sm text-slate-600">One size</span>
-                ) : (
-                  <span className="text-sm text-slate-400">—</span>
-                )}
-              </div>
+              {/* Sizes: shared component — always visible on mobile and desktop; no conditional by viewport */}
+              <ProductSizesFromProduct product={product} label="Size" variant="default" className="flex-shrink-0" />
 
               {status.label !== 'In Stock' && (
                 <div className="flex items-center gap-2 text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200/60 mt-3">

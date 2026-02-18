@@ -267,7 +267,7 @@ export function Inventory() {
       )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Inventory</h1>
+          <h1 className="text-slate-900 tracking-tight mb-1" style={{ fontSize: 'var(--text-h1)', fontWeight: 600 }}>Inventory</h1>
           <p className="text-slate-500 text-sm flex flex-wrap items-center gap-x-1 gap-y-1">
             <span>{s.filteredProducts.length} product{s.filteredProducts.length !== 1 ? 's' : ''} found</span>
             {s.filteredProducts.length !== s.products.length && <span> of {s.products.length}</span>}

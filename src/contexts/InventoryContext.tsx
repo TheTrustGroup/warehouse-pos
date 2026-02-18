@@ -177,6 +177,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   offlineRef.current = offline;
   /** Mirror of current products for equivalence check during silent refresh (avoids setState when nothing changed → no jitter). */
   const productsRef = useRef<Product[]>([]);
+  /** Throttle silent refresh so poll + visibility + mount don't cause back-to-back requests (reduces list jitter). */
+  const lastSilentRefreshAtRef = useRef<number>(0);
+  const SILENT_REFRESH_THROTTLE_MS = 2000;
 
   const products = useMemo(
     (): Product[] => (offlineEnabled ? (offline.products ?? []) : apiOnlyProducts),
@@ -345,8 +348,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const bypassCache = options?.bypassCache === true;
     const timeoutMs = options?.timeoutMs;
     const wid = effectiveWarehouseId;
-    const cached = cacheRef.current[wid];
+
     const now = Date.now();
+    if (silent) {
+      if (now - lastSilentRefreshAtRef.current < SILENT_REFRESH_THROTTLE_MS) return;
+      lastSilentRefreshAtRef.current = now;
+    }
+
+    const cached = cacheRef.current[wid];
     const cacheValid = !bypassCache && cached && (now - cached.ts) < PRODUCTS_CACHE_TTL_MS;
     if (cacheValid && cached.data.length > 0) {
       setProducts(cached.data);
@@ -637,8 +646,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   }, [currentWarehouseId]);
 
-  // Real-time: poll when tab visible so all devices see server truth (adds/edits/deletes). 10s keeps cross-device latency acceptable for production.
-  const INVENTORY_POLL_MS = 10_000;
+  // Real-time: poll when tab visible so all devices see server truth. 30s reduces jitter from aggressive refresh while keeping cross-device updates reasonable.
+  const INVENTORY_POLL_MS = 30_000;
   useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }), intervalMs: INVENTORY_POLL_MS });
 
   // When user returns to this tab, refetch from server so changes from other devices (e.g. deletes) show immediately.
