@@ -1003,7 +1003,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           : { ...normalized, images: payloadImages.length > 0 ? payloadImages : (Array.isArray(updated.images) ? updated.images : []) };
       const sizeKind = updates.sizeKind ?? (withImages as Product).sizeKind ?? 'na';
       // Prefer API response sizes when server returned real multiple sizes (same source of truth as list RPC); else use form data
-      const apiQuantityBySize = Array.isArray((withImages as Product).quantityBySize) ? (withImages as Product).quantityBySize : [];
+      const rawApiSizes = (withImages as Product).quantityBySize;
+      const apiQuantityBySize = Array.isArray(rawApiSizes) ? rawApiSizes : [];
       const apiHasRealSizes = apiQuantityBySize.length > 0 && !isOnlySyntheticOneSize(apiQuantityBySize);
       const quantityBySize =
         apiHasRealSizes
