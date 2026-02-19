@@ -391,8 +391,15 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     const validSizeRows = (formData.quantityBySize ?? [])
       .filter((r) => (r.sizeCode ?? '').trim() !== '')
       .filter((r) => !isSyntheticOneSizeRow(r.sizeCode ?? ''));
+    const rowsWithQtyButNoSize = (formData.quantityBySize ?? []).filter(
+      (r) => (r.sizeCode ?? '').trim() === '' && Number(r.quantity ?? 0) > 0
+    );
     if (formData.sizeKind === 'sized' && validSizeRows.length === 0) {
       showToast('error', 'Add at least one size row to save.');
+      return;
+    }
+    if (formData.sizeKind === 'sized' && rowsWithQtyButNoSize.length > 0) {
+      showToast('error', 'Enter a size (e.g. S, M, EU30) for every row that has a quantity. Rows without a size are ignored.');
       return;
     }
     const name = nameRef.current?.value ?? formData.name;
@@ -775,6 +782,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
                   <span className="ml-2 text-slate-400 font-normal">(Loading sizes…)</span>
                 )}
               </label>
+              <p className="text-slate-500 text-sm mb-2">Enter a size (e.g. S, M, EU30) and quantity for each row. Rows without a size are not saved.</p>
               {formData.quantityBySize.length === 0 && (
                 <p className="text-amber-600 text-sm mb-2">Add at least one size row to save.</p>
               )}
