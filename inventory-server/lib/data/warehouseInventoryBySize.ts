@@ -89,7 +89,7 @@ export async function getProductIdsWithBySizeData(
 
 /**
  * Set quantities by size for (warehouse, product). Replaces all rows for this (warehouse, product).
- * Only inserts rows with quantity > 0. Does NOT update warehouse_inventory total; caller must set that to sum(quantity) for POS.
+ * Does NOT update warehouse_inventory total; caller must set that to sum(quantity) for POS.
  */
 export async function setQuantitiesBySize(
   warehouseId: string,
@@ -105,55 +105,16 @@ export async function setQuantitiesBySize(
     .eq('product_id', productId);
   if (delErr) throw delErr;
   const toInsert = entries
-    .filter((e) => e.sizeCode && Number(e.quantity) > 0)
+    .filter((e) => e.sizeCode && Number(e.quantity) >= 0)
     .map((e) => ({
       warehouse_id: warehouseId,
       product_id: productId,
       size_code: e.sizeCode,
-      quantity: Math.floor(Number(e.quantity)),
+      quantity: Math.max(0, Math.floor(Number(e.quantity))),
       updated_at: ts,
     }));
   if (toInsert.length > 0) {
     const { error: insErr } = await supabase.from(TABLE).insert(toInsert);
     if (insErr) throw insErr;
   }
-}
-
-/** Form row shape: size_code + quantity (e.g. from EditableSizesColumn / quantityBySize). */
-export interface SizeFormRow {
-  size_code: string;
-  quantity: number;
-}
-
-/**
- * Save flow: delete all existing rows for (productId, warehouseId), then insert current sizes with quantity > 0.
- * Use when the user clicks Save and you have the current sizes form data. Throws on error; caller should show toast/alert.
- */
-export async function saveSizesToSupabase(
-  productId: string,
-  warehouseId: string,
-  sizesForm: SizeFormRow[]
-): Promise<void> {
-  const supabase = getSupabase();
-  const { error: deleteError } = await supabase
-    .from(TABLE)
-    .delete()
-    .eq('product_id', productId)
-    .eq('warehouse_id', warehouseId);
-  if (deleteError) throw deleteError;
-
-  const sizesToInsert = sizesForm
-    .filter((s) => Number(s.quantity) > 0)
-    .map((s) => ({
-      product_id: productId,
-      warehouse_id: warehouseId,
-      size_code: String(s.size_code ?? '').trim(),
-      quantity: Math.floor(Number(s.quantity)),
-    }))
-    .filter((s) => s.size_code);
-
-  if (sizesToInsert.length === 0) return;
-
-  const { error: insertError } = await supabase.from(TABLE).insert(sizesToInsert);
-  if (insertError) throw insertError;
 }
