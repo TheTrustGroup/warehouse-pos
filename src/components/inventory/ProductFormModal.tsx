@@ -470,6 +470,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       if (product?.id && payloadImages.length > 0) {
         setProductImages(product.id, payloadImages);
       }
+      console.log('Submitting sizes:', validSizeRows, 'sizeKind:', formData.sizeKind);
       await Promise.resolve(onSubmit(payload, product?.id ?? null));
       onClose();
     } catch {

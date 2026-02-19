@@ -477,7 +477,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             return p;
           });
         }
-        // BUG 2 FIX: Saved product ALWAYS wins within 60s. Read refs at call time (no closure/stale ref).
+        // BUG 2 FIX: Saved product ALWAYS wins within 60s. Read ref at EXECUTION time (not closure) so merge sees current value.
         const updated = lastUpdatedProductRef.current;
         const nowInMerge = Date.now();
         const inWindow = updated != null && nowInMerge - updated.at < RECENT_UPDATE_WINDOW_MS;
@@ -1096,7 +1096,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       // Filter zero-quantity sizes so list only shows sizes with stock
       quantityBySize = quantityBySize.filter((s) => Number(s.quantity ?? 0) > 0);
       const finalProduct = { ...withImages, sizeKind, quantityBySize } as Product;
-      const newList = products.map((p) => (p.id === id ? finalProduct : p));
       const at = Date.now();
       // Set refs BEFORE setState so any in-flight loadProducts() merge sees this product and does not overwrite with stale API data.
       // Store a clone so no shared reference can be mutated by later code.
@@ -1111,14 +1110,18 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.log('[Inventory] Product saved; list state updated. Recent-update window active for 60s so poll/refetch will not overwrite.', { productId: id });
       }
       if (payloadImages.length > 0) setProductImages(id, payloadImages);
-      setProducts(newList);
-      cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
-      if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), newList);
-      if (isIndexedDBAvailable()) {
-        saveProductsToDb(newList).catch((e) => {
-          reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: newList.length });
-        });
-      }
+      // Use functional update so we map over latest state, not stale closure (products can change between PUT start and resolve).
+      setProducts((prev) => {
+        const next = prev.map((p) => (p.id === id ? finalProduct : p));
+        cacheRef.current[effectiveWarehouseId] = { data: next, ts: Date.now() };
+        if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), next);
+        if (isIndexedDBAvailable()) {
+          saveProductsToDb(next).catch((e) => {
+            reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: next.length });
+          });
+        }
+        return next;
+      });
       setLastSyncAt(new Date());
       logInventoryUpdate({ productId: id, sku: product.sku });
       showToast('success', 'Product updated.');
