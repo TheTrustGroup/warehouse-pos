@@ -133,6 +133,11 @@ begin
         insert into warehouse_inventory_by_size (warehouse_id, product_id, size_code, quantity, updated_at)
         values (p_warehouse_id, p_id, v_size_code, v_size_qty, now());
       end loop;
+    else
+      -- empty array (e.g. one_size after clearing by_size): use p_quantity for total so stock does not become 0
+      if p_quantity is not null then
+        v_qty := greatest(0, p_quantity);
+      end if;
     end if;
     insert into warehouse_inventory (warehouse_id, product_id, quantity, updated_at)
     values (p_warehouse_id, p_id, greatest(0, v_qty), now())
