@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
-import { Product, type QuantityBySizeItem } from '../../types';
+import { Product } from '../../types';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
 import { safeValidateProductForm } from '../../lib/validationSchemas';
 import { useWarehouse, DEFAULT_WAREHOUSE_ID } from '../../contexts/WarehouseContext';
@@ -145,8 +145,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     const skipImageOverwrite = imageUploadingRef.current;
 
     if (currentProduct) {
-      const rawQtyBySize = (currentProduct.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
-      const qtyBySize = rawQtyBySize.filter((q) => !isSyntheticOneSizeRow(q.sizeCode ?? ''));
+      const effectiveWarehouseId = (currentProduct as { warehouseId?: string }).warehouseId ?? warehouseId ?? DEFAULT_WAREHOUSE_ID;
       const validImages = Array.isArray(currentProduct.images)
         ? currentProduct.images.filter(
             (img): img is string =>
@@ -155,6 +154,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
               (img.startsWith('data:') || img.startsWith('http://') || img.startsWith('https://'))
           )
         : [];
+      // First set form from product so modal feels instant (quantityBySize may be patched below from DB).
       setFormData((prev) => ({
         sku: currentProduct.sku,
         barcode: currentProduct.barcode,
@@ -166,7 +166,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         costPrice: currentProduct.costPrice,
         sellingPrice: currentProduct.sellingPrice,
         reorderLevel: currentProduct.reorderLevel,
-        warehouseId: (currentProduct as any).warehouseId ?? warehouseId,
+        warehouseId: effectiveWarehouseId,
         location: currentProduct.location && typeof currentProduct.location === 'object'
           ? { warehouse: (currentProduct.location as any).warehouse ?? 'Main Store', aisle: (currentProduct.location as any).aisle ?? '', rack: (currentProduct.location as any).rack ?? '', bin: (currentProduct.location as any).bin ?? '' }
           : { warehouse: 'Main Store', aisle: '', rack: '', bin: '' },
@@ -178,12 +178,28 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         variants: currentProduct.variants || {},
         createdBy: currentProduct.createdBy,
         sizeKind: (currentProduct.sizeKind ?? 'na') as SizeKind,
-        quantityBySize: qtyBySize.length > 0 ? qtyBySize : [],
+        quantityBySize: currentProduct.quantityBySize ?? [],
       }));
       if (!skipImageOverwrite) {
         setImagePreview(validImages);
         formDataImagesRef.current = validImages;
         imagesLengthRef.current = validImages.length;
+      }
+      // For sized products, fetch canonical size_code + quantity from DB and patch form (avoids spaces/casing mismatch).
+      if ((currentProduct.sizeKind ?? 'na') === 'sized') {
+        apiGet<{ data: Array<{ sizeCode: string; quantity: number }> }>(
+          API_BASE_URL,
+          `/api/products/${currentProduct.id}/inventory-by-size?warehouse_id=${encodeURIComponent(effectiveWarehouseId)}`
+        )
+          .then((res) => {
+            if (res?.data && res.data.length > 0) {
+              setFormData((prev) => ({
+                ...prev,
+                quantityBySize: res.data.map((r) => ({ sizeCode: r.sizeCode, quantity: r.quantity })),
+              }));
+            }
+          })
+          .catch(() => { /* keep form as-is on fetch failure */ });
       }
     } else {
       setFormData((prev) => ({

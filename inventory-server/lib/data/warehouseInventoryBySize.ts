@@ -34,7 +34,8 @@ export async function getQuantitiesBySize(
     .from(TABLE)
     .select('size_code, quantity')
     .eq('warehouse_id', warehouseId)
-    .eq('product_id', productId);
+    .eq('product_id', productId)
+    .order('size_code');
   if (error) throw error;
   return (data ?? []).map((row: { size_code: string; quantity: number }) => ({
     sizeCode: row.size_code,
