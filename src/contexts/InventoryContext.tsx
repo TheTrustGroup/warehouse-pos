@@ -364,9 +364,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
     const now = Date.now();
     if (silent) {
+      const sinceLastSave = now - lastSaveAtRef.current;
+      // eslint-disable-next-line no-console -- intentional: appears in production to confirm guard fires
+      console.log('[Poll] sinceLastSave:', sinceLastSave, 'skipping:', sinceLastSave < POST_SAVE_NO_REFETCH_MS);
       if (now - lastSilentRefreshAtRef.current < SILENT_REFRESH_THROTTLE_MS) return;
       if (now - lastSizeUpdateAtRef.current < SIZE_UPDATE_COOLDOWN_MS) return;
-      if (now - lastSaveAtRef.current < POST_SAVE_NO_REFETCH_MS) return;
+      if (sinceLastSave < POST_SAVE_NO_REFETCH_MS) return;
       lastSilentRefreshAtRef.current = now;
     }
 
@@ -736,7 +739,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   }, [currentWarehouseId]);
 
-  // Real-time: poll when tab visible so all devices see server truth. 30s reduces jitter. lastSaveAtRef (POST_SAVE_NO_REFETCH_MS 10s) is checked inside loadProducts so we skip the poll for 10s after save; merge of lastUpdatedProductRef protects for 60s when poll does run.
+  // Real-time: poll when tab visible so all devices see server truth. 30s reduces jitter. lastSaveAtRef (POST_SAVE_NO_REFETCH_MS 60s) is checked inside loadProducts when silent so we skip the poll for 60s after save; visibility and retry handlers also guard with POST_SAVE_NO_REFETCH_MS.
   const INVENTORY_POLL_MS = 30_000;
   useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }), intervalMs: INVENTORY_POLL_MS });
 
@@ -744,6 +747,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
+        if (Date.now() - lastSaveAtRef.current < POST_SAVE_NO_REFETCH_MS) return;
         loadProductsRef.current(undefined, { silent: true, bypassCache: true }).catch(() => {});
       }
     };
@@ -753,7 +757,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   // When user clicks "Try again" on the server-unavailable banner, refetch products.
   useEffect(() => {
-    const onRetry = () => loadProducts(undefined, { bypassCache: true });
+    const onRetry = () => {
+      if (Date.now() - lastSaveAtRef.current < POST_SAVE_NO_REFETCH_MS) return;
+      loadProductsRef.current(undefined, { bypassCache: true }).catch(() => {});
+    };
     window.addEventListener('circuit-retry', onRetry);
     return () => window.removeEventListener('circuit-retry', onRetry);
   }, []);
