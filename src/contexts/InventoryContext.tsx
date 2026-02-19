@@ -81,6 +81,13 @@ function getAllCachedProducts(): Product[] {
   }
 }
 
+/** True when quantityBySize is exactly one row and it's the RPC fallback "One size" / "ONESIZE" (so we should prefer cache's real sizes). */
+function isOnlySyntheticOneSize(quantityBySize: unknown): boolean {
+  if (!Array.isArray(quantityBySize) || quantityBySize.length !== 1) return false;
+  const code = String((quantityBySize[0] as { sizeCode?: string })?.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase();
+  return code === 'ONESIZE' || code === 'ONE_SIZE';
+}
+
 /** Read cached product list for this warehouse only. Never returns another warehouse's data — so switching warehouse always shows correct scope (or loading until API returns). */
 function getCachedProductsForWarehouse(warehouseId: string): Product[] {
   if (typeof window === 'undefined' || !isStorageAvailable()) return [];
@@ -424,7 +431,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             if (Array.isArray(c.images) && c.images.length > 0 && (!p.images || p.images.length === 0)) {
               next = { ...next, images: c.images };
             }
-            if ((c.sizeKind === 'sized' || (Array.isArray(c.quantityBySize) && c.quantityBySize.length > 0)) && !(Array.isArray(next.quantityBySize) && next.quantityBySize.length > 0)) {
+            const apiHasNoRealSizes = !(Array.isArray(next.quantityBySize) && next.quantityBySize.length > 0) || isOnlySyntheticOneSize(next.quantityBySize);
+            if ((c.sizeKind === 'sized' || (Array.isArray(c.quantityBySize) && c.quantityBySize.length > 0)) && apiHasNoRealSizes) {
               next = { ...next, sizeKind: c.sizeKind ?? next.sizeKind, quantityBySize: Array.isArray(c.quantityBySize) ? c.quantityBySize : [] };
             }
             return next;
