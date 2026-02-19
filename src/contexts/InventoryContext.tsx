@@ -1001,11 +1001,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         apiHasImages
           ? normalized
           : { ...normalized, images: payloadImages.length > 0 ? payloadImages : (Array.isArray(updated.images) ? updated.images : []) };
-      // Always apply form's size type and sizes to list so Sizes column shows immediately (don't rely on API response)
       const sizeKind = updates.sizeKind ?? (withImages as Product).sizeKind ?? 'na';
-      const quantityBySize = Array.isArray(updates.quantityBySize)
-        ? updates.quantityBySize
-        : (Array.isArray((withImages as Product).quantityBySize) ? (withImages as Product).quantityBySize : []);
+      // Prefer API response sizes when server returned real multiple sizes (same source of truth as list RPC); else use form data
+      const apiQuantityBySize = Array.isArray((withImages as Product).quantityBySize) ? (withImages as Product).quantityBySize : [];
+      const apiHasRealSizes = apiQuantityBySize.length > 0 && !isOnlySyntheticOneSize(apiQuantityBySize);
+      const quantityBySize =
+        apiHasRealSizes
+          ? apiQuantityBySize
+          : (Array.isArray(updates.quantityBySize) && updates.quantityBySize.length > 0
+              ? updates.quantityBySize
+              : apiQuantityBySize.length > 0 ? apiQuantityBySize : []);
       const finalProduct = { ...withImages, sizeKind, quantityBySize } as Product;
       const newList = products.map((p) => (p.id === id ? finalProduct : p));
       if (payloadImages.length > 0) setProductImages(id, payloadImages);

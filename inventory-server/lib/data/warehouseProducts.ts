@@ -488,7 +488,8 @@ async function createWarehouseProductLegacy(
 
 /** PUT: update one. Uses atomic RPC when available; fallback to legacy. Optimistic lock: version; 409 if conflict. */
 export async function updateWarehouseProduct(id: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const existing = await getWarehouseProductById(id);
+  const wid = (body.warehouseId as string)?.trim() || getDefaultWarehouseId();
+  const existing = await getWarehouseProductById(id, wid);
   if (!existing) {
     const err = new Error('Product not found') as Error & { status?: number };
     err.status = 404;
@@ -499,7 +500,6 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
 
   const currentVersion = Number(existing.version ?? 0);
   const ts = now();
-  const wid = (body.warehouseId as string) ?? getDefaultWarehouseId();
   const quantityBySizeRaw = (body as { quantityBySize?: Array<{ sizeCode: string; quantity: number }> }).quantityBySize;
   const hasSized = Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0;
   const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: currentVersion + 1 }, id, ts);
