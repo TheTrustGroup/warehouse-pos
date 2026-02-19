@@ -1002,16 +1002,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           ? normalized
           : { ...normalized, images: payloadImages.length > 0 ? payloadImages : (Array.isArray(updated.images) ? updated.images : []) };
       const sizeKind = updates.sizeKind ?? (withImages as Product).sizeKind ?? 'na';
-      // Prefer API response sizes when server returned real multiple sizes (same source of truth as list RPC); else use form data
       const rawApiSizes = (withImages as Product).quantityBySize;
       const apiQuantityBySize = Array.isArray(rawApiSizes) ? rawApiSizes : [];
       const apiHasRealSizes = apiQuantityBySize.length > 0 && !isOnlySyntheticOneSize(apiQuantityBySize);
+      const formSentSizes = Array.isArray(updates.quantityBySize) && updates.quantityBySize.length > 0;
+      // When user saved multiple sizes: prefer API if it returned real sizes; else use form data so UI shows S/M/L immediately (avoids ONESIZE × N until refetch)
       const quantityBySize =
         apiHasRealSizes
           ? apiQuantityBySize
-          : (Array.isArray(updates.quantityBySize) && updates.quantityBySize.length > 0
-              ? updates.quantityBySize
-              : apiQuantityBySize.length > 0 ? apiQuantityBySize : []);
+          : formSentSizes
+            ? updates.quantityBySize!
+            : apiQuantityBySize.length > 0 ? apiQuantityBySize : [];
       const finalProduct = { ...withImages, sizeKind, quantityBySize } as Product;
       const newList = products.map((p) => (p.id === id ? finalProduct : p));
       if (payloadImages.length > 0) setProductImages(id, payloadImages);

@@ -500,8 +500,13 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
 
   const currentVersion = Number(existing.version ?? 0);
   const ts = now();
-  const bodySizeKind = (body as { sizeKind?: string }).sizeKind;
-  const quantityBySizeRaw = (body as { quantityBySize?: Array<{ sizeCode: string; quantity: number }> }).quantityBySize;
+  const bodySizeKind = (body as { sizeKind?: string }).sizeKind ?? (body as { size_kind?: string }).size_kind;
+  const quantityBySizeRaw =
+    (body as { quantityBySize?: Array<{ sizeCode: string; quantity: number }> }).quantityBySize
+    ?? (body as { quantity_by_size?: Array<{ sizeCode?: string; size_code?: string; quantity: number }> }).quantity_by_size?.map((e) => ({
+        sizeCode: (e.sizeCode ?? e.size_code ?? '').toString().trim(),
+        quantity: Number(e.quantity) ?? 0,
+      }));
   const hasSized =
     bodySizeKind === 'sized' || (Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0);
   const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: currentVersion + 1 }, id, ts);
@@ -518,10 +523,12 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
   if (hasSized) {
     const normalized =
       Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0
-        ? quantityBySizeRaw.map((e) => ({
-            sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
-            quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
-          })).filter((e) => e.sizeCode)
+        ? quantityBySizeRaw
+            .map((e) => ({
+              sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase(),
+              quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
+            }))
+            .filter((e) => e.sizeCode && e.sizeCode !== 'NA')
         : [];
     const sum = normalized.reduce((s, e) => s + e.quantity, 0);
     const existingQty = Number(existing.quantity ?? 0) || 0;
