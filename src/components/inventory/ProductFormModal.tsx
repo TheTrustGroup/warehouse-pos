@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
-import { Product, type QuantityBySizeItem } from '../../types';
+import { Product, type QuantityBySizeItem, type SizeInventoryItem } from '../../types';
+import { EditableSizesColumn } from './EditableSizesColumn';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
 import { safeValidateProductForm } from '../../lib/validationSchemas';
 import { useWarehouse, DEFAULT_WAREHOUSE_ID } from '../../contexts/WarehouseContext';
@@ -11,7 +12,7 @@ import { apiGet } from '../../lib/apiClient';
 import { compressImage, MAX_IMAGE_BASE64_LENGTH } from '../../lib/imageUtils';
 import { setProductImages } from '../../lib/productImagesStore';
 import { Button } from '../ui/Button';
-import { X, Upload, Plus, Trash2, CloudOff } from 'lucide-react';
+import { X, Upload, CloudOff } from 'lucide-react';
 
 const MAX_PRODUCT_IMAGES = 5;
 
@@ -367,6 +368,40 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const removeTag = (tag: string) => {
     setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
   };
+
+  const selectedWarehouseForSizes = formData.warehouseId || currentWarehouseId;
+  const productIdForSizes = product?.id ?? 'new';
+  const formSizeInventory = useMemo((): SizeInventoryItem[] => {
+    return (formData.quantityBySize ?? [])
+      .filter((r) => (r.sizeCode ?? '').trim() !== '' && !isSyntheticOneSizeRow(r.sizeCode ?? ''))
+      .map((r) => ({
+        product_id: productIdForSizes,
+        warehouse_id: selectedWarehouseForSizes,
+        size_code: r.sizeCode,
+        quantity: r.quantity ?? 0,
+        size_codes: { size_order: sizeCodes.find((s) => s.size_code === r.sizeCode)?.size_order ?? 0 },
+      }));
+  }, [formData.quantityBySize, productIdForSizes, selectedWarehouseForSizes, sizeCodes]);
+
+  const setFormSizeInventory = useCallback(
+    (updater: React.SetStateAction<SizeInventoryItem[]>) => {
+      setFormData((prev) => {
+        const prevList = (prev.quantityBySize ?? [])
+          .filter((r) => (r.sizeCode ?? '').trim() !== '' && !isSyntheticOneSizeRow(r.sizeCode ?? ''))
+          .map((r) => ({
+            product_id: productIdForSizes,
+            warehouse_id: prev.warehouseId || currentWarehouseId,
+            size_code: r.sizeCode,
+            quantity: r.quantity ?? 0,
+            size_codes: { size_order: sizeCodes.find((s) => s.size_code === r.sizeCode)?.size_order ?? 0 },
+          }));
+        const next = typeof updater === 'function' ? updater(prevList) : updater;
+        const quantityBySize = next.map((row) => ({ sizeCode: row.size_code, quantity: row.quantity }));
+        return { ...prev, quantityBySize };
+      });
+    },
+    [currentWarehouseId, productIdForSizes, sizeCodes]
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -759,68 +794,47 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
                   <span className="ml-2 text-slate-400 font-normal">(Loading sizes…)</span>
                 )}
               </label>
-              {formData.quantityBySize.length === 0 && (
-                <p className="text-amber-600 text-sm mb-2">Add at least one size row to save.</p>
+              {formSizeInventory.length === 0 && (
+                <p className="text-amber-600 text-sm mb-2">Add at least one size to save.</p>
               )}
-              <div className="space-y-2">
-                <datalist id="size-codes-datalist">
-                  {sizeCodes.map((s) => (
-                    <option key={s.size_code} value={s.size_code} label={s.size_label} />
-                  ))}
-                </datalist>
-                {formData.quantityBySize.map((row, idx) => (
-                  <div key={idx} className="flex flex-wrap items-center gap-2 min-h-touch">
-                    <input
-                      type="text"
-                      list="size-codes-datalist"
-                      value={row.sizeCode}
-                      onChange={(e) => setFormData(prev => ({
+              <EditableSizesColumn
+                product={{ id: productIdForSizes }}
+                selectedWarehouse={selectedWarehouseForSizes}
+                sizeInventory={formSizeInventory}
+                setSizeInventory={setFormSizeInventory}
+              />
+              {sizeCodes.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <select
+                    className="input-field min-h-[44px] min-w-[140px]"
+                    value=""
+                    onChange={(e) => {
+                      const sizeCode = e.target.value;
+                      if (!sizeCode) return;
+                      setFormData((prev) => ({
                         ...prev,
-                        quantityBySize: prev.quantityBySize.map((r, i) =>
-                          i === idx ? { ...r, sizeCode: e.target.value } : r
-                        ),
-                      }))}
-                      placeholder="Pick or type size (e.g. US 9, EU 42)"
-                      className="input-field flex-1 min-w-[120px] min-h-[44px]"
-                      autoComplete="off"
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      value={row.quantity}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        quantityBySize: prev.quantityBySize.map((r, i) =>
-                          i === idx ? { ...r, quantity: Number(e.target.value) || 0 } : r
-                        ),
-                      }))}
-                      className="input-field w-24 min-h-[44px]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setFormData(prev => ({
-                        ...prev,
-                        quantityBySize: prev.quantityBySize.filter((_, i) => i !== idx),
-                      }))}
-                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
-                      aria-label="Remove size row"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({
-                    ...prev,
-                    quantityBySize: [...prev.quantityBySize, { sizeCode: '', quantity: 0 }],
-                  }))}
-                  className="min-h-[44px] px-4 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 inline-flex items-center gap-2 text-sm font-medium"
-                >
-                  <Plus className="w-5 h-5" />
-                  Add size
-                </button>
-              </div>
+                        quantityBySize: [...prev.quantityBySize, { sizeCode, quantity: 0 }],
+                      }));
+                      e.target.value = '';
+                    }}
+                    aria-label="Add a size"
+                  >
+                    <option value="">Add size…</option>
+                    {sizeCodes
+                      .filter(
+                        (s) =>
+                          !formData.quantityBySize.some(
+                            (r) => (r.sizeCode ?? '').trim() === s.size_code
+                          )
+                      )
+                      .map((s) => (
+                        <option key={s.size_code} value={s.size_code}>
+                          {s.size_label || s.size_code}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
             </div>
           )}
 
