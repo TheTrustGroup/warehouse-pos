@@ -718,7 +718,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       ...(product.version !== undefined && { version: product.version }),
       sizeKind: product.sizeKind ?? 'na',
       ...(Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0 && { quantityBySize: product.quantityBySize }),
-      ...((product as Record<string, unknown>).warehouseId != null && { warehouseId: (product as Record<string, unknown>).warehouseId }),
+      ...((product as Product & { warehouseId?: string }).warehouseId != null && { warehouseId: (product as Product & { warehouseId?: string }).warehouseId }),
     };
   };
 
