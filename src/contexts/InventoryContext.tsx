@@ -374,6 +374,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const updated = lastUpdatedProductRef.current;
       if (updated && now - updated.at < RECENT_UPDATE_WINDOW_MS) {
         listToSet = listToSet.map((p) => (p.id === updated.product.id ? updated.product : p));
+        if (import.meta.env?.DEV) {
+          console.log('[Inventory] loadProducts (cache path): preserved just-updated product (avoids revert).', { productId: updated.product.id });
+        }
       }
       setProducts(listToSet);
       setIsLoading(false);
@@ -468,6 +471,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const updated = lastUpdatedProductRef.current;
         if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
           merged = merged.map((p) => (p.id === updated.product.id ? updated.product : p));
+          if (import.meta.env?.DEV) {
+            console.log('[Inventory] loadProducts: preserved just-updated product in merge (avoids revert).', { productId: updated.product.id });
+          }
         }
         // Persistence: never show empty if we have cached data (avoid data loss from wrong warehouse or transient API empty)
         if (merged.length === 0 && (isStorageAvailable() || isIndexedDBAvailable())) {
@@ -1045,6 +1051,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       // Set refs BEFORE setState so any in-flight loadProducts() merge sees this product and does not overwrite with stale API data
       lastUpdatedProductRef.current = { product: finalProduct, at };
       if (isSized) lastSizeUpdateAtRef.current = at;
+      if (import.meta.env?.DEV) {
+        console.log('[Inventory] Product saved; list state updated. Recent-update window active for 60s so poll/refetch will not overwrite.', { productId: id });
+      }
       if (payloadImages.length > 0) setProductImages(id, payloadImages);
       setApiOnlyProductsState(newList);
       cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
