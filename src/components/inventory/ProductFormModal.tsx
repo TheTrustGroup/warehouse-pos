@@ -536,9 +536,16 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 solid-panel border-b border-slate-200/80 px-4 sm:px-6 py-4 flex items-center justify-between z-10 flex-shrink-0">
-          <h2 id="product-form-title" className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate pr-2">
-            {product ? 'Edit product' : 'Add product'}
-          </h2>
+          <div className="min-w-0 flex-1 pr-2">
+            <h2 id="product-form-title" className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate">
+              {product ? 'Edit product' : 'Add product'}
+            </h2>
+            {product?.id && (
+              <p className="text-xs text-slate-500 mt-1 font-mono truncate" title="Product ID (copy for API or SQL)">
+                ID: {product.id}
+              </p>
+            )}
+          </div>
           <Button type="button" variant="action" onClick={onClose} className="rounded-lg min-h-[44px] min-w-[44px] flex-shrink-0" aria-label="Close">
             <X className="w-5 h-5 text-slate-600" />
           </Button>
