@@ -185,21 +185,34 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         formDataImagesRef.current = validImages;
         imagesLengthRef.current = validImages.length;
       }
-      // For sized products, fetch canonical size_code + quantity from DB and patch form (avoids spaces/casing mismatch).
       if ((currentProduct.sizeKind ?? 'na') === 'sized') {
-        apiGet<{ data: Array<{ sizeCode: string; quantity: number }> }>(
-          API_BASE_URL,
-          `/api/products/${currentProduct.id}/inventory-by-size?warehouse_id=${encodeURIComponent(effectiveWarehouseId)}`
-        )
-          .then((res) => {
-            if (res?.data && res.data.length > 0) {
-              setFormData((prev) => ({
-                ...prev,
-                quantityBySize: res.data.map((r) => ({ sizeCode: r.sizeCode, quantity: r.quantity })),
-              }));
-            }
-          })
-          .catch(() => { /* keep form as-is on fetch failure */ });
+        const existingSizes = (currentProduct.quantityBySize ?? [])
+          .filter((r) => r.quantity > 0)
+          .map((r) => ({ sizeCode: r.sizeCode, quantity: r.quantity }));
+
+        if (existingSizes.length > 0) {
+          setFormData((prev) => ({
+            ...prev,
+            quantityBySize: existingSizes,
+          }));
+        } else {
+          // Fallback: fetch from DB if product came without sizes
+          apiGet<{ data: Array<{ sizeCode: string; quantity: number }> }>(
+            API_BASE_URL,
+            `/api/products/${currentProduct.id}/inventory-by-size?warehouse_id=${encodeURIComponent(effectiveWarehouseId)}`
+          )
+            .then((res) => {
+              if (res?.data && res.data.length > 0) {
+                setFormData((prev) => ({
+                  ...prev,
+                  quantityBySize: res.data
+                    .filter((r) => r.quantity > 0)
+                    .map((r) => ({ sizeCode: r.sizeCode, quantity: r.quantity })),
+                }));
+              }
+            })
+            .catch(() => {});
+        }
       }
     } else {
       setFormData((prev) => ({
