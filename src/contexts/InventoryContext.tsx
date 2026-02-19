@@ -365,6 +365,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const now = Date.now();
     if (silent) {
       const sinceLastSave = now - lastSaveAtRef.current;
+      // eslint-disable-next-line no-console -- debug: confirm ref and timing in production
+      console.log('[Poll] lastSaveAtRef.current:', lastSaveAtRef.current, 'now:', now, 'since:', sinceLastSave);
       // eslint-disable-next-line no-console -- intentional: appears in production to confirm guard fires
       console.log('[Poll] sinceLastSave:', sinceLastSave, 'skipping:', sinceLastSave < POST_SAVE_NO_REFETCH_MS);
       if (now - lastSilentRefreshAtRef.current < SILENT_REFRESH_THROTTLE_MS) return;
@@ -1112,6 +1114,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       };
       lastUpdatedProductRef.current = { product: productForRef, at };
       lastSaveAtRef.current = at;
+      // eslint-disable-next-line no-console -- debug: confirm save timestamp
+      console.log('[Save] lastSaveAtRef set to:', at);
       if (isSized) lastSizeUpdateAtRef.current = at;
       if (import.meta.env?.DEV) {
         console.log('[Inventory] Product saved; list state updated. Recent-update window active for 60s so poll/refetch will not overwrite.', { productId: id });
