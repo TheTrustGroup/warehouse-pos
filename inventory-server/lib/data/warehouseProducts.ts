@@ -478,10 +478,12 @@ async function createWarehouseProductLegacy(
     : Number(body.quantity) ?? 0;
   if (hasSized && quantityBySizeRaw) {
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
-    const quantityBySize = quantityBySizeRaw.map((e) => {
-      const code = String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA';
-      return { sizeCode: code, sizeLabel: sizeLabels.get(code) ?? code, quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)) };
-    });
+    const quantityBySize = quantityBySizeRaw
+      .map((e) => {
+        const code = String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA';
+        return { sizeCode: code, sizeLabel: sizeLabels.get(code) ?? code, quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)) };
+      })
+      .filter((e) => e.quantity > 0);
     return rowToApi(outRow, qty, quantityBySize);
   }
   return rowToApi(outRow, qty);
@@ -545,7 +547,7 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
         pQuantityBySize = [];
         pQuantity = bodyQty != null ? bodyQty : existingQty;
       } else if (normalized.length > 0) {
-        pQuantityBySize = normalized;
+        pQuantityBySize = normalized.filter((e) => e.quantity > 0);
       } else {
         // CRITICAL: Payload had no size rows (e.g. partial update or form didn't send quantityBySize).
         // Preserve existing per-size inventory instead of passing [] which would DELETE all rows and wipe sizes.
@@ -668,10 +670,12 @@ async function updateWarehouseProductLegacy(
   const outRow = data as WarehouseProductRow;
   if (hasSized && quantityBySizeRaw && preservedQty == null) {
     const sizeLabels = await getSizeCodes().then((list) => new Map(list.map((s) => [s.size_code, s.size_label])));
-    const quantityBySize = quantityBySizeRaw.map((e) => {
-      const code = String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA';
-      return { sizeCode: code, sizeLabel: sizeLabels.get(code) ?? code, quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)) };
-    });
+    const quantityBySize = quantityBySizeRaw
+      .map((e) => {
+        const code = String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA';
+        return { sizeCode: code, sizeLabel: sizeLabels.get(code) ?? code, quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)) };
+      })
+      .filter((e) => e.quantity > 0);
     return rowToApi(outRow, qty, quantityBySize);
   }
   return rowToApi(outRow, qty);
