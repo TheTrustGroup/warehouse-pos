@@ -97,17 +97,13 @@ export function Inventory() {
       }
       return;
     }
-    try {
-      const newId = await s.addProduct(productData);
-      s.setIsModalOpen(false);
-      s.setEditingProduct(null);
-      s.setUndoStack((prev) => {
-        const next = [{ productId: newId, at: Date.now() }, ...prev].slice(0, s.MAX_UNDO_ENTRIES);
-        return next;
-      });
-    } catch (e) {
-      throw e;
-    }
+    const newId = await s.addProduct(productData);
+    s.setIsModalOpen(false);
+    s.setEditingProduct(null);
+    s.setUndoStack((prev) => {
+      const next = [{ productId: newId, at: Date.now() }, ...prev].slice(0, s.MAX_UNDO_ENTRIES);
+      return next;
+    });
   };
 
   const handleCloseProductModal = useCallback(() => {

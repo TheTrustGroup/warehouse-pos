@@ -17,7 +17,6 @@ import { logError } from '../utils/logger';
 export function reportError(error: unknown, context?: Record<string, unknown>): void {
   const err = error instanceof Error ? error : new Error(String(error));
   if (import.meta.env.DEV) {
-    // eslint-disable-next-line no-console
     console.error('[Error]', err, context);
   }
   logError(err, context);
@@ -31,6 +30,5 @@ export function reportError(error: unknown, context?: Record<string, unknown>): 
 export function logErrorForDev(error: unknown, context?: string | Record<string, unknown>): void {
   if (!import.meta.env.DEV) return;
   const ctx = typeof context === 'string' ? { context } : context;
-  // eslint-disable-next-line no-console
   console.error('[Error]', error, ctx ?? {});
 }

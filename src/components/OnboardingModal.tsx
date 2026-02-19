@@ -53,7 +53,9 @@ export function OnboardingModal() {
     setOpen(false);
     try {
       localStorage.setItem(STORAGE_KEY, '1');
-    } catch {}
+    } catch {
+      /* localStorage not available */
+    }
   };
 
   if (!open) return null;

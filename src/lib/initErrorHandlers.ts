@@ -22,7 +22,9 @@ export function setErrorReportingConsent(consent: boolean): void {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(CONSENT_KEY, consent ? 'true' : 'false');
     }
-  } catch (_) {}
+  } catch {
+    /* ignore */
+  }
 }
 
 export function initErrorHandlers(): void {

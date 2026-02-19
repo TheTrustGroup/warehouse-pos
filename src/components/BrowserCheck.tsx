@@ -46,7 +46,9 @@ export function BrowserCheck({ children }: { children: ReactNode }) {
     setDismissed(true);
     try {
       localStorage.setItem(STORAGE_KEY, '1');
-    } catch {}
+    } catch {
+      /* localStorage not available */
+    }
   };
 
   if (supported === null || supported) return <>{children}</>;

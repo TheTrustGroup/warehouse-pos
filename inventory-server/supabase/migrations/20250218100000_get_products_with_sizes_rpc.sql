@@ -94,7 +94,7 @@ begin
       where wibs.warehouse_id = p_warehouse_id and wibs.product_id = wp.id
     ) sizes_json on true
   )
-  -- When product has quantity but no rows in warehouse_inventory_by_size (e.g. table added later), show "One size: N" so Size column is never empty.
+  -- Only show "One size" fallback when product is NOT sized (na/one_size). For size_kind = 'sized', return actual by_size so UI shows what was entered (S/M/L); empty if none.
   select jsonb_agg(
     jsonb_build_object(
       'id', id,
@@ -118,11 +118,13 @@ begin
       'version', version,
       'sizeKind', size_kind,
       'quantityBySize', case
+        when size_kind = 'sized' then coalesce(quantity_by_size, '[]'::jsonb)
         when coalesce(quantity_by_size, '[]'::jsonb) = '[]'::jsonb and quantity > 0 then
           jsonb_build_array(jsonb_build_object('sizeCode', 'One size', 'sizeLabel', 'One size', 'quantity', quantity))
         else coalesce(quantity_by_size, '[]'::jsonb)
       end,
       'sizes', case
+        when size_kind = 'sized' then coalesce(sizes_arr, '[]'::jsonb)
         when coalesce(sizes_arr, '[]'::jsonb) = '[]'::jsonb and quantity > 0 then
           jsonb_build_array(jsonb_build_object('size', 'One size', 'quantity', quantity))
         else coalesce(sizes_arr, '[]'::jsonb)
@@ -209,6 +211,7 @@ begin
     return;
   end if;
 
+  -- Only show "One size" fallback when product is NOT sized. For size_kind = 'sized', return actual by_size.
   data := jsonb_build_object(
     'id', v_row.id,
     'sku', v_row.sku,
@@ -231,11 +234,13 @@ begin
     'version', v_row.version,
     'sizeKind', v_row.size_kind,
     'quantityBySize', case
+      when coalesce(v_row.size_kind, 'na') = 'sized' then coalesce(v_row.quantity_by_size, '[]'::jsonb)
       when coalesce(v_row.quantity_by_size, '[]'::jsonb) = '[]'::jsonb and v_row.quantity > 0 then
         jsonb_build_array(jsonb_build_object('sizeCode', 'One size', 'sizeLabel', 'One size', 'quantity', v_row.quantity))
       else coalesce(v_row.quantity_by_size, '[]'::jsonb)
     end,
     'sizes', case
+      when coalesce(v_row.size_kind, 'na') = 'sized' then coalesce(v_row.sizes_arr, '[]'::jsonb)
       when coalesce(v_row.sizes_arr, '[]'::jsonb) = '[]'::jsonb and v_row.quantity > 0 then
         jsonb_build_array(jsonb_build_object('size', 'One size', 'quantity', v_row.quantity))
       else coalesce(v_row.sizes_arr, '[]'::jsonb)
