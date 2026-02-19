@@ -369,7 +369,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const cached = cacheRef.current[wid];
     const cacheValid = !bypassCache && cached && (now - cached.ts) < PRODUCTS_CACHE_TTL_MS;
     if (cacheValid && cached.data.length > 0) {
-      setProducts(cached.data);
+      // Never overwrite a just-updated product with cached data (same rule as API merge path)
+      let listToSet = cached.data;
+      const updated = lastUpdatedProductRef.current;
+      if (updated && now - updated.at < RECENT_UPDATE_WINDOW_MS) {
+        listToSet = listToSet.map((p) => (p.id === updated.product.id ? updated.product : p));
+      }
+      setProducts(listToSet);
       setIsLoading(false);
       setError(null);
     }
@@ -1035,12 +1041,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             : apiQuantityBySize.length > 0 ? apiQuantityBySize : [];
       const finalProduct = { ...withImages, sizeKind, quantityBySize } as Product;
       const newList = products.map((p) => (p.id === id ? finalProduct : p));
+      const at = Date.now();
+      // Set refs BEFORE setState so any in-flight loadProducts() merge sees this product and does not overwrite with stale API data
+      lastUpdatedProductRef.current = { product: finalProduct, at };
+      if (isSized) lastSizeUpdateAtRef.current = at;
       if (payloadImages.length > 0) setProductImages(id, payloadImages);
       setApiOnlyProductsState(newList);
       cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
-      const at = Date.now();
-      lastUpdatedProductRef.current = { product: finalProduct, at };
-      if (isSized) lastSizeUpdateAtRef.current = at;
       if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), newList);
       if (isIndexedDBAvailable()) {
         saveProductsToDb(newList).catch((e) => {

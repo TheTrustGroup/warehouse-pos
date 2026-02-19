@@ -28,7 +28,6 @@ interface ProductTableViewProps {
   /** When true, disable delete (e.g. server unavailable). */
   disableDestructiveActions?: boolean;
   /** Called when user deletes a size from the Sizes column: (productId, warehouseId, sizeCode) => void */
-  onDeleteSize?: (productId: string, warehouseId: string, sizeCode: string) => void;
 }
 
 export function ProductTableView({
@@ -48,7 +47,6 @@ export function ProductTableView({
   onVerifySaved,
   onRetrySync,
   disableDestructiveActions = false,
-  onDeleteSize,
 }: ProductTableViewProps) {
   const [sortField, setSortField] = useState<keyof Product>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -242,7 +240,6 @@ export function ProductTableView({
                       product={product}
                       selectedWarehouse={selectedWarehouse}
                       sizeInventory={sizeInventory}
-                      onDeleteSize={onDeleteSize}
                     />
                   </td>
                   <td className="px-4 py-3 align-middle">

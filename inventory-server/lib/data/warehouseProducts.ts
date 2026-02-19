@@ -567,7 +567,8 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
         Array.isArray(bySize) &&
         bySize.length === 1 &&
         /one\s*size|onesize/i.test(String(bySize[0]?.sizeCode ?? ''));
-      if (singleSynthetic)
+      const emptyOrSynthetic = !Array.isArray(bySize) || bySize.length === 0 || singleSynthetic;
+      if (emptyOrSynthetic)
         out.quantityBySize = pQuantityBySize.map((e) => ({ ...e, sizeLabel: e.sizeCode }));
     }
     return out;

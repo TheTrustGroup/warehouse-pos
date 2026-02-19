@@ -30,7 +30,6 @@ interface ProductGridViewProps {
   /** When true, disable delete (e.g. server unavailable). */
   disableDestructiveActions?: boolean;
   /** Called when user deletes a size from the Sizes column: (productId, warehouseId, sizeCode) => void */
-  onDeleteSize?: (productId: string, warehouseId: string, sizeCode: string) => void;
 }
 
 export function ProductGridView({
@@ -49,7 +48,6 @@ export function ProductGridView({
   onVerifySaved,
   onRetrySync,
   disableDestructiveActions = false,
-  onDeleteSize,
 }: ProductGridViewProps) {
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [ripple, setRipple] = useState<{ productId: string; x: number; y: number; id: number } | null>(null);
@@ -231,7 +229,6 @@ export function ProductGridView({
                   product={product}
                   selectedWarehouse={selectedWarehouse}
                   sizeInventory={sizeInventory}
-                  onDeleteSize={onDeleteSize}
                 />
               </div>
 

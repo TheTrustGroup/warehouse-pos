@@ -111,22 +111,6 @@ export function Inventory() {
     s.setEditingProduct(null);
   }, [s.setIsModalOpen, s.setEditingProduct]);
 
-  /** Remove a size from a product at the selected warehouse; updates product and UI. */
-  const handleDeleteSize = useCallback(
-    async (productId: string, warehouseId: string, sizeCode: string) => {
-      const product = s.products.find((p) => p.id === productId);
-      if (!product) return;
-      const nextQuantityBySize = (product.quantityBySize ?? []).filter((row) => row.sizeCode !== sizeCode);
-      try {
-        await s.updateProduct(productId, { quantityBySize: nextQuantityBySize, warehouseId });
-        s.showToast('success', `Size ${sizeCode} removed.`);
-      } catch (err) {
-        s.showToast('error', getUserFriendlyMessage(err));
-      }
-    },
-    [s.products, s.updateProduct, s.showToast]
-  );
-
   const selectedWarehouse = s.currentWarehouseId ?? '';
   const sizeInventory = useMemo<SizeInventoryItem[]>(() => {
     return s.filteredProducts.flatMap((p) =>
@@ -447,7 +431,6 @@ export function Inventory() {
               onVerifySaved={s.verifyProductSaved}
               onRetrySync={s.refreshProducts}
               disableDestructiveActions={disableDestructive}
-              onDeleteSize={handleDeleteSize}
             />
           ) : (
             <ProductGridView
@@ -466,7 +449,6 @@ export function Inventory() {
               onVerifySaved={s.verifyProductSaved}
               onRetrySync={s.refreshProducts}
               disableDestructiveActions={disableDestructive}
-              onDeleteSize={handleDeleteSize}
             />
           )}
         </div>
