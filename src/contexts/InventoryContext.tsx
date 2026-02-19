@@ -269,6 +269,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const RECENT_ADD_WINDOW_MS = 15_000;
   const RECENT_UPDATE_WINDOW_MS = 60_000;
   const RECENT_DELETE_WINDOW_MS = 15_000;
+  /** After a sized product update, skip silent refresh for this long so API list does not overwrite with stale One size. */
+  const SIZE_UPDATE_COOLDOWN_MS = 20_000;
+  const lastSizeUpdateAtRef = useRef<number>(0);
 
   const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
     const params = new URLSearchParams();
@@ -359,6 +362,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const now = Date.now();
     if (silent) {
       if (now - lastSilentRefreshAtRef.current < SILENT_REFRESH_THROTTLE_MS) return;
+      if (now - lastSizeUpdateAtRef.current < SIZE_UPDATE_COOLDOWN_MS) return;
       lastSilentRefreshAtRef.current = now;
     }
 
@@ -438,7 +442,23 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             return next;
           });
         }
-        // If we just updated a product (with images), any loadProducts that runs afterward must keep that version so the image does not vanish
+        // Prefer current state when API returned synthetic "One size" but we have real S/M/L (avoids revert after size edit)
+        const currentForMerge = productsRef.current;
+        if (currentForMerge.length > 0) {
+          merged = merged.map((p) => {
+            const fromState = currentForMerge.find((x) => x.id === p.id);
+            if (!fromState) return p;
+            const apiSynthetic = isOnlySyntheticOneSize(p.quantityBySize);
+            const stateHasRealSizes =
+              fromState.sizeKind === 'sized' &&
+              Array.isArray(fromState.quantityBySize) &&
+              fromState.quantityBySize.length > 0 &&
+              !isOnlySyntheticOneSize(fromState.quantityBySize);
+            if (apiSynthetic && stateHasRealSizes) return fromState;
+            return p;
+          });
+        }
+        // If we just updated a product (with images/sizes), any loadProducts that runs afterward must keep that version
         const updated = lastUpdatedProductRef.current;
         if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
           merged = merged.map((p) => (p.id === updated.product.id ? updated.product : p));
@@ -496,11 +516,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           }
         }
         listToSet = listToSet.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
-        // During silent refresh, never replace list with empty — avoids "No products yet" flash when API returns [] briefly
         const current = productsRef.current;
-        const keepCurrentOnEmpty = silent && listToSet.length === 0 && current.length > 0;
-        if (keepCurrentOnEmpty) {
+        // Never replace list with empty when we have products — avoids empty-state flash and persistent empty
+        if (listToSet.length === 0 && current.length > 0) {
           cacheRef.current[wid] = { data: current, ts: Date.now() };
+          if (!silent) setError('Server returned no products for this warehouse. Showing last saved list.');
           return;
         }
         // During silent refresh, skip setState when list is equivalent (order-independent) to avoid list jitter on mobile
@@ -1018,7 +1038,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (payloadImages.length > 0) setProductImages(id, payloadImages);
       setApiOnlyProductsState(newList);
       cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
-      lastUpdatedProductRef.current = { product: finalProduct, at: Date.now() };
+      const at = Date.now();
+      lastUpdatedProductRef.current = { product: finalProduct, at };
+      if (isSized) lastSizeUpdateAtRef.current = at;
       if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), newList);
       if (isIndexedDBAvailable()) {
         saveProductsToDb(newList).catch((e) => {

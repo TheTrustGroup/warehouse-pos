@@ -530,14 +530,22 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
             }))
             .filter((e) => e.sizeCode && e.sizeCode !== 'NA')
         : [];
-    const sum = normalized.reduce((s, e) => s + e.quantity, 0);
-    const existingQty = Number(existing.quantity ?? 0) || 0;
-    const bodyQty = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
-    if (normalized.length > 0 && sum === 0 && (existingQty > 0 || (bodyQty != null && bodyQty > 0))) {
+    const singleOneSize =
+      normalized.length === 1 && /^ONE(_?)SIZE$/i.test(normalized[0].sizeCode.replace(/\s/g, ''));
+    if (singleOneSize) {
+      (row as { size_kind: string }).size_kind = 'one_size';
       pQuantityBySize = [];
-      pQuantity = bodyQty != null ? bodyQty : existingQty;
+      pQuantity = normalized[0].quantity;
     } else {
-      pQuantityBySize = normalized;
+      const sum = normalized.reduce((s, e) => s + e.quantity, 0);
+      const existingQty = Number(existing.quantity ?? 0) || 0;
+      const bodyQty = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
+      if (normalized.length > 0 && sum === 0 && (existingQty > 0 || (bodyQty != null && bodyQty > 0))) {
+        pQuantityBySize = [];
+        pQuantity = bodyQty != null ? bodyQty : existingQty;
+      } else {
+        pQuantityBySize = normalized;
+      }
     }
   }
 
@@ -552,7 +560,17 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
 
   if (!rpcError) {
     const updated = await getWarehouseProductById(id, wid);
-    return updated ?? rowToApi(rpcData as WarehouseProductRow, 0);
+    const out: Record<string, unknown> = (updated ?? rowToApi(rpcData as WarehouseProductRow, 0)) as Record<string, unknown>;
+    if (pQuantityBySize && pQuantityBySize.length > 0) {
+      const bySize = out.quantityBySize as Array<{ sizeCode?: string }> | undefined;
+      const singleSynthetic =
+        Array.isArray(bySize) &&
+        bySize.length === 1 &&
+        /one\s*size|onesize/i.test(String(bySize[0]?.sizeCode ?? ''));
+      if (singleSynthetic)
+        out.quantityBySize = pQuantityBySize.map((e) => ({ ...e, sizeLabel: e.sizeCode }));
+    }
+    return out;
   }
 
   if (rpcError.code === '42883' || rpcError.message?.includes('does not exist')) {

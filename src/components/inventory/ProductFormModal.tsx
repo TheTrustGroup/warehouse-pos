@@ -372,7 +372,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     e.preventDefault();
     if (isSubmitting) return;
     if (import.meta.env?.DEV) console.time('ProductForm Submit (total)');
-    const validSizeRows = (formData.quantityBySize ?? []).filter((r) => (r.sizeCode ?? '').trim() !== '');
+    const validSizeRows = (formData.quantityBySize ?? [])
+      .filter((r) => (r.sizeCode ?? '').trim() !== '')
+      .filter((r) => !isSyntheticOneSizeRow(r.sizeCode ?? ''));
     if (formData.sizeKind === 'sized' && validSizeRows.length === 0) {
       showToast('error', 'Add at least one size row to save.');
       return;
