@@ -1110,17 +1110,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.log('[Inventory] Product saved; list state updated. Recent-update window active for 60s so poll/refetch will not overwrite.', { productId: id });
       }
       if (payloadImages.length > 0) setProductImages(id, payloadImages);
-      // Use functional update so we map over latest state, not stale closure (products can change between PUT start and resolve).
-      setProducts((prev) => {
-        const next = prev.map((p) => (p.id === id ? finalProduct : p));
-        cacheRef.current[effectiveWarehouseId] = { data: next, ts: Date.now() };
-        if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), next);
+      setApiOnlyProductsState((prev) => {
+        const newList = prev.map((p) => (p.id === id ? finalProduct : p));
+        cacheRef.current[effectiveWarehouseId] = { data: newList, ts: Date.now() };
+        if (isStorageAvailable()) setStoredData(productsCacheKey(effectiveWarehouseId), newList);
         if (isIndexedDBAvailable()) {
-          saveProductsToDb(next).catch((e) => {
-            reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: next.length });
+          saveProductsToDb(newList).catch((e) => {
+            reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: newList.length });
           });
         }
-        return next;
+        return newList;
       });
       setLastSyncAt(new Date());
       logInventoryUpdate({ productId: id, sku: product.sku });
