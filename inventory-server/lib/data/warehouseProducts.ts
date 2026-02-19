@@ -500,13 +500,13 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
 
   const currentVersion = Number(existing.version ?? 0);
   const ts = now();
+  const bodySizeKind = (body as { sizeKind?: string }).sizeKind;
   const quantityBySizeRaw = (body as { quantityBySize?: Array<{ sizeCode: string; quantity: number }> }).quantityBySize;
-  const hasSized = Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0;
+  const hasSized =
+    bodySizeKind === 'sized' || (Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0);
   const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: currentVersion + 1 }, id, ts);
 
-  // When client sends quantityBySize with rows, always persist size_kind = 'sized' so list fetch includes product in sizedIds and shows sizes.
   if (hasSized) (row as { size_kind: string }).size_kind = 'sized';
-  // Structural safeguard: when we are not updating by_size (hasSized is false), never overwrite size_kind with 'na' for a product that is already sized (avoids partial updates wiping sizes).
   const existingSizeKind = (existing as { sizeKind?: string }).sizeKind ?? (existing as { size_kind?: string }).size_kind;
   if (!hasSized && (existingSizeKind === 'sized' || existingSizeKind === 'one_size') && (row as { size_kind?: string }).size_kind === 'na') {
     (row as { size_kind: string }).size_kind = existingSizeKind as string;
@@ -514,21 +514,23 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
 
   const supabase = getSupabase();
   let pQuantity = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
-  let pQuantityBySize =
-    hasSized && quantityBySizeRaw
-      ? quantityBySizeRaw.map((e) => ({
-          sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
-          quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
-        })).filter((e) => e.sizeCode)
-      : null;
-  // Safeguard: if client sends quantityBySize that sums to 0 but product had/has quantity, preserve total (avoid accidental zeroing when editing to add sizes)
-  if (pQuantityBySize && pQuantityBySize.length > 0) {
-    const sum = pQuantityBySize.reduce((s, e) => s + e.quantity, 0);
+  let pQuantityBySize: Array<{ sizeCode: string; quantity: number }> | null = null;
+  if (hasSized) {
+    const normalized =
+      Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0
+        ? quantityBySizeRaw.map((e) => ({
+            sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase() || 'NA',
+            quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
+          })).filter((e) => e.sizeCode)
+        : [];
+    const sum = normalized.reduce((s, e) => s + e.quantity, 0);
     const existingQty = Number(existing.quantity ?? 0) || 0;
     const bodyQty = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
-    if (sum === 0 && (existingQty > 0 || (bodyQty != null && bodyQty > 0))) {
-      pQuantityBySize = null;
+    if (normalized.length > 0 && sum === 0 && (existingQty > 0 || (bodyQty != null && bodyQty > 0))) {
+      pQuantityBySize = [];
       pQuantity = bodyQty != null ? bodyQty : existingQty;
+    } else {
+      pQuantityBySize = normalized;
     }
   }
 

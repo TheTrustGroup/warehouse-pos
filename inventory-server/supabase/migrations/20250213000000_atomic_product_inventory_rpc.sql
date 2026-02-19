@@ -120,20 +120,22 @@ begin
     raise exception 'Product was updated by someone else. Please refresh and try again.';
   end if;
 
-  if p_quantity_by_size is not null and jsonb_array_length(p_quantity_by_size) > 0 then
+  if p_quantity_by_size is not null then
     delete from warehouse_inventory_by_size where warehouse_id = p_warehouse_id and product_id = p_id;
     v_qty := 0;
-    for v_entry in select * from jsonb_array_elements(p_quantity_by_size)
-    loop
-      v_size_code := upper(nullif(trim(replace(v_entry->>'sizeCode', ' ', '')), ''));
-      if v_size_code is null then v_size_code := 'NA'; end if;
-      v_size_qty := greatest(0, floor((v_entry->>'quantity')::numeric));
-      v_qty := v_qty + v_size_qty;
-      insert into warehouse_inventory_by_size (warehouse_id, product_id, size_code, quantity, updated_at)
-      values (p_warehouse_id, p_id, v_size_code, v_size_qty, now());
-    end loop;
+    if jsonb_array_length(p_quantity_by_size) > 0 then
+      for v_entry in select * from jsonb_array_elements(p_quantity_by_size)
+      loop
+        v_size_code := upper(nullif(trim(replace(v_entry->>'sizeCode', ' ', '')), ''));
+        if v_size_code is null then v_size_code := 'NA'; end if;
+        v_size_qty := greatest(0, floor((v_entry->>'quantity')::numeric));
+        v_qty := v_qty + v_size_qty;
+        insert into warehouse_inventory_by_size (warehouse_id, product_id, size_code, quantity, updated_at)
+        values (p_warehouse_id, p_id, v_size_code, v_size_qty, now());
+      end loop;
+    end if;
     insert into warehouse_inventory (warehouse_id, product_id, quantity, updated_at)
-    values (p_warehouse_id, p_id, v_qty, now())
+    values (p_warehouse_id, p_id, greatest(0, v_qty), now())
     on conflict (warehouse_id, product_id) do update set quantity = excluded.quantity, updated_at = excluded.updated_at;
   elsif p_quantity is not null then
     insert into warehouse_inventory (warehouse_id, product_id, quantity, updated_at)
