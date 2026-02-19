@@ -138,3 +138,111 @@ end;
 $$;
 
 comment on function get_products_with_sizes is 'Returns products with total quantity and per-size breakdown for one warehouse. Single source of truth for list/sizes; custom size codes supported via left join size_codes.';
+
+-- Single product with sizes: same shape as one element of get_products_with_sizes data. Used for GET /api/products/:id and PUT response so edit/update shows real sizes.
+create or replace function get_product_with_sizes(
+  p_warehouse_id uuid,
+  p_product_id uuid
+)
+returns table (data jsonb)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row record;
+begin
+  select
+    wp.id,
+    wp.sku,
+    wp.barcode,
+    wp.name,
+    wp.description,
+    wp.category,
+    wp.tags,
+    wp.cost_price,
+    wp.selling_price,
+    wp.reorder_level,
+    wp.location,
+    wp.supplier,
+    wp.images,
+    wp.expiry_date,
+    wp.created_by,
+    wp.created_at,
+    wp.updated_at,
+    wp.version,
+    coalesce(wp.size_kind, 'na') as size_kind,
+    coalesce(wi.quantity, 0) as quantity,
+    sizes_json.quantity_by_size,
+    sizes_json.sizes_arr
+  into v_row
+  from warehouse_products wp
+  left join warehouse_inventory wi on wi.warehouse_id = p_warehouse_id and wi.product_id = wp.id
+  left join lateral (
+    select
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'sizeCode', wibs.size_code,
+            'sizeLabel', coalesce(sc.size_label, wibs.size_code),
+            'quantity', wibs.quantity
+          ) order by coalesce(sc.size_order, 0), wibs.size_code
+        ) filter (where wibs.size_code is not null),
+        '[]'::jsonb
+      ) as quantity_by_size,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'size', coalesce(sc.size_label, wibs.size_code),
+            'quantity', wibs.quantity
+          ) order by coalesce(sc.size_order, 0), wibs.size_code
+        ) filter (where wibs.size_code is not null),
+        '[]'::jsonb
+      ) as sizes_arr
+    from warehouse_inventory_by_size wibs
+    left join size_codes sc on sc.size_code = wibs.size_code
+    where wibs.warehouse_id = p_warehouse_id and wibs.product_id = wp.id
+  ) sizes_json on true
+  where wp.id = p_product_id;
+
+  if not found then
+    return;
+  end if;
+
+  data := jsonb_build_object(
+    'id', v_row.id,
+    'sku', v_row.sku,
+    'barcode', v_row.barcode,
+    'name', v_row.name,
+    'description', v_row.description,
+    'category', v_row.category,
+    'tags', v_row.tags,
+    'quantity', v_row.quantity,
+    'costPrice', v_row.cost_price,
+    'sellingPrice', v_row.selling_price,
+    'reorderLevel', v_row.reorder_level,
+    'location', v_row.location,
+    'supplier', v_row.supplier,
+    'images', v_row.images,
+    'expiryDate', v_row.expiry_date,
+    'createdBy', v_row.created_by,
+    'createdAt', v_row.created_at,
+    'updatedAt', v_row.updated_at,
+    'version', v_row.version,
+    'sizeKind', v_row.size_kind,
+    'quantityBySize', case
+      when coalesce(v_row.quantity_by_size, '[]'::jsonb) = '[]'::jsonb and v_row.quantity > 0 then
+        jsonb_build_array(jsonb_build_object('sizeCode', 'One size', 'sizeLabel', 'One size', 'quantity', v_row.quantity))
+      else coalesce(v_row.quantity_by_size, '[]'::jsonb)
+    end,
+    'sizes', case
+      when coalesce(v_row.sizes_arr, '[]'::jsonb) = '[]'::jsonb and v_row.quantity > 0 then
+        jsonb_build_array(jsonb_build_object('size', 'One size', 'quantity', v_row.quantity))
+      else coalesce(v_row.sizes_arr, '[]'::jsonb)
+    end
+  );
+  return next;
+end;
+$$;
+
+comment on function get_product_with_sizes is 'Returns one product with quantity and per-size breakdown for one warehouse. Same source of truth as get_products_with_sizes; use for GET/PUT single product so sizes match list.';

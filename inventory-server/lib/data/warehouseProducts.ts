@@ -345,14 +345,24 @@ function posRowToApi(
   return out;
 }
 
-/** GET one by id. Quantity is for the given warehouseId (default if omitted). */
+/** GET one by id. Quantity and sizes for the given warehouseId (default if omitted). Uses get_product_with_sizes RPC when available (same source of truth as list). */
 export async function getWarehouseProductById(id: string, warehouseId?: string): Promise<Record<string, unknown> | null> {
   const supabase = getSupabase();
+  const wid = (warehouseId?.trim?.() && warehouseId) ? warehouseId : getDefaultWarehouseId();
+
+  const { data: rpcRows, error: rpcError } = await supabase.rpc('get_product_with_sizes', {
+    p_warehouse_id: wid,
+    p_product_id: id,
+  });
+  if (!rpcError && Array.isArray(rpcRows) && rpcRows.length > 0) {
+    const row = rpcRows[0] as { data?: unknown };
+    if (row?.data != null && typeof row.data === 'object') return row.data as Record<string, unknown>;
+  }
+
   const { data, error } = await supabase.from(TABLE).select('*').eq('id', id).maybeSingle();
   if (error) throw error;
   if (!data) return null;
   const row = data as WarehouseProductRow;
-  const wid = (warehouseId?.trim?.() && warehouseId) ? warehouseId : getDefaultWarehouseId();
   const qty = await getQuantity(wid, id);
   const isSizedByKind = (row.size_kind ?? (row as { sizeKind?: string }).sizeKind ?? 'na') === 'sized';
   const bySize = await getQuantitiesBySize(wid, id);
