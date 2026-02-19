@@ -208,7 +208,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     productsRef.current = products;
   }, [products]);
 
-  /** When offline disabled: update API-only state. When enabled: no-op (list from Dexie). */
+  /** When offline disabled: update API-only state. When enabled: no-op (list from Dexie). Same state as setApiOnlyProductsState; loadProducts uses setProducts so lastUpdatedProductRef merge is always applied before state update. updateProduct calls setApiOnlyProductsState directly (no bypass; ref is for loadProducts merge only). */
   const setProducts = useCallback(
     (arg: Product[] | ((prev: Product[]) => Product[])) => {
       if (!offlineEnabled) {
@@ -373,13 +373,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const cached = cacheRef.current[wid];
     const cacheValid = !bypassCache && cached && (now - cached.ts) < PRODUCTS_CACHE_TTL_MS;
     if (cacheValid && cached.data.length > 0) {
-      // Never overwrite a just-updated product with cached data (same rule as API merge path)
+      // Never overwrite a just-updated product with cached data (same rule as API merge path). lastUpdatedProductRef ALWAYS wins within 60s.
       let listToSet = cached.data;
       const updated = lastUpdatedProductRef.current;
-      if (updated && now - updated.at < RECENT_UPDATE_WINDOW_MS) {
-        listToSet = listToSet.map((p) => (p.id === updated.product.id ? updated.product : p));
+      const cachePathInWindow = updated && now - updated.at < RECENT_UPDATE_WINDOW_MS;
+      if (cachePathInWindow) {
+        listToSet = listToSet.map((p) => (p.id === updated!.product.id ? updated!.product : p));
         if (import.meta.env?.DEV) {
-          console.log('[Inventory] loadProducts (cache path): preserved just-updated product (avoids revert).', { productId: updated.product.id });
+          console.log('[Inventory] loadProducts (cache path): protection FIRED — preserved just-updated product (avoids revert).', { productId: updated!.product.id });
         }
       }
       setProducts(listToSet);
@@ -471,13 +472,27 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             return p;
           });
         }
-        // If we just updated a product (with images/sizes), any loadProducts that runs afterward must keep that version
+        // If we just updated a product (with images/sizes), any loadProducts that runs afterward must keep that version.
+        // lastUpdatedProductRef ALWAYS wins for that product ID within the 60s window.
         const updated = lastUpdatedProductRef.current;
-        if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
-          merged = merged.map((p) => (p.id === updated.product.id ? updated.product : p));
+        const nowInMerge = Date.now();
+        const inWindow = updated && nowInMerge - updated.at < RECENT_UPDATE_WINDOW_MS;
+        if (inWindow) {
+          const hadProduct = merged.some((p) => p.id === updated!.product.id);
+          merged = merged.map((p) => (p.id === updated!.product.id ? updated!.product : p));
           if (import.meta.env?.DEV) {
-            console.log('[Inventory] loadProducts: preserved just-updated product in merge (avoids revert).', { productId: updated.product.id });
+            console.log('[Inventory] loadProducts: protection FIRED — replaced product with lastUpdatedProductRef (avoids revert).', {
+              productId: updated!.product.id,
+              hadProductInList: hadProduct,
+              quantityBySizeLength: Array.isArray(updated!.product.quantityBySize) ? updated!.product.quantityBySize.length : 0,
+            });
           }
+        } else if (import.meta.env?.DEV) {
+          console.log('[Inventory] loadProducts: protection SKIPPED.', {
+            reason: !updated ? 'no ref' : 'outside 60s window',
+            productId: updated?.product?.id,
+            elapsedMs: updated ? nowInMerge - updated.at : undefined,
+          });
         }
         // Persistence: never show empty if we have cached data (avoid data loss from wrong warehouse or transient API empty)
         if (merged.length === 0 && (isStorageAvailable() || isIndexedDBAvailable())) {
@@ -671,9 +686,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
 
     // Synchronous read: only this warehouse's cache — never show another warehouse's list when switching.
+    // Merge lastUpdatedProductRef so a just-saved product is never overwritten by stale localStorage on mount/re-run.
     const productsFromCache = getCachedProductsForWarehouse(effectiveWarehouseId);
     if (productsFromCache.length > 0) {
-      setProducts(productsFromCache);
+      let listToSet = productsFromCache;
+      const updated = lastUpdatedProductRef.current;
+      if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
+        listToSet = listToSet.map((p) => (p.id === updated.product.id ? updated.product : p));
+      }
+      setProducts(listToSet);
       setIsLoading(false);
       setError(null);
       hadCache = true;
@@ -686,8 +707,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         try {
           const fromDb = await loadProductsFromDb<any>();
           const list = Array.isArray(fromDb) ? fromDb : [];
-          const productsFromCache = toProducts(list);
+          let productsFromCache = toProducts(list);
           if (productsFromCache.length > 0 && mountedRef.current) {
+            const updated = lastUpdatedProductRef.current;
+            if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
+              productsFromCache = productsFromCache.map((p) => (p.id === updated.product.id ? updated.product : p));
+            }
             setProducts(productsFromCache);
             setIsLoading(false);
             setError(null);
@@ -707,7 +732,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   }, [currentWarehouseId]);
 
-  // Real-time: poll when tab visible so all devices see server truth. 30s reduces jitter from aggressive refresh while keeping cross-device updates reasonable.
+  // Real-time: poll when tab visible so all devices see server truth. 30s reduces jitter. lastSaveAtRef (POST_SAVE_NO_REFETCH_MS 10s) is checked inside loadProducts so we skip the poll for 10s after save; merge of lastUpdatedProductRef protects for 60s when poll does run.
   const INVENTORY_POLL_MS = 30_000;
   useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }), intervalMs: INVENTORY_POLL_MS });
 
@@ -1057,6 +1082,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const apiHasRealSizes = apiQuantityBySize.length > 0 && !isOnlySyntheticOneSize(apiQuantityBySize);
       const formSentSizes = Array.isArray(updates.quantityBySize) && updates.quantityBySize.length > 0;
       // When user saved multiple sizes: prefer API if it returned real sizes; else use form data so UI shows S/M/L immediately (avoids ONESIZE × N until refetch)
+      // Prefer API response for quantityBySize when it has real sizes so ref/store never get stale form data
       const quantityBySize =
         apiHasRealSizes
           ? apiQuantityBySize
@@ -1066,8 +1092,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const finalProduct = { ...withImages, sizeKind, quantityBySize } as Product;
       const newList = products.map((p) => (p.id === id ? finalProduct : p));
       const at = Date.now();
-      // Set refs BEFORE setState so any in-flight loadProducts() merge sees this product and does not overwrite with stale API data
-      lastUpdatedProductRef.current = { product: finalProduct, at };
+      // Set refs BEFORE setState so any in-flight loadProducts() merge sees this product and does not overwrite with stale API data.
+      // Store a clone so no shared reference can be mutated by later code.
+      const productForRef: Product = {
+        ...finalProduct,
+        quantityBySize: Array.isArray(finalProduct.quantityBySize) ? finalProduct.quantityBySize.map((s) => ({ ...s })) : [],
+      };
+      lastUpdatedProductRef.current = { product: productForRef, at };
       lastSaveAtRef.current = at;
       if (isSized) lastSizeUpdateAtRef.current = at;
       if (import.meta.env?.DEV) {
