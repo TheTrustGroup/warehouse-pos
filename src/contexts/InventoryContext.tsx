@@ -1086,8 +1086,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       let normalized: Product;
       try {
-        normalized = fromApi && (fromApi as { id?: string }).id
-          ? normalizeProduct(fromApi as any)
+        const rawResponse = fromApi && (fromApi as { data?: unknown[] }).data
+          ? (fromApi as { data: unknown[] }).data[0]
+          : fromApi;
+        normalized = rawResponse && (rawResponse as { id?: string }).id
+          ? normalizeProduct(rawResponse as any)
           : updated;
       } catch (normalizeErr) {
         console.error('[Save] normalizeProduct threw:', normalizeErr);
