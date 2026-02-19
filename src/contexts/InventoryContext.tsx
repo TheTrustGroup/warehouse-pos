@@ -273,7 +273,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const SIZE_UPDATE_COOLDOWN_MS = 20_000;
   const lastSizeUpdateAtRef = useRef<number>(0);
   /** After a successful save (add/update), skip background refetch for this long so poll/visibility don't overwrite with stale list. */
-  const POST_SAVE_NO_REFETCH_MS = 10_000;
+  const POST_SAVE_NO_REFETCH_MS = 60_000;
   const lastSaveAtRef = useRef<number>(0);
 
   const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
