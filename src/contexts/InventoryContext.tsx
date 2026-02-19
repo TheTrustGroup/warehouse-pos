@@ -1078,14 +1078,21 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       // eslint-disable-next-line no-console -- debug: confirm API response after put
       console.log('[Save] fromApi result:', fromApi != null, (fromApi as Record<string, unknown>)?.id, (fromApi as Record<string, unknown>)?.version);
+      console.log('[Save] reached post-API, fromApi:', JSON.stringify(fromApi)?.slice(0, 200));
       if (import.meta.env?.DEV) {
         console.timeEnd('API Request (update)');
         console.log('[Inventory] updateProduct: raw API response', { fromApi: fromApi != null ? { id: (fromApi as { id?: string }).id, quantityBySize: (fromApi as { quantityBySize?: unknown }).quantityBySize, sizeKind: (fromApi as { sizeKind?: string }).sizeKind } : null });
         console.time('State Update (update)');
       }
-      const normalized = fromApi && (fromApi as { id?: string }).id
-        ? normalizeProduct(fromApi as any)
-        : updated;
+      let normalized: Product;
+      try {
+        normalized = fromApi && (fromApi as { id?: string }).id
+          ? normalizeProduct(fromApi as any)
+          : updated;
+      } catch (normalizeErr) {
+        console.error('[Save] normalizeProduct threw:', normalizeErr);
+        normalized = updated;
+      }
       const apiHasImages = Array.isArray(normalized.images) && normalized.images.length > 0;
       // Keep images from our update if API response omits them (e.g. backend doesn't return base64)
       const withImages =
