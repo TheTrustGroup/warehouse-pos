@@ -339,6 +339,7 @@ function posRowToApi(
     sellingPrice: row.selling_price,
     reorderLevel: row.reorder_level ?? 0,
     quantity,
+    version: row.version ?? 0,
     updatedAt: row.updated_at,
     quantityBySize: Array.isArray(quantityBySize) ? quantityBySize : [],
   };
@@ -567,6 +568,8 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
     const sizeCount = pQuantityBySize?.length ?? 0;
     console.log('[updateWarehouseProduct] Saving sizes:', sizeCount > 0 ? pQuantityBySize : pQuantityBySize ?? 'null (will not touch by_size table)', { productId: id, warehouseId: wid, sizeCount });
   }
+
+  console.log('[VERSION CHECK] existing.version:', existing.version, 'currentVersion:', currentVersion);
 
   const { data: rpcData, error: rpcError } = await supabase.rpc('update_warehouse_product_atomic', {
     p_id: id,
