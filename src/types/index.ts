@@ -23,6 +23,15 @@ export interface QuantityBySizeItem {
   quantity: number;
 }
 
+/** Per-warehouse per-size inventory row (for Sizes column: filter by product + warehouse, quantity > 0, sort by size_order). */
+export interface SizeInventoryItem {
+  product_id: string;
+  warehouse_id: string;
+  quantity: number;
+  size_code: string;
+  size_codes: { size_order: number };
+}
+
 export interface Product {
   id: string;
   sku: string;

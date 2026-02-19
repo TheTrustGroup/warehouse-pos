@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useInventoryPageState } from './useInventoryPageState';
 import { API_BASE_URL } from '../lib/api';
 import { useApiStatus } from '../contexts/ApiStatusContext';
@@ -9,7 +9,7 @@ import { InventoryFilters } from '../components/inventory/InventoryFilters';
 import { InventorySearchBar } from '../components/inventory/InventorySearchBar';
 import { InventoryListSkeleton } from '../components/inventory/InventoryListSkeleton';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-import { Product } from '../types';
+import { Product, SizeInventoryItem } from '../types';
 import { getLocationDisplay, formatRelativeTime } from '../lib/utils';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { Button } from '../components/ui/Button';
@@ -110,6 +110,36 @@ export function Inventory() {
     s.setIsModalOpen(false);
     s.setEditingProduct(null);
   }, [s.setIsModalOpen, s.setEditingProduct]);
+
+  /** Remove a size from a product at the selected warehouse; updates product and UI. */
+  const handleDeleteSize = useCallback(
+    async (productId: string, warehouseId: string, sizeCode: string) => {
+      const product = s.products.find((p) => p.id === productId);
+      if (!product) return;
+      const nextQuantityBySize = (product.quantityBySize ?? []).filter((row) => row.sizeCode !== sizeCode);
+      try {
+        await s.updateProduct(productId, { quantityBySize: nextQuantityBySize, warehouseId });
+        s.showToast('success', `Size ${sizeCode} removed.`);
+      } catch (err) {
+        s.showToast('error', getUserFriendlyMessage(err));
+      }
+    },
+    [s.products, s.updateProduct, s.showToast]
+  );
+
+  const selectedWarehouse = s.currentWarehouseId ?? '';
+  const sizeInventory = useMemo<SizeInventoryItem[]>(() => {
+    return s.filteredProducts.flatMap((p) =>
+      (p.quantityBySize ?? []).map((q) => ({
+        product_id: p.id,
+        warehouse_id: selectedWarehouse,
+        quantity: q.quantity,
+        size_code: q.sizeCode,
+        size_codes: { size_order: (q as { sizeCode: string; quantity: number; sizeOrder?: number }).sizeOrder ?? 0 },
+      }))
+    );
+  }, [s.filteredProducts, selectedWarehouse]);
+
 
   const handleUndoAdd = async (productId: string) => {
     try {
@@ -402,6 +432,8 @@ export function Inventory() {
           ) : s.viewMode === 'table' ? (
             <ProductTableView
               products={s.filteredProducts}
+              sizeInventory={sizeInventory}
+              selectedWarehouse={selectedWarehouse}
               onEdit={handleEditProduct}
               onDelete={handleDeleteProduct}
               onView={handleViewProduct}
@@ -415,10 +447,13 @@ export function Inventory() {
               onVerifySaved={s.verifyProductSaved}
               onRetrySync={s.refreshProducts}
               disableDestructiveActions={disableDestructive}
+              onDeleteSize={handleDeleteSize}
             />
           ) : (
             <ProductGridView
               products={s.filteredProducts}
+              sizeInventory={sizeInventory}
+              selectedWarehouse={selectedWarehouse}
               onEdit={handleEditProduct}
               onDelete={handleDeleteProduct}
               selectedIds={s.selectedIds}
@@ -431,6 +466,7 @@ export function Inventory() {
               onVerifySaved={s.verifyProductSaved}
               onRetrySync={s.refreshProducts}
               disableDestructiveActions={disableDestructive}
+              onDeleteSize={handleDeleteSize}
             />
           )}
         </div>
