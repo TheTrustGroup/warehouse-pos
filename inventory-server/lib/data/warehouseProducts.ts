@@ -543,10 +543,29 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
       if (normalized.length > 0 && sum === 0 && (existingQty > 0 || (bodyQty != null && bodyQty > 0))) {
         pQuantityBySize = [];
         pQuantity = bodyQty != null ? bodyQty : existingQty;
-      } else {
+      } else if (normalized.length > 0) {
         pQuantityBySize = normalized;
+      } else {
+        // CRITICAL: Payload had no size rows (e.g. partial update or form didn't send quantityBySize).
+        // Preserve existing per-size inventory instead of passing [] which would DELETE all rows and wipe sizes.
+        const existingBySize = (existing as { quantityBySize?: Array<{ sizeCode?: string; quantity?: number }> }).quantityBySize;
+        const preserved =
+          Array.isArray(existingBySize) && existingBySize.length > 0
+            ? existingBySize
+                .map((e) => ({
+                  sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase(),
+                  quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
+                }))
+                .filter((e) => e.sizeCode && e.sizeCode !== 'NA' && !/^ONE(_?)SIZE$/i.test(e.sizeCode.replace(/\s/g, '')))
+            : [];
+        pQuantityBySize = preserved.length > 0 ? preserved : [];
       }
     }
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    const sizeCount = pQuantityBySize?.length ?? 0;
+    console.log('[updateWarehouseProduct] Saving sizes:', sizeCount > 0 ? pQuantityBySize : pQuantityBySize ?? 'null (will not touch by_size table)', { productId: id, warehouseId: wid, sizeCount });
   }
 
   const { data: rpcData, error: rpcError } = await supabase.rpc('update_warehouse_product_atomic', {
