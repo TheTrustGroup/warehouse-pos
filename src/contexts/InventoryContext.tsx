@@ -958,7 +958,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return;
       }
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
-      const payload = productToPayload(updated);
+      // Always send the warehouse we're viewing so sizes are written to the correct warehouse (list and column use same warehouse_id)
+      const payload = { ...productToPayload(updated), warehouseId: (updates.warehouseId ?? effectiveWarehouseId) || undefined };
+      if ((updates.sizeKind === 'sized' || updated.sizeKind === 'sized') && Array.isArray(updates.quantityBySize) && updates.quantityBySize.length > 0) {
+        (payload as Record<string, unknown>).quantityBySize = updates.quantityBySize;
+      }
       const putProduct = async (): Promise<Record<string, unknown> | null> => {
         try {
           return (await apiPut<Record<string, unknown>>(API_BASE_URL, productByIdPath('/admin/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
