@@ -272,6 +272,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /** After a sized product update, skip silent refresh for this long so API list does not overwrite with stale One size. */
   const SIZE_UPDATE_COOLDOWN_MS = 20_000;
   const lastSizeUpdateAtRef = useRef<number>(0);
+  /** After a successful save (add/update), skip background refetch for this long so poll/visibility don't overwrite with stale list. */
+  const POST_SAVE_NO_REFETCH_MS = 10_000;
+  const lastSaveAtRef = useRef<number>(0);
 
   const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
     const params = new URLSearchParams();
@@ -363,6 +366,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     if (silent) {
       if (now - lastSilentRefreshAtRef.current < SILENT_REFRESH_THROTTLE_MS) return;
       if (now - lastSizeUpdateAtRef.current < SIZE_UPDATE_COOLDOWN_MS) return;
+      if (now - lastSaveAtRef.current < POST_SAVE_NO_REFETCH_MS) return;
       lastSilentRefreshAtRef.current = now;
     }
 
@@ -511,6 +515,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             fallback = getAllCachedProducts();
           }
           if (fallback.length > 0) {
+            const updatedInWindow = lastUpdatedProductRef.current;
+            if (updatedInWindow && Date.now() - updatedInWindow.at < RECENT_UPDATE_WINDOW_MS) {
+              fallback = fallback.map((p) => (p.id === updatedInWindow.product.id ? updatedInWindow.product : p));
+            }
             setProducts(fallback);
             if (!silent) setError('Server returned no products for this warehouse. Showing last saved list.');
             logInventoryRead({ listLength: fallback.length, environment: 'cache-fallback' });
@@ -599,7 +607,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (isIndexedDBAvailable()) {
         const fromDb = await loadProductsFromDb<any>();
         if (fromDb.length > 0) {
-          const fallbackList = fromDb.map((p: any) => normalizeProduct(p));
+          let fallbackList = fromDb.map((p: any) => normalizeProduct(p));
+          const updated = lastUpdatedProductRef.current;
+          if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
+            fallbackList = fallbackList.map((p) => (p.id === updated.product.id ? updated.product : p));
+          }
           setProducts(fallbackList);
           if (!silent) {
             setError(null);
@@ -617,6 +629,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       let localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
       if (localProducts.length === 0) {
         localProducts = getAllCachedProducts();
+      }
+      const updated = lastUpdatedProductRef.current;
+      if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
+        localProducts = localProducts.map((p) => (p.id === updated.product.id ? updated.product : p));
       }
       setProducts(localProducts);
       if (localProducts.length > 0 && !silent) {
@@ -938,7 +954,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         normalized = { ...normalized, warehouseId: productData.warehouseId.trim() } as Product;
       }
       if (Array.isArray(normalized.images) && normalized.images.length > 0) setProductImages(resolvedId, normalized.images);
-      lastAddedProductRef.current = { product: normalized, at: Date.now() };
+      const at = Date.now();
+      lastAddedProductRef.current = { product: normalized, at };
+      lastSaveAtRef.current = at;
       setApiOnlyProductsState((prev) => prev.map((p) => (p.id === tempId ? normalized : p)));
       cacheRef.current[effectiveWarehouseId] = { data: [normalized, ...apiOnlyProducts.filter((p) => p.id !== tempId)], ts: Date.now() };
       setLastSyncAt(new Date());
@@ -1050,6 +1068,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const at = Date.now();
       // Set refs BEFORE setState so any in-flight loadProducts() merge sees this product and does not overwrite with stale API data
       lastUpdatedProductRef.current = { product: finalProduct, at };
+      lastSaveAtRef.current = at;
       if (isSized) lastSizeUpdateAtRef.current = at;
       if (import.meta.env?.DEV) {
         console.log('[Inventory] Product saved; list state updated. Recent-update window active for 60s so poll/refetch will not overwrite.', { productId: id });
