@@ -1076,6 +1076,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           throw firstErr;
         }
       }
+      // eslint-disable-next-line no-console -- debug: confirm API response after put
+      console.log('[Save] fromApi result:', fromApi != null, (fromApi as Record<string, unknown>)?.id, (fromApi as Record<string, unknown>)?.version);
       if (import.meta.env?.DEV) {
         console.timeEnd('API Request (update)');
         console.log('[Inventory] updateProduct: raw API response', { fromApi: fromApi != null ? { id: (fromApi as { id?: string }).id, quantityBySize: (fromApi as { quantityBySize?: unknown }).quantityBySize, sizeKind: (fromApi as { sizeKind?: string }).sizeKind } : null });
