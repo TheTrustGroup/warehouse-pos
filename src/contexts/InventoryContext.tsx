@@ -363,9 +363,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setError(null);
     }
     try {
-      if (!silent) {
-        if (!cacheValid) setBackgroundRefreshing(true);
-      }
+      // Show "Updating..." and hide empty state during any refresh (including silent) to avoid empty-state flash
+      if (!cacheValid) setBackgroundRefreshing(true);
       if (!silent && !cacheValid) {
         setIsLoading(true);
         setError(null);
@@ -489,8 +488,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           }
         }
         listToSet = listToSet.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
-        // During silent refresh, skip setState when list is equivalent (order-independent) to avoid list jitter on mobile
+        // During silent refresh, never replace list with empty — avoids "No products yet" flash when API returns [] briefly
         const current = productsRef.current;
+        const keepCurrentOnEmpty = silent && listToSet.length === 0 && current.length > 0;
+        if (keepCurrentOnEmpty) {
+          cacheRef.current[wid] = { data: current, ts: Date.now() };
+          return;
+        }
+        // During silent refresh, skip setState when list is equivalent (order-independent) to avoid list jitter on mobile
         const currentById = new Map(current.map((p) => [p.id, p]));
         const sameIds = current.length === listToSet.length && listToSet.every((p) => currentById.has(p.id));
         const sameData = sameIds && listToSet.every((p) => {
@@ -713,6 +718,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       ...(product.version !== undefined && { version: product.version }),
       sizeKind: product.sizeKind ?? 'na',
       ...(Array.isArray(product.quantityBySize) && product.quantityBySize.length > 0 && { quantityBySize: product.quantityBySize }),
+      ...((product as Record<string, unknown>).warehouseId != null && { warehouseId: (product as Record<string, unknown>).warehouseId }),
     };
   };
 

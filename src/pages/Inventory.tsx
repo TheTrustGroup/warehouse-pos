@@ -189,8 +189,8 @@ export function Inventory() {
           </div>
         </div>
       )}
-      {/* Empty state: only when not loading, no error, and truly no products */}
-      {!s.isLoading && !s.error && s.products.length === 0 && !showFullErrorCard && (
+      {/* Empty state: only when not loading, no error, no background refresh, and truly no products (avoids flash during auto-refresh) */}
+      {!s.isLoading && !s.error && !s.isBackgroundRefreshing && s.products.length === 0 && !showFullErrorCard && (
         <div className={`flex items-center justify-center ${listMinHeight}`}>
           <div className="solid-card max-w-md w-full mx-auto text-center p-8">
             <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">

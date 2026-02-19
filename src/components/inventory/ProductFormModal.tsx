@@ -15,6 +15,12 @@ import { X, Upload, Plus, Trash2, CloudOff } from 'lucide-react';
 
 const MAX_PRODUCT_IMAGES = 5;
 
+/** RPC fallback uses "One size"; backend may store "ONESIZE". Don't treat as real size row — avoid saving it as sole size. */
+function isSyntheticOneSizeRow(sizeCode: string): boolean {
+  const n = String(sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase();
+  return n === 'ONESIZE' || n === 'ONE_SIZE';
+}
+
 export type SizeKind = 'na' | 'one_size' | 'sized';
 
 interface SizeCodeOption {
@@ -139,7 +145,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     const skipImageOverwrite = imageUploadingRef.current;
 
     if (currentProduct) {
-      const qtyBySize = (currentProduct.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
+      const rawQtyBySize = (currentProduct.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
+      const qtyBySize = rawQtyBySize.filter((q) => !isSyntheticOneSizeRow(q.sizeCode ?? ''));
       const validImages = Array.isArray(currentProduct.images)
         ? currentProduct.images.filter(
             (img): img is string =>
@@ -711,14 +718,15 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
                   type="button"
                   onClick={() => setFormData(prev => {
                     if (kind !== 'sized') return { ...prev, sizeKind: kind, quantityBySize: [] };
-                    // When switching to Multiple sizes on edit: pre-fill one row with current stock so stock is not zeroed (critical fix)
+                    // When switching to Multiple sizes: pre-fill one row with current stock. Ignore synthetic "One size" from RPC fallback.
                     const currentQty = product ? (Number(product.quantity ?? 0) || 0) : 0;
-                    const hasExistingSizes = Array.isArray(prev.quantityBySize) && prev.quantityBySize.length > 0 && prev.quantityBySize.some(r => Number(r.quantity ?? 0) > 0);
+                    const realRows = (prev.quantityBySize ?? []).filter((r) => !isSyntheticOneSizeRow(r.sizeCode ?? ''));
+                    const hasExistingSizes = realRows.length > 0 && realRows.some((r) => Number(r.quantity ?? 0) > 0);
                     const quantityBySize = hasExistingSizes
-                      ? prev.quantityBySize
+                      ? realRows
                       : currentQty > 0
                         ? [{ sizeCode: '', quantity: currentQty }]
-                        : prev.quantityBySize.length > 0 ? prev.quantityBySize : [{ sizeCode: '', quantity: 0 }];
+                        : realRows.length > 0 ? realRows : [{ sizeCode: '', quantity: 0 }];
                     return { ...prev, sizeKind: kind, quantityBySize };
                   })}
                   className={`min-h-[44px] min-w-[44px] px-4 rounded-xl border text-sm font-medium transition-colors ${
