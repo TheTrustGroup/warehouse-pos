@@ -188,8 +188,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         imagesLengthRef.current = validImages.length;
       }
       if ((currentProduct.sizeKind ?? 'na') === 'sized') {
+        // Show all rows including zero qty (no filter)
         const existingSizes = (currentProduct.quantityBySize ?? [])
-          .filter((r) => r.quantity > 0)
           .map((r) => ({ sizeCode: r.sizeCode, quantity: r.quantity }));
 
         if (existingSizes.length > 0) {

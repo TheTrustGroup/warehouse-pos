@@ -1075,11 +1075,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return;
       }
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
-      const isSized = updates.sizeKind === 'sized' || updated.sizeKind === 'sized';
       const payload = { ...productToPayload(updated), warehouseId: (updates.warehouseId ?? effectiveWarehouseId) || DEFAULT_WAREHOUSE_ID } as Record<string, unknown>;
-      if (isSized) {
-        payload.quantityBySize = Array.isArray(updates.quantityBySize) ? updates.quantityBySize : [];
-      }
+      // Always override quantityBySize from updates — never let the old product value leak through
+      payload.quantityBySize = Array.isArray(updates.quantityBySize) ? updates.quantityBySize : [];
       const putProduct = async (): Promise<Record<string, unknown> | null> => {
         try {
           return (await apiPut<Record<string, unknown>>(API_BASE_URL, productByIdPath('/admin/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
@@ -1152,7 +1150,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       lastSaveAtRef.current = at;
       // eslint-disable-next-line no-console -- debug: confirm save timestamp
       console.log('[Save] lastSaveAtRef set to:', at);
-      if (isSized) lastSizeUpdateAtRef.current = at;
+      if (sizeKind === 'sized') lastSizeUpdateAtRef.current = at;
       if (import.meta.env?.DEV) {
         console.log('[Inventory] Product saved; list state updated. Recent-update window active for 60s so poll/refetch will not overwrite.', { productId: id });
       }
