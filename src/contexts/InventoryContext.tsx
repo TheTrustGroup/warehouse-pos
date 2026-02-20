@@ -205,6 +205,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const unsyncedCountFromHook = offline.unsyncedCount ?? 0;
 
   useEffect(() => {
+    console.log('InventoryContext mounted');
+  }, []);
+  useEffect(() => {
+    console.log('InventoryProvider mounted');
+  }, []);
+
+  useEffect(() => {
     productsRef.current = products;
   }, [products]);
 

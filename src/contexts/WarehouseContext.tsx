@@ -47,6 +47,10 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  useEffect(() => {
+    console.log('WarehouseProvider mounted');
+  }, []);
+
   const refreshWarehouses = useCallback(async (options?: { timeoutMs?: number }) => {
     try {
       const list = await apiGet<Warehouse[]>(API_BASE_URL, '/api/warehouses', {
