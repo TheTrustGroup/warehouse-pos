@@ -18,7 +18,6 @@ import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { reportError } from '../lib/errorReporting';
 import { apiRequest } from '../lib/apiClient';
 import { API_BASE_URL } from '../lib/api';
-import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 const is401 = (e: unknown) => (e as { status?: number })?.status === 401;
 
@@ -152,8 +151,8 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
     <>
       {children}
       {internal.isCriticalDataLoading && (
-        <div className="fixed inset-0 bg-white/60 flex items-center justify-center z-50">
-          <LoadingSpinner />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-sm">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
         </div>
       )}
     </>
