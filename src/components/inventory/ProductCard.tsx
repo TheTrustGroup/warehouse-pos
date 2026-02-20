@@ -43,6 +43,7 @@ interface ProductCardProps {
     sizeKind: string;
   }) => Promise<void>;
   onEditFull: (product: Product) => void;       // open full modal
+  onDelete?: (product: Product) => void;        // request delete (parent shows confirm)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -95,7 +96,8 @@ const IconImage = () => (
 );
 
 const IconSpinner = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="animate-spin">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+    style={{ animation: 'card-spin 0.8s linear infinite' }}>
     <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
   </svg>
 );
@@ -312,6 +314,7 @@ export default function ProductCard({
   onEditClose,
   onSaveStock,
   onEditFull,
+  onDelete,
 }: ProductCardProps) {
 
   const status = getStockStatus(product);
@@ -402,12 +405,12 @@ export default function ProductCard({
 
       {/* ── Footer (hidden when editing) ── */}
       {!isEditing && (
-        <div className="grid grid-cols-2 border-t border-slate-100">
+        <div className="grid grid-cols-3 border-t border-slate-100">
           <button
             type="button"
             onClick={() => onEditFull(product)}
             className="
-              h-12 flex items-center justify-center gap-1.5
+              h-12 flex items-center justify-center gap-1
               text-[13px] font-semibold text-slate-500
               border-r border-slate-100
               hover:bg-slate-50 hover:text-slate-700
@@ -420,16 +423,41 @@ export default function ProductCard({
             type="button"
             onClick={() => onEditOpen(product.id)}
             className="
-              h-12 flex items-center justify-center gap-1.5
+              h-12 flex items-center justify-center gap-1
               text-[13px] font-semibold text-red-500
+              border-r border-slate-100
               hover:bg-red-50
               transition-colors duration-150
             "
           >
             <IconPlus /> Stock
           </button>
+          {/* Delete button */}
+          <button
+            type="button"
+            onClick={() => onDelete?.(product)}
+            className="
+              h-12 flex items-center justify-center
+              text-slate-400
+              hover:bg-red-50 hover:text-red-500
+              transition-colors duration-150
+            "
+            aria-label="Delete product"
+            title="Delete product"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6"/><path d="M14 11v6"/>
+              <path d="M9 6V4h6v2"/>
+            </svg>
+          </button>
         </div>
       )}
+
+      <style>{`
+        @keyframes card-spin { to { transform: rotate(360deg); } }
+      `}</style>
     </article>
   );
 }

@@ -44,7 +44,7 @@ const POSPage = lazyWithRetry(() => import('./pages/POSPage').then(m => ({ defau
 const Orders = lazyWithRetry(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
 const Reports = lazyWithRetry(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
 const Settings = lazyWithRetry(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
-const Login = lazyWithRetry(() => import('./pages/Login').then(m => ({ default: m.Login })));
+const LoginPage = lazyWithRetry(() => import('./pages/LoginPage'));
 
 const Users = () => {
   const navigate = useNavigate();
@@ -195,7 +195,7 @@ function App() {
             <OnboardingModal />
             <Suspense fallback={<div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 gap-4"><LoadingSpinner size="lg" /><p className="text-slate-600 text-sm font-medium">Loading…</p></div>}>
               <Routes>
-                <Route path="/login" element={<Login />} />
+                <Route path="/login" element={<LoginPage />} />
                 <Route path="/" element={<ProtectedRoutes />}>
                         <Route
                           index
