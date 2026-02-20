@@ -59,8 +59,8 @@ function receiptId(): string {
 
 // ── Receipt HTML builder ──────────────────────────────────────────────────
 
-function buildReceiptHTML(sale: SalePayload): string {
-  const id   = receiptId();
+function buildReceiptHTML(sale: SalePayload & { receiptId?: string }): string {
+  const id   = sale.receiptId ?? receiptId();
   const date = fmtDate();
 
   const lineRows = sale.lines.map(l => {
@@ -242,7 +242,7 @@ function esc(str: string): string {
 
 // ── Main export ───────────────────────────────────────────────────────────
 
-export function printReceipt(sale: SalePayload): void {
+export function printReceipt(sale: SalePayload & { receiptId?: string }): void {
   const html = buildReceiptHTML(sale);
 
   // Create a hidden iframe

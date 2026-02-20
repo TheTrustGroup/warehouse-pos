@@ -1,6 +1,3 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 export default function RootLayout({
   children,
 }: {
@@ -8,9 +5,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body style={{ fontFamily: 'system-ui', margin: 0, padding: 16 }}>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

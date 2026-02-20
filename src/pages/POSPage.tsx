@@ -1,52 +1,37 @@
 // ============================================================
 // POSPage.tsx  —  warehouse-pos/src/pages/POSPage.tsx
 //
-// BUG FIX: "Processing..." never resolves
+// Complete POS with world-class stock management:
 //
-// Root causes (both must be fixed):
-//
-// Bug 1 — /api/sales doesn't exist yet (or returns an error):
-//   handleCharge called `await apiFetch('/api/sales', ...)`.
-//   If that endpoint doesn't exist, apiFetch THROWS.
-//   CartSheet's handleCharge wraps the call in try/finally and sets
-//   isCharging=false in finally — but it never catches the error and
-//   re-throws it, so the `isCharging` state gets stuck on true in
-//   some React versions, OR the error propagates and leaves the button
-//   greyed out indefinitely.
-//
-//   Fix: wrap the sales API call in its own try/catch. If /api/sales
-//   fails, LOG the error but still complete the sale locally — stock
-//   was optimistically deducted, the sale happened in the real world.
-//   Show a toast warning "Sale recorded locally — sync issue" instead
-//   of blocking the cashier.
-//
-// Bug 2 — setSaleResult called before setCartOpen(false) resolves:
-//   setSaleResult(payload) triggered SaleSuccessScreen to render
-//   while CartSheet was still technically "open" (cartOpen=true).
-//   The z-index layering means SaleSuccessScreen (z-50) renders
-//   BEHIND the CartSheet backdrop. Cashier sees nothing change.
-//
-//   Fix: close cart first, then show success screen after a short
-//   delay so the sheet's closing animation completes.
+// Checkout flow:
+//   1. handleCharge called from CartSheet
+//   2. POST /api/sales → calls record_sale RPC on Supabase
+//      → atomically: inserts sale + lines + deducts stock in DB
+//   3. On API success:
+//      - Get real receiptId from server (RCP-2026-NNNNN)
+//      - Optimistically deduct stock in local UI (instant feedback)
+//      - Clear cart, close sheet, show SaleSuccessScreen
+//   4. On API failure:
+//      - Cashier still sees success (sale happened in real world)
+//      - Warning toast: "Sync issue — sale logged locally"
+//      - Local stock still deducted (will resync on next product reload)
+//   5. After success screen → "New sale" → reloads products from server
+//      (this brings local stock in sync with DB truth)
 // ============================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getApiHeaders } from '../lib/api';
 import { printReceipt } from '../lib/printReceipt';
 
-import SessionScreen, { type Warehouse } from '../components/pos/SessionScreen';
-import POSHeader from '../components/pos/POSHeader';
-import ProductGrid from '../components/pos/ProductGrid';
-import CartBar from '../components/pos/CartBar';
-import SizePickerSheet, {
-  type POSProduct,
-  type CartLineInput,
-} from '../components/pos/SizePickerSheet';
-import CartSheet, {
-  type CartLine,
-  type SalePayload,
-} from '../components/pos/CartSheet';
-import SaleSuccessScreen from '../components/pos/SaleSuccessScreen';
+import SessionScreen, { type Warehouse }         from '../components/pos/SessionScreen';
+import POSHeader                                  from '../components/pos/POSHeader';
+import ProductGrid                                from '../components/pos/ProductGrid';
+import CartBar                                    from '../components/pos/CartBar';
+import SizePickerSheet, { type POSProduct, type CartLineInput }
+                                                  from '../components/pos/SizePickerSheet';
+import CartSheet, { type CartLine, type SalePayload }
+                                                  from '../components/pos/CartSheet';
+import SaleSuccessScreen                          from '../components/pos/SaleSuccessScreen';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -57,40 +42,50 @@ const WAREHOUSES: Warehouse[] = [
 
 interface POSPageProps { apiBaseUrl?: string; }
 
-function buildCartKey(productId: string, sizeCode: string | null): string {
+// Extends SalePayload with server-assigned fields
+export interface CompletedSale extends SalePayload {
+  receiptId?: string;   // e.g. RCP-2026-00001  (from server)
+  saleId?:    string;   // UUID from DB
+  completedAt?: string; // ISO timestamp
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function buildCartKey(productId: string, sizeCode: string | null) {
   return `${productId}__${sizeCode ?? 'NA'}`;
 }
 
-function formatPrice(n: number): string {
+function fmt(n: number) {
   return `GH₵${Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// ── Toast ──────────────────────────────────────────────────────────────────
+// ── Toast hook ─────────────────────────────────────────────────────────────
 
 function useToast() {
-  const [toast, setToast] = useState<{ message: string; id: number; warn?: boolean } | null>(null);
-  const show = useCallback((message: string, warn = false) => {
+  const [toast, setToast] = useState<{ message: string; id: number; type: 'ok' | 'warn' | 'err' } | null>(null);
+  const show = useCallback((message: string, type: 'ok' | 'warn' | 'err' = 'ok') => {
     const id = Date.now();
-    setToast({ message, id, warn });
-    setTimeout(() => setToast(t => t?.id === id ? null : t), 3000);
+    setToast({ message, id, type });
+    setTimeout(() => setToast(t => (t?.id === id ? null : t)), 3200);
   }, []);
   return { toast, show };
 }
 
-// ── Main Page ──────────────────────────────────────────────────────────────
+// ── Main page ──────────────────────────────────────────────────────────────
 
 export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
 
-  const [sessionOpen, setSessionOpen]       = useState(true);
-  const [warehouse, setWarehouse]           = useState<Warehouse>(WAREHOUSES[0]);
-  const [products, setProducts]             = useState<POSProduct[]>([]);
-  const [loading, setLoading]               = useState(false);
-  const [search, setSearch]                 = useState('');
-  const [category, setCategory]             = useState('all');
-  const [cart, setCart]                     = useState<CartLine[]>([]);
-  const [cartOpen, setCartOpen]             = useState(false);
-  const [activeProduct, setActiveProduct]   = useState<POSProduct | null>(null);
-  const [saleResult, setSaleResult]         = useState<SalePayload | null>(null);
+  const [sessionOpen, setSessionOpen]     = useState(true);
+  const [warehouse, setWarehouse]         = useState<Warehouse>(WAREHOUSES[0]);
+  const [products, setProducts]           = useState<POSProduct[]>([]);
+  const [loading, setLoading]             = useState(false);
+  const [search, setSearch]               = useState('');
+  const [category, setCategory]           = useState('all');
+  const [cart, setCart]                   = useState<CartLine[]>([]);
+  const [cartOpen, setCartOpen]           = useState(false);
+  const [activeProduct, setActiveProduct] = useState<POSProduct | null>(null);
+  const [saleResult, setSaleResult]       = useState<CompletedSale | null>(null);
+  const [charging, setCharging]           = useState(false); // prevents double-tap
 
   const { toast, show: showToast } = useToast();
   const isMounted = useRef(true);
@@ -115,29 +110,28 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error((body as { message?: string }).message ?? `Request failed: ${res.status}`);
+      throw new Error(body.message ?? body.error ?? `HTTP ${res.status}`);
     }
-    // Handle 204 No Content (some DELETE/POST endpoints return no body)
     const text = await res.text();
     return text ? JSON.parse(text) : ({} as T);
   }
 
   // ── Load products ─────────────────────────────────────────────────────────
 
-  const loadProducts = useCallback(async (wid: string) => {
-    setLoading(true);
+  const loadProducts = useCallback(async (wid: string, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await apiFetch<POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }>(
         `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000&in_stock=false`
       );
       const list: POSProduct[] = Array.isArray(data)
         ? data
-        : (data as any).data ?? (data as any).products ?? [];
+        : (data as Record<string, unknown>).data ?? (data as Record<string, unknown>).products ?? [];
       if (isMounted.current) setProducts(list);
-    } catch (e: any) {
-      if (isMounted.current) showToast(e.message ?? 'Failed to load products');
+    } catch (e: unknown) {
+      if (!silent) showToast(e instanceof Error ? e.message : 'Failed to load products', 'err');
     } finally {
-      if (isMounted.current) setLoading(false);
+      if (!silent && isMounted.current) setLoading(false);
     }
   }, [apiBaseUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -162,18 +156,10 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
   function handleAddToCart(input: CartLineInput) {
     const key = buildCartKey(input.productId, input.sizeCode);
     setCart(prev => {
-      const existing = prev.find(l => l.key === key);
-      if (existing) return prev.map(l => l.key === key ? { ...l, qty: l.qty + input.qty } : l);
-      return [...prev, {
-        key,
-        productId: input.productId,
-        name: input.name,
-        sku: input.sku,
-        sizeCode: input.sizeCode,
-        sizeLabel: input.sizeLabel,
-        unitPrice: input.unitPrice,
-        qty: input.qty,
-      }];
+      const exists = prev.find(l => l.key === key);
+      if (exists) return prev.map(l => l.key === key ? { ...l, qty: l.qty + input.qty } : l);
+      return [...prev, { key, productId: input.productId, name: input.name, sku: input.sku,
+        sizeCode: input.sizeCode, sizeLabel: input.sizeLabel, unitPrice: input.unitPrice, qty: input.qty }];
     });
     showToast(`${input.name}${input.sizeLabel ? ` · ${input.sizeLabel}` : ''} added`);
   }
@@ -191,127 +177,154 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
     setCartOpen(false);
   }
 
-  // ── Charge ────────────────────────────────────────────────────────────────
+  // ── Charge / complete sale ────────────────────────────────────────────────
   //
-  // FIX 1: /api/sales error is now caught and warned — not thrown.
-  //   The cashier gets a warning toast but the sale still completes.
-  //   This prevents isCharging from getting stuck in CartSheet.
+  // Order of operations:
+  //   1. POST /api/sales  → record_sale RPC (atomic: sale + lines + stock deduction in DB)
+  //   2. Deduct stock locally (optimistic — instant UI feedback, even if API is slow)
+  //   3. Close cart sheet → wait for animation
+  //   4. Show success screen with real receiptId from server
   //
-  // FIX 2: CartSheet closes FIRST, then SaleSuccessScreen appears.
-  //   350ms delay matches the sheet's closing animation duration.
-  //   Without this, the success screen renders behind the CartSheet backdrop.
+  // If step 1 fails:
+  //   - Skip receipt ID (generate a local one as fallback)
+  //   - Still complete the checkout flow (cashier isn't blocked)
+  //   - Show amber warning toast
+  //   - Local stock still deducted (corrected on next loadProducts)
 
   async function handleCharge(payload: SalePayload) {
-    let apiFailed = false;
+    if (charging) return; // prevent double-tap
+    setCharging(true);
 
-    // Step 1: Try to record the sale in the database
+    let serverSaleId:    string | undefined;
+    let serverReceiptId: string | undefined;
+    let completedAt:     string | undefined;
+    let syncWarning = false;
+
+    // ── Step 1: Record sale in DB (stock deducted atomically in Postgres) ──
     try {
-      await apiFetch('/api/sales', {
+      const result = await apiFetch<{
+        id: string;
+        receiptId: string;
+        createdAt: string;
+      }>('/api/sales', {
         method: 'POST',
         body: JSON.stringify({
-          warehouseId: payload.warehouseId,
-          customerName: payload.customerName || null,
+          warehouseId:   payload.warehouseId,
+          customerName:  payload.customerName || null,
           paymentMethod: payload.paymentMethod,
-          subtotal: payload.subtotal,
-          discountPct: payload.discountPct,
-          discountAmt: payload.discountAmt,
-          total: payload.total,
-          lines: payload.lines.map(l => ({
+          subtotal:      payload.subtotal,
+          discountPct:   payload.discountPct,
+          discountAmt:   payload.discountAmt,
+          total:         payload.total,
+          lines:         payload.lines.map(l => ({
             productId: l.productId,
-            sizeCode: l.sizeCode,
-            qty: l.qty,
+            sizeCode:  l.sizeCode,
+            qty:       l.qty,
             unitPrice: l.unitPrice,
             lineTotal: l.unitPrice * l.qty,
+            name:      l.name,
+            sku:       l.sku,
           })),
         }),
       });
+
+      serverSaleId    = result.id;
+      serverReceiptId = result.receiptId;
+      completedAt     = result.createdAt ?? new Date().toISOString();
+
     } catch (apiErr: unknown) {
-      // ── BUG FIX 1 ──────────────────────────────────────────────────────
-      // Don't throw here. If the API fails (endpoint missing, network error,
-      // server error), the sale still happened in the real world — don't
-      // block the cashier. Warn them instead.
-      // ───────────────────────────────────────────────────────────────────
-      console.warn('[POSPage] /api/sales failed:', apiErr instanceof Error ? apiErr.message : apiErr);
-      apiFailed = true;
+      // DB call failed — log but don't block the cashier
+      console.error('[POSPage] /api/sales failed:', apiErr instanceof Error ? apiErr.message : apiErr);
+      syncWarning = true;
+      // Fallback local receipt ID
+      serverReceiptId = 'LOCAL-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+      completedAt = new Date().toISOString();
     }
 
-    // Step 2: Optimistically deduct stock from the local product list
-    setProducts(prev =>
-      prev.map(p => {
-        const saleLines = payload.lines.filter(l => l.productId === p.id);
-        if (saleLines.length === 0) return p;
+    // ── Step 2: Deduct stock locally (instant UI feedback) ─────────────────
+    // Even though the DB already deducted, the frontend needs to update
+    // its local products list so the grid shows correct stock immediately.
+    setProducts(prev => prev.map(p => {
+      const saleLines = payload.lines.filter(l => l.productId === p.id);
+      if (saleLines.length === 0) return p;
 
-        if (p.sizeKind === 'sized') {
-          const updatedSizes = p.quantityBySize.map(row => {
-            const line = saleLines.find(l => l.sizeCode === row.sizeCode);
-            return line ? { ...row, quantity: Math.max(0, row.quantity - line.qty) } : row;
-          });
-          return { ...p, quantityBySize: updatedSizes, quantity: updatedSizes.reduce((s, r) => s + r.quantity, 0) };
-        }
+      if (p.sizeKind === 'sized') {
+        const updatedSizes = p.quantityBySize.map(row => {
+          const line = saleLines.find(l => l.sizeCode === row.sizeCode);
+          return line ? { ...row, quantity: Math.max(0, row.quantity - line.qty) } : row;
+        });
+        return { ...p, quantityBySize: updatedSizes, quantity: updatedSizes.reduce((s, r) => s + r.quantity, 0) };
+      }
 
-        const totalSold = saleLines.reduce((s, l) => s + l.qty, 0);
-        return { ...p, quantity: Math.max(0, p.quantity - totalSold) };
-      })
-    );
+      const totalSold = saleLines.reduce((s, l) => s + l.qty, 0);
+      return { ...p, quantity: Math.max(0, p.quantity - totalSold) };
+    }));
 
-    // Step 3: Clear cart immediately
+    // ── Step 3: Clear cart + close sheet ───────────────────────────────────
     setCart([]);
-
-    // ── BUG FIX 2 ──────────────────────────────────────────────────────────
-    // Close the cart sheet FIRST. Then wait for its closing animation to
-    // complete (300ms) before showing the success screen. Without this delay,
-    // the success screen (z-50) is mounted while the CartSheet backdrop
-    // (also z-40+) is still visible — they fight over z-index and the
-    // success screen appears invisible or behind the sheet.
-    // ────────────────────────────────────────────────────────────────────────
     setCartOpen(false);
-    await new Promise(resolve => setTimeout(resolve, 350));
+    setCharging(false);
 
-    // Step 4: Show success screen (and warning toast if API failed)
-    if (isMounted.current) {
-      setSaleResult(payload);
-      if (apiFailed) showToast('Sale recorded locally — sync issue', true);
+    // ── Step 4: Wait for sheet close animation then show success screen ────
+    await new Promise(r => setTimeout(r, 350));
+
+    if (!isMounted.current) return;
+
+    // Build the completed sale object (payload + server data)
+    const completedSale: CompletedSale = {
+      ...payload,
+      saleId:      serverSaleId,
+      receiptId:   serverReceiptId,
+      completedAt,
+    };
+
+    setSaleResult(completedSale);
+
+    if (syncWarning) {
+      showToast('⚠ Sync issue — check connection', 'warn');
     }
   }
 
-  // ── New sale ──────────────────────────────────────────────────────────────
+  // ── New sale (after success screen) ──────────────────────────────────────
 
   function handleNewSale() {
     setSaleResult(null);
     setCart([]);
-    loadProducts(warehouse.id);
-  }
-
-  // ── Print receipt ─────────────────────────────────────────────────────────
-
-  function handlePrintReceipt(sale: SalePayload) {
-    printReceipt(sale);
+    // Re-fetch from server so stock is 100% accurate (DB truth, not optimistic)
+    loadProducts(warehouse.id, true);
   }
 
   // ── Share receipt ─────────────────────────────────────────────────────────
 
-  function handleShareReceipt(sale: SalePayload) {
+  function handleShareReceipt(sale: CompletedSale) {
     const lines = sale.lines
-      .map(l => `${l.name}${l.sizeLabel ? ` (${l.sizeLabel})` : ''} x${l.qty} — ${formatPrice(l.unitPrice * l.qty)}`)
+      .map(l => `${l.name}${l.sizeLabel ? ` (${l.sizeLabel})` : ''} x${l.qty} — ${fmt(l.unitPrice * l.qty)}`)
       .join('\n');
 
     const text = [
       '🧾 Receipt — Extreme Dept Kidz',
+      sale.receiptId ?? '',
       '─────────────────────',
       lines,
       '─────────────────────',
-      sale.discountPct > 0 ? `Discount: −${formatPrice(sale.discountAmt)}` : null,
-      `Total: ${formatPrice(sale.total)}`,
+      sale.discountPct > 0 ? `Discount: −${fmt(sale.discountAmt)}` : null,
+      `Total: ${fmt(sale.total)}`,
       `Paid via: ${sale.paymentMethod}`,
       sale.customerName ? `Customer: ${sale.customerName}` : null,
-      `Date: ${new Date().toLocaleString('en-GH')}`,
+      `Date: ${new Date(sale.completedAt ?? Date.now()).toLocaleString('en-GH')}`,
     ].filter(Boolean).join('\n');
 
-    if (typeof navigator !== 'undefined' && navigator.share) {
+    if (navigator.share) {
       navigator.share({ title: 'Receipt', text }).catch(() => {});
     } else {
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
     }
+  }
+
+  // ── Print receipt ─────────────────────────────────────────────────────────
+
+  function handlePrintReceipt(sale: CompletedSale) {
+    printReceipt({ ...sale, receiptId: sale.receiptId });
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -370,7 +383,7 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
         onRemoveLine={handleRemoveLine}
         onClearCart={handleClearCart}
         onCharge={handleCharge}
-        onClose={() => setCartOpen(false)}
+        onClose={() => !charging && setCartOpen(false)}
       />
 
       <SaleSuccessScreen
@@ -382,25 +395,22 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
 
       {/* Toast */}
       {toast && (
-        <div
-          key={toast.id}
-          className={`
-            fixed bottom-24 left-1/2 -translate-x-1/2 z-40
-            px-4 py-2.5 rounded-full
-            bg-slate-900 text-white
-            text-[13px] font-semibold
-            shadow-[0_4px_20px_rgba(0,0,0,0.2)]
-            whitespace-nowrap pointer-events-none
-            border-l-[3px] ${toast.warn ? 'border-amber-400' : 'border-emerald-500'}
-            animate-[toastIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)]
-          `}
-        >
+        <div key={toast.id} className={`
+          fixed bottom-24 left-1/2 -translate-x-1/2 z-40
+          px-4 py-2.5 rounded-full
+          bg-slate-900 text-white text-[13px] font-semibold
+          shadow-[0_4px_20px_rgba(0,0,0,0.2)]
+          whitespace-nowrap pointer-events-none
+          border-l-[3px]
+          ${toast.type === 'warn' ? 'border-amber-400' : toast.type === 'err' ? 'border-red-500' : 'border-emerald-500'}
+          animate-[posToastIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)]
+        `}>
           {toast.message}
         </div>
       )}
 
       <style>{`
-        @keyframes toastIn {
+        @keyframes posToastIn {
           from { opacity: 0; transform: translateX(-50%) translateY(10px); }
           to   { opacity: 1; transform: translateX(-50%) translateY(0); }
         }

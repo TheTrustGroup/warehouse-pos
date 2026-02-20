@@ -41,6 +41,7 @@ function DefaultRoute() {
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const InventoryPage = lazyWithRetry(() => import('./pages/InventoryPage').then(m => ({ default: m.default })));
 const POSPage = lazyWithRetry(() => import('./pages/POSPage').then(m => ({ default: m.default })));
+const SalesHistoryPage = lazyWithRetry(() => import('./pages/SalesHistoryPage').then(m => ({ default: m.default })));
 const Orders = lazyWithRetry(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
 const Reports = lazyWithRetry(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
 const Settings = lazyWithRetry(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
@@ -88,6 +89,11 @@ function InventoryPageRoute() {
 /** Full POS flow: session screen, products grid, cart, charge, success. Uses API_BASE_URL (set VITE_API_BASE_URL e.g. to https://warehouse-pos-api-v2.vercel.app). */
 function POSPageRoute() {
   return <POSPage apiBaseUrl={API_BASE_URL} />;
+}
+
+/** Sales history: revenue summary, payment breakdown, searchable list, CSV export. Uses GET /api/sales. */
+function SalesHistoryPageRoute() {
+  return <SalesHistoryPage apiBaseUrl={API_BASE_URL} />;
 }
 
 /** Listens for service worker update event and shows toast. Must be inside ToastProvider. */
@@ -236,6 +242,19 @@ function App() {
                             <ProtectedRoute permission={PERMISSIONS.POS.ACCESS}>
                               <RouteErrorBoundary routeName="POS">
                                 <POSPageRoute />
+                              </RouteErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="sales"
+                          element={
+                            <ProtectedRoute
+                              anyPermissions={[PERMISSIONS.REPORTS.VIEW_SALES]}
+                              redirectPathIfForbidden="/pos"
+                            >
+                              <RouteErrorBoundary routeName="Sales History">
+                                <SalesHistoryPageRoute />
                               </RouteErrorBoundary>
                             </ProtectedRoute>
                           }

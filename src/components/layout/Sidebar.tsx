@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Package,
   ShoppingCart,
+  Receipt,
   ClipboardList,
   BarChart3,
   Settings,
@@ -26,6 +27,7 @@ const baseNavigation: NavItem[] = [
   { name: 'Inventory', to: '/inventory', icon: Package, permission: PERMISSIONS.INVENTORY.VIEW },
   { name: 'Orders', to: '/orders', icon: ClipboardList, permission: PERMISSIONS.ORDERS.VIEW },
   { name: 'POS', to: '/pos', icon: ShoppingCart, permission: PERMISSIONS.POS.ACCESS },
+  { name: 'Sales', to: '/sales', icon: Receipt, permission: PERMISSIONS.REPORTS.VIEW_SALES },
   {
     name: 'Reports',
     to: '/reports',
