@@ -11,7 +11,7 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import { getApiHeaders } from '../lib/api';
+import { apiGet } from '../lib/apiClient';
 import { printReceipt } from '../lib/printReceipt';
 
 interface SalesHistoryPageProps { apiBaseUrl?: string; }
@@ -285,13 +285,12 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
       const params = new URLSearchParams({ warehouse_id: warehouseId, limit: '500' });
       if (from) params.set('from', from);
 
-      const res = await fetch(`${apiBaseUrl}/api/sales?${params}`, {
-        headers: new Headers(getApiHeaders()),
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setSales(Array.isArray(data) ? data : data.data ?? []);
+      const data = await apiGet<{ data?: Sale[] } | Sale[]>(
+        apiBaseUrl,
+        `/api/sales?${params}`,
+        { maxRetries: 3, timeoutMs: 20_000 }
+      );
+      setSales(Array.isArray(data) ? data : (data as { data?: Sale[] }).data ?? []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load sales');
     } finally {

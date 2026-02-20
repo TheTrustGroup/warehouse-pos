@@ -27,6 +27,7 @@ import ProductCard, { ProductCardSkeleton, type Product } from '../components/in
 import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
 import { getApiHeaders } from '../lib/api';
+import { apiGet } from '../lib/apiClient';
 
 type FilterKey = 'all' | string;
 type SortKey   = 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc';
@@ -34,6 +35,9 @@ type SortKey   = 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_
 interface InventoryPageProps { apiBaseUrl?: string; }
 
 const POLL_MS   = 30_000;
+const INITIAL_PRODUCTS_LIMIT = 200;  // Fast first paint; rest loaded in background
+const REMAINING_PRODUCTS_LIMIT = 800;
+const PRODUCTS_CACHE_KEY = (wid: string) => `warehouse_products_${wid}`;
 const CATEGORIES = ['Sneakers', 'Slippers', 'Boots', 'Sandals', 'Accessories'];
 const WAREHOUSES = [
   { id: '00000000-0000-0000-0000-000000000001', name: 'Main Store' },
@@ -284,32 +288,67 @@ export default function InventoryPage({ apiBaseUrl = '' }: InventoryPageProps) {
 
   // ── Load products ─────────────────────────────────────────────────────────
   // silent=true → don't show loading spinner (used by poll + post-action refresh)
+  // Stale-while-revalidate: show cached list immediately (if any), then fetch and replace.
+  // Uses apiGet (retries + 20s timeout) for consistent loading.
 
   const loadProducts = useCallback(async (silent = false) => {
     // Never overwrite modal form state mid-edit
     if (modalOpenRef.current) return;
 
-    if (!silent) setLoading(true);
     setError(null);
 
-    try {
-      const data = await apiFetch<{ data?: Product[]; products?: Product[] } | Product[]>(
-        `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=1000`
-      );
-      const list: Product[] = Array.isArray(data)
-        ? data
-        : (data as { data?: Product[] }).data ?? (data as { products?: Product[] }).products ?? [];
+    let hadCache = false;
+    if (!silent && typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(PRODUCTS_CACHE_KEY(warehouseId));
+        if (raw) {
+          const parsed = JSON.parse(raw) as unknown;
+          const cached = Array.isArray(parsed) ? parsed as Product[] : [];
+          if (cached.length > 0) {
+            setProducts(cached);
+            setLoading(false);
+            hadCache = true;
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    if (!silent && !hadCache) setLoading(true);
 
-      // ─────────────────────────────────────────────────────────────────────
-      // KEY: filter out any IDs currently being deleted.
-      // Without this, the poll overwrites state and the product "comes back".
-      // ─────────────────────────────────────────────────────────────────────
+    const basePath = `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}`;
+    const getOpts = { maxRetries: 3, timeoutMs: 20_000 };
+
+    try {
+      // First request: smaller payload for fast first paint
+      const path1 = `${basePath}&limit=${INITIAL_PRODUCTS_LIMIT}`;
+      const data1 = await apiGet<{ data?: Product[]; products?: Product[] } | Product[]>(apiBaseUrl, path1, getOpts);
+      let list: Product[] = Array.isArray(data1)
+        ? data1
+        : (data1 as { data?: Product[] }).data ?? (data1 as { products?: Product[] }).products ?? [];
+
       const pending = pendingDeletesRef.current;
-      setProducts(
-        pending.size > 0
-          ? list.filter(p => !pending.has(p.id))
-          : list
-      );
+      list = pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list;
+      setProducts(list);
+
+      // If we got a full page, fetch the rest in background and merge
+      if (list.length >= INITIAL_PRODUCTS_LIMIT) {
+        const path2 = `${basePath}&limit=${REMAINING_PRODUCTS_LIMIT}&offset=${INITIAL_PRODUCTS_LIMIT}`;
+        apiGet<{ data?: Product[]; products?: Product[] } | Product[]>(apiBaseUrl, path2, getOpts)
+          .then((data2) => {
+            const rest = Array.isArray(data2)
+              ? data2
+              : (data2 as { data?: Product[] }).data ?? (data2 as { products?: Product[] }).products ?? [];
+            const merged = pending.size > 0 ? [...list, ...rest].filter(p => !pending.has(p.id)) : [...list, ...rest];
+            setProducts(merged);
+            if (typeof localStorage !== 'undefined' && merged.length > 0) {
+              try { localStorage.setItem(PRODUCTS_CACHE_KEY(warehouseId), JSON.stringify(merged)); } catch { /* ignore */ }
+            }
+          })
+          .catch(() => { /* keep first page; cache already written below if list is first page only */ });
+      }
+
+      if (list.length > 0 && list.length < INITIAL_PRODUCTS_LIMIT && typeof localStorage !== 'undefined') {
+        try { localStorage.setItem(PRODUCTS_CACHE_KEY(warehouseId), JSON.stringify(list)); } catch { /* ignore */ }
+      }
     } catch (e: unknown) {
       if (!silent) setError(e instanceof Error ? e.message : 'Failed to load products.');
     } finally {
@@ -321,12 +360,11 @@ export default function InventoryPage({ apiBaseUrl = '' }: InventoryPageProps) {
 
   const loadSizeCodes = useCallback(async () => {
     try {
-      const data = await apiFetch<SizeCode[] | { data: SizeCode[] }>(
-        `/api/size-codes?warehouse_id=${encodeURIComponent(warehouseId)}`
-      );
+      const path = `/api/size-codes?warehouse_id=${encodeURIComponent(warehouseId)}`;
+      const data = await apiGet<SizeCode[] | { data: SizeCode[] }>(apiBaseUrl, path, { maxRetries: 2, timeoutMs: 10_000 });
       setSizeCodes(Array.isArray(data) ? data : (data as { data?: SizeCode[] }).data ?? []);
     } catch { /* non-critical */ }
-  }, [warehouseId]);
+  }, [warehouseId, apiBaseUrl]);
 
   // ── Polling ───────────────────────────────────────────────────────────────
 

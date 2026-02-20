@@ -382,15 +382,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const path = productsPath('/api/products', { limit: 1000 });
-        // Fail fast on server/network errors so we show cached products instead of spinning (maxRetries: 0).
-        const getOpts = { signal, timeoutMs, maxRetries: 0 };
+        const INITIAL_LIMIT = 200;
+        const REMAINING_LIMIT = 800;
+        const path = productsPath('/api/products', { limit: INITIAL_LIMIT });
+        const getOpts = { signal, timeoutMs, maxRetries: 3 };
         let raw: { data?: Product[]; total?: number } | Product[] | null = null;
         try {
           raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
         } catch (e) {
           const status = (e as { status?: number })?.status;
-          // Only fall back to admin endpoint when /api/products is not found (404). Never on 403 — cashiers must use /api/products only.
           if (status === 404) {
             raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: 1000 }), getOpts);
           } else {
@@ -402,7 +402,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           setError(parsed.message);
           return;
         }
-        const apiProducts = parsed.items.map((p) => normalizeProduct(p));
+        let apiProducts = parsed.items.map((p) => normalizeProduct(p));
+        if (apiProducts.length >= INITIAL_LIMIT) {
+          const path2 = productsPath('/api/products', { limit: REMAINING_LIMIT, offset: INITIAL_LIMIT });
+          try {
+            const raw2 = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path2, getOpts);
+            const parsed2 = parseProductsResponse(raw2);
+            if (parsed2.success && parsed2.items.length > 0) {
+              apiProducts = [...apiProducts, ...parsed2.items.map((p) => normalizeProduct(p))];
+            }
+          } catch {
+            /* use first page only */
+          }
+        }
         const apiIds = new Set(apiProducts.map((p) => p.id));
         // Keep products that exist only locally (e.g. added while offline or when API failed) so inventory never vanishes
         const localOnly: Product[] = [];

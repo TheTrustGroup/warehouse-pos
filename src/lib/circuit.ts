@@ -79,11 +79,20 @@ export class CircuitBreaker {
 
 let sharedCircuit: CircuitBreaker | null = null;
 
+function logCircuitState(state: State): void {
+  if (state === 'open' && typeof console !== 'undefined') {
+    console.warn(
+      '[API] Circuit breaker opened — server temporarily unavailable. Requests will be blocked until cooldown. Check backend and network.'
+    );
+  }
+}
+
 export function getApiCircuitBreaker(): CircuitBreaker {
   if (!sharedCircuit) {
     sharedCircuit = new CircuitBreaker({
       failureThreshold: 8,
       cooldownMs: 45_000,
+      onStateChange: logCircuitState,
     });
   }
   return sharedCircuit;

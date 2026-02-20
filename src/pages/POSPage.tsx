@@ -27,6 +27,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
+import { apiGet } from '../lib/apiClient';
 import { printReceipt } from '../lib/printReceipt';
 
 import SessionScreen, { type Warehouse }         from '../components/pos/SessionScreen';
@@ -136,12 +137,16 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   }, []);
 
   // ── Load products ─────────────────────────────────────────────────────────
+  // Uses apiGet (retries + timeout) for consistent loading when network is flaky.
 
   const loadProducts = useCallback(async (wid: string, silent = false) => {
     if (!silent) setLoading(true);
+    const path = `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000`;
     try {
-      const data = await apiFetch<POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }>(
-        `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000`
+      const data = await apiGet<POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }>(
+        API_BASE_URL,
+        path,
+        { maxRetries: 3, timeoutMs: 20_000 }
       );
       const list: POSProduct[] = Array.isArray(data)
         ? data
@@ -152,7 +157,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     } finally {
       if (!silent && isMounted.current) setLoading(false);
     }
-  }, [apiFetch, showToast]);
+  }, [showToast]);
 
   useEffect(() => {
     if (!sessionOpen) {
