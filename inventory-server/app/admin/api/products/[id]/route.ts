@@ -90,9 +90,12 @@ export async function DELETE(
     return new NextResponse(null, { status: 204 });
   } catch (e) {
     console.error('[admin/api/products/[id] DELETE]', e);
-    return NextResponse.json(
-      { message: e instanceof Error ? e.message : 'Failed to delete product' },
-      { status: 500 }
-    );
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof (e as { message?: unknown })?.message === 'string'
+          ? (e as { message: string }).message
+          : 'Failed to delete product';
+    return NextResponse.json({ message }, { status: 500 });
   }
 }

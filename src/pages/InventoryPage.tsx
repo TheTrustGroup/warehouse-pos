@@ -266,8 +266,9 @@ export default function InventoryPage({ apiBaseUrl = '' }: InventoryPageProps) {
       clearTimeout(timeout);
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const e = new Error((body as { message?: string }).message ?? `Request failed: ${res.status}`) as Error & { status: number };
+        const body = await res.json().catch(() => ({})) as { message?: string; error?: string };
+        const msg = body?.message ?? body?.error ?? `Request failed: ${res.status}`;
+        const e = new Error(msg) as Error & { status: number };
         e.status = res.status;
         throw e;
       }
@@ -403,12 +404,24 @@ export default function InventoryPage({ apiBaseUrl = '' }: InventoryPageProps) {
     // Step 4: optimistic remove from UI
     setProducts(prev => prev.filter(p => p.id !== product.id));
 
-    // Step 5: API call
+    // Step 5: API call — try admin path first (matches rest of app), then public API on 404
     try {
-      await apiFetch(`/api/products/${encodeURIComponent(product.id)}`, {
-        method: 'DELETE',
-        body: JSON.stringify({ warehouseId }),
-      });
+      try {
+        await apiFetch(
+          `/admin/api/products/${encodeURIComponent(product.id)}?warehouse_id=${encodeURIComponent(warehouseId)}`,
+          { method: 'DELETE' }
+        );
+      } catch (adminErr: unknown) {
+        const status = (adminErr as { status?: number })?.status;
+        if (status === 404) {
+          await apiFetch(`/api/products/${encodeURIComponent(product.id)}`, {
+            method: 'DELETE',
+            body: JSON.stringify({ warehouseId }),
+          });
+        } else {
+          throw adminErr;
+        }
+      }
 
       // Step 6a: Confirmed. Clear pending. Product is gone permanently.
       pendingDeletesRef.current.delete(product.id);
@@ -425,7 +438,8 @@ export default function InventoryPage({ apiBaseUrl = '' }: InventoryPageProps) {
         return [...prev, product].sort((a, b) => a.name.localeCompare(b.name));
       });
 
-      showToast(e instanceof Error ? e.message : 'Failed to delete product', 'error');
+      const msg = e instanceof Error ? e.message : 'Failed to delete product';
+      showToast(msg, 'error');
     }
   }
 
