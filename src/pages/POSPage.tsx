@@ -124,9 +124,8 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
       const data = await apiFetch<POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }>(
         `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000&in_stock=false`
       );
-      const list: POSProduct[] = Array.isArray(data)
-        ? data
-        : (data as Record<string, unknown>).data ?? (data as Record<string, unknown>).products ?? [];
+      const raw = Array.isArray(data) ? data : (data as Record<string, unknown>).data ?? (data as Record<string, unknown>).products;
+      const list: POSProduct[] = Array.isArray(raw) ? raw : [];
       if (isMounted.current) setProducts(list);
     } catch (e: unknown) {
       if (!silent) showToast(e instanceof Error ? e.message : 'Failed to load products', 'err');
