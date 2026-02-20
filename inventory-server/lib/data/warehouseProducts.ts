@@ -489,118 +489,209 @@ async function createWarehouseProductLegacy(
   return rowToApi(outRow, qty);
 }
 
-/** PUT: update one. Uses atomic RPC when available; fallback to legacy. Optimistic lock: version; 409 if conflict. */
-export async function updateWarehouseProduct(id: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+/** PUT: update one product. Atomic RPC with version lock; legacy fallback. */
+export async function updateWarehouseProduct(
+  id: string,
+  body: Record<string, unknown>
+): Promise<Record<string, unknown>> {
   const wid = (body.warehouseId as string)?.trim() || getDefaultWarehouseId();
+
+  // 1. Load existing — 404 if missing
   const existing = await getWarehouseProductById(id, wid);
   if (!existing) {
     const err = new Error('Product not found') as Error & { status?: number };
     err.status = 404;
     throw err;
   }
-  const merged = { ...existing, ...body };
-  validateSizeKindAndQuantityBySize(merged.sizeKind ?? merged.size_kind, merged.quantityBySize);
 
   const currentVersion = Number(existing.version ?? 0);
   const ts = now();
-  const bodySizeKind = (body as { sizeKind?: string }).sizeKind ?? (body as { size_kind?: string }).size_kind;
-  const quantityBySizeRaw =
-    (body as { quantityBySize?: Array<{ sizeCode: string; quantity: number }> }).quantityBySize
-    ?? (body as { quantity_by_size?: Array<{ sizeCode?: string; size_code?: string; quantity: number }> }).quantity_by_size?.map((e) => ({
+
+  // ── 2. Resolve sizeKind ────────────────────────────────────────────────────
+  // Use whatever the body says. If body omits sizeKind, fall back to existing.
+  // NEVER silently revert to the old sizeKind — that was the root cause of
+  // "editing size type has no effect".
+  const bodySizeKind = (
+    (body as { sizeKind?: string }).sizeKind ??
+    (body as { size_kind?: string }).size_kind ??
+    (existing as { sizeKind?: string }).sizeKind ??
+    (existing as { size_kind?: string }).size_kind ??
+    'na'
+  ).toLowerCase() as 'na' | 'one_size' | 'sized';
+
+  // ── 3. Resolve quantityBySize from body ───────────────────────────────────
+  const quantityBySizeRaw: Array<{ sizeCode: string; quantity: number }> | undefined =
+    (body as { quantityBySize?: Array<{ sizeCode: string; quantity: number }> }).quantityBySize ??
+    (body as { quantity_by_size?: Array<{ sizeCode?: string; size_code?: string; quantity: number }> })
+      .quantity_by_size?.map((e) => ({
         sizeCode: (e.sizeCode ?? e.size_code ?? '').toString().trim(),
-        quantity: Number(e.quantity) ?? 0,
+        quantity: Number(e.quantity) || 0,
       }));
-  const hasSized =
-    bodySizeKind === 'sized' || (Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0);
-  const row = bodyToRow({ ...existing, ...body, id, updatedAt: ts, version: currentVersion + 1 }, id, ts);
 
-  if (hasSized) (row as { size_kind: string }).size_kind = 'sized';
-  const existingSizeKind = (existing as { sizeKind?: string }).sizeKind ?? (existing as { size_kind?: string }).size_kind;
-  if (!hasSized && (existingSizeKind === 'sized' || existingSizeKind === 'one_size') && (row as { size_kind?: string }).size_kind === 'na') {
-    (row as { size_kind: string }).size_kind = existingSizeKind as string;
-  }
+  // ── 4. Build the product row for warehouse_products ───────────────────────
+  const row = bodyToRow(
+    { ...existing, ...body, id, updatedAt: ts, version: currentVersion + 1 },
+    id,
+    ts
+  );
 
-  const supabase = getSupabase();
-  let pQuantity = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
+  // Always write the resolved sizeKind into the row — don't let bodyToRow
+  // or spread from `existing` leave a stale value.
+  (row as { size_kind: string }).size_kind = bodySizeKind;
+
+  // ── 5. Build pQuantity / pQuantityBySize for the RPC ──────────────────────
+  let pQuantity: number | null =
+    typeof (body as { quantity?: number }).quantity === 'number'
+      ? (body as { quantity: number }).quantity
+      : null;
+
   let pQuantityBySize: Array<{ sizeCode: string; quantity: number }> | null = null;
-  if (hasSized) {
+
+  if (bodySizeKind === 'sized') {
+    // Normalize whatever rows came in
     const normalized =
       Array.isArray(quantityBySizeRaw) && quantityBySizeRaw.length > 0
         ? quantityBySizeRaw
             .map((e) => ({
-              sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase(),
-              quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
+              sizeCode: String(e.sizeCode ?? '')
+                .trim()
+                .replace(/\s+/g, '')
+                .toUpperCase(),
+              quantity: Math.max(0, Math.floor(Number(e.quantity) || 0)),
             }))
+            // Drop blank codes and the legacy "NA" sentinel
             .filter((e) => e.sizeCode && e.sizeCode !== 'NA')
         : [];
+
+    // Detect a single ONE_SIZE synthetic row (legacy fallback artefact)
     const singleOneSize =
-      normalized.length === 1 && /^ONE(_?)SIZE$/i.test(normalized[0].sizeCode.replace(/\s/g, ''));
+      normalized.length === 1 &&
+      /^ONE(_?)SIZE$/i.test(normalized[0].sizeCode.replace(/\s/g, ''));
+
     if (singleOneSize) {
+      // Treat as one_size product
       (row as { size_kind: string }).size_kind = 'one_size';
-      pQuantityBySize = [];
+      pQuantityBySize = []; // clear by_size rows
       pQuantity = normalized[0].quantity;
+    } else if (normalized.length > 0) {
+      // ✅ Send ALL rows — including quantity:0 ones.
+      // The RPC does DELETE + INSERT so every row in this array becomes the
+      // new truth. Zero-qty rows are valid (size exists, just out of stock).
+      pQuantityBySize = normalized;
+      // Derive total from sizes so warehouse_inventory stays in sync
+      pQuantity = normalized.reduce((sum, r) => sum + r.quantity, 0);
     } else {
-      // Send all rows (including quantity 0) so RPC replace strategy inserts them; no "all zeros" early-exit.
-      if (normalized.length > 0) {
-        pQuantityBySize = normalized;
-      } else {
-        // CRITICAL: Payload had no size rows (e.g. partial update or form didn't send quantityBySize).
-        // Preserve existing per-size inventory instead of passing [] which would DELETE all rows and wipe sizes.
-        const existingBySize = (existing as { quantityBySize?: Array<{ sizeCode?: string; quantity?: number }> }).quantityBySize;
-        const preserved =
-          Array.isArray(existingBySize) && existingBySize.length > 0
-            ? existingBySize
-                .map((e) => ({
-                  sizeCode: String(e.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase(),
-                  quantity: Math.max(0, Math.floor(Number(e.quantity) ?? 0)),
-                }))
-                .filter((e) => e.sizeCode && e.sizeCode !== 'NA' && !/^ONE(_?)SIZE$/i.test(e.sizeCode.replace(/\s/g, '')))
-            : [];
-        pQuantityBySize = preserved.length > 0 ? preserved : [];
+      // Body said sizeKind=sized but sent zero size rows.
+      // Preserve existing per-size inventory rather than wiping it.
+      const existingBySize = (
+        existing as { quantityBySize?: Array<{ sizeCode?: string; quantity?: number }> }
+      ).quantityBySize;
+      const preserved =
+        Array.isArray(existingBySize) && existingBySize.length > 0
+          ? existingBySize
+              .map((e) => ({
+                sizeCode: String(e.sizeCode ?? '')
+                  .trim()
+                  .replace(/\s+/g, '')
+                  .toUpperCase(),
+                quantity: Math.max(0, Math.floor(Number(e.quantity) || 0)),
+              }))
+              .filter(
+                (e) =>
+                  e.sizeCode &&
+                  e.sizeCode !== 'NA' &&
+                  !/^ONE(_?)SIZE$/i.test(e.sizeCode.replace(/\s/g, ''))
+              )
+          : [];
+      // Passing null tells the RPC: "don't touch by_size at all"
+      // Passing [] would DELETE all rows — we don't want that here
+      pQuantityBySize = preserved.length > 0 ? preserved : null;
+      if (pQuantityBySize !== null) {
+        pQuantity = pQuantityBySize.reduce((sum, r) => sum + r.quantity, 0);
       }
     }
+  } else if (bodySizeKind === 'one_size') {
+    // Clear all per-size rows; set a plain quantity
+    pQuantityBySize = [];
+    pQuantity =
+      pQuantity ??
+      (typeof (existing as { quantity?: number }).quantity === 'number'
+        ? (existing as { quantity: number }).quantity
+        : 0);
+  } else {
+    // na — no sizes at all
+    pQuantityBySize = [];
+    pQuantity =
+      pQuantity ??
+      (typeof (existing as { quantity?: number }).quantity === 'number'
+        ? (existing as { quantity: number }).quantity
+        : 0);
   }
 
   if (process.env.NODE_ENV !== 'production') {
-    const sizeCount = pQuantityBySize?.length ?? 0;
-    console.log('[updateWarehouseProduct] Saving sizes:', sizeCount > 0 ? pQuantityBySize : pQuantityBySize ?? 'null (will not touch by_size table)', { productId: id, warehouseId: wid, sizeCount });
+    console.log('[updateWarehouseProduct] sizeKind:', bodySizeKind, '| sizes:', pQuantityBySize, '| qty:', pQuantity);
   }
 
-  console.log('[VERSION CHECK] existing.version:', existing.version, 'currentVersion:', currentVersion);
-
-  const { data: rpcData, error: rpcError } = await supabase.rpc('update_warehouse_product_atomic', {
-    p_id: id,
-    p_warehouse_id: wid,
-    p_row: row,
-    p_current_version: currentVersion,
-    p_quantity: pQuantity,
-    p_quantity_by_size: pQuantityBySize,
-  });
+  // ── 6. Call the atomic RPC ────────────────────────────────────────────────
+  const supabase = getSupabase();
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    'update_warehouse_product_atomic',
+    {
+      p_id: id,
+      p_warehouse_id: wid,
+      p_row: row,
+      p_current_version: currentVersion,
+      p_quantity: pQuantity,
+      p_quantity_by_size: pQuantityBySize,
+    }
+  );
 
   if (!rpcError) {
+    // Re-fetch so the response always reflects DB truth
     const updated = await getWarehouseProductById(id, wid);
-    const out: Record<string, unknown> = (updated ?? rowToApi(rpcData as WarehouseProductRow, 0)) as Record<string, unknown>;
+    const out: Record<string, unknown> = (
+      updated ?? rowToApi(rpcData as WarehouseProductRow, 0)
+    ) as Record<string, unknown>;
+
+    // If DB returned no by_size rows yet (e.g. replication lag) but we just
+    // wrote some, patch the response so the UI doesn't flash stale data.
     if (pQuantityBySize && pQuantityBySize.length > 0) {
       const bySize = out.quantityBySize as Array<{ sizeCode?: string }> | undefined;
-      const singleSynthetic =
-        Array.isArray(bySize) &&
-        bySize.length === 1 &&
-        /one\s*size|onesize/i.test(String(bySize[0]?.sizeCode ?? ''));
-      const emptyOrSynthetic = !Array.isArray(bySize) || bySize.length === 0 || singleSynthetic;
-      if (emptyOrSynthetic)
-        out.quantityBySize = pQuantityBySize.map((e) => ({ ...e, sizeLabel: e.sizeCode }));
+      const isEmpty = !Array.isArray(bySize) || bySize.length === 0;
+      if (isEmpty) {
+        out.quantityBySize = pQuantityBySize.map((e) => ({
+          ...e,
+          sizeLabel: e.sizeCode,
+        }));
+      }
     }
+
     return out;
   }
 
-  if (rpcError.code === '42883' || rpcError.message?.includes('does not exist')) {
-    return updateWarehouseProductLegacy(id, body, existing, currentVersion, ts, wid, quantityBySizeRaw, hasSized);
+  // ── 7. Fallbacks ──────────────────────────────────────────────────────────
+  if (
+    rpcError.code === '42883' ||
+    rpcError.message?.includes('does not exist')
+  ) {
+    return updateWarehouseProductLegacy(
+      id,
+      body,
+      existing,
+      currentVersion,
+      ts,
+      wid,
+      quantityBySizeRaw,
+      bodySizeKind === 'sized'
+    );
   }
+
   if (rpcError.message?.includes('updated by someone else')) {
     const err = new Error(rpcError.message) as Error & { status?: number };
     err.status = 409;
     throw err;
   }
+
   throw rpcError;
 }
 

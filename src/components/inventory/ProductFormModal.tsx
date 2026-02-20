@@ -131,7 +131,6 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     };
   }, [isOpen, product]);
 
-  // Only sync form when the modal *first* opens (isOpen: false -> true). Do not overwrite when product reference changes (e.g. polling) while open.
   useEffect(() => {
     if (!isOpen) {
       wasOpenRef.current = false;
@@ -147,16 +146,30 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     const skipImageOverwrite = imageUploadingRef.current;
 
     if (currentProduct) {
-      const effectiveWarehouseId = (currentProduct as { warehouseId?: string }).warehouseId ?? warehouseId ?? DEFAULT_WAREHOUSE_ID;
+      const effectiveWarehouseId =
+        (currentProduct as { warehouseId?: string }).warehouseId ??
+        warehouseId ??
+        DEFAULT_WAREHOUSE_ID;
+
       const validImages = Array.isArray(currentProduct.images)
         ? currentProduct.images.filter(
             (img): img is string =>
               typeof img === 'string' &&
               img.length > 0 &&
-              (img.startsWith('data:') || img.startsWith('http://') || img.startsWith('https://'))
+              (img.startsWith('data:') ||
+                img.startsWith('http://') ||
+                img.startsWith('https://'))
           )
         : [];
-      // First set form from product so modal feels instant (quantityBySize may be patched below from DB).
+
+      const sizeKind = (currentProduct.sizeKind ?? 'na') as SizeKind;
+
+      // All rows — including zero-qty — so user sees and can edit every size
+      const quantityBySize = (currentProduct.quantityBySize ?? []).map((r) => ({
+        sizeCode: r.sizeCode,
+        quantity: r.quantity,
+      }));
+
       setFormData((prev) => ({
         sku: currentProduct.sku,
         barcode: currentProduct.barcode,
@@ -169,54 +182,60 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         sellingPrice: currentProduct.sellingPrice,
         reorderLevel: currentProduct.reorderLevel,
         warehouseId: effectiveWarehouseId,
-        location: currentProduct.location && typeof currentProduct.location === 'object'
-          ? { warehouse: (currentProduct.location as any).warehouse ?? 'Main Store', aisle: (currentProduct.location as any).aisle ?? '', rack: (currentProduct.location as any).rack ?? '', bin: (currentProduct.location as any).bin ?? '' }
-          : { warehouse: 'Main Store', aisle: '', rack: '', bin: '' },
-        supplier: currentProduct.supplier && typeof currentProduct.supplier === 'object'
-          ? { name: (currentProduct.supplier as any).name ?? '', contact: (currentProduct.supplier as any).contact ?? '', email: (currentProduct.supplier as any).email ?? '' }
-          : { name: '', contact: '', email: '' },
+        location:
+          currentProduct.location && typeof currentProduct.location === 'object'
+            ? {
+                warehouse:
+                  (currentProduct.location as any).warehouse ?? 'Main Store',
+                aisle: (currentProduct.location as any).aisle ?? '',
+                rack: (currentProduct.location as any).rack ?? '',
+                bin: (currentProduct.location as any).bin ?? '',
+              }
+            : { warehouse: 'Main Store', aisle: '', rack: '', bin: '' },
+        supplier:
+          currentProduct.supplier && typeof currentProduct.supplier === 'object'
+            ? {
+                name: (currentProduct.supplier as any).name ?? '',
+                contact: (currentProduct.supplier as any).contact ?? '',
+                email: (currentProduct.supplier as any).email ?? '',
+              }
+            : { name: '', contact: '', email: '' },
         images: skipImageOverwrite ? prev.images : validImages,
         expiryDate: currentProduct.expiryDate,
         variants: currentProduct.variants || {},
         createdBy: currentProduct.createdBy,
-        sizeKind: (currentProduct.sizeKind ?? 'na') as SizeKind,
-        quantityBySize: currentProduct.quantityBySize ?? [],
+        sizeKind,
+        quantityBySize,
       }));
+
       if (!skipImageOverwrite) {
         setImagePreview(validImages);
         formDataImagesRef.current = validImages;
         imagesLengthRef.current = validImages.length;
       }
-      if ((currentProduct.sizeKind ?? 'na') === 'sized') {
-        // Show all rows including zero qty (no filter)
-        const existingSizes = (currentProduct.quantityBySize ?? [])
-          .map((r) => ({ sizeCode: r.sizeCode, quantity: r.quantity }));
 
-        if (existingSizes.length > 0) {
-          setFormData((prev) => ({
-            ...prev,
-            quantityBySize: existingSizes,
-          }));
-        } else {
-          // Fallback: fetch from DB if product came without sizes
-          apiGet<{ data: Array<{ sizeCode: string; quantity: number }> }>(
-            API_BASE_URL,
-            `/api/products/${currentProduct.id}/inventory-by-size?warehouse_id=${encodeURIComponent(effectiveWarehouseId)}`
-          )
-            .then((res) => {
-              if (res?.data && res.data.length > 0) {
-                setFormData((prev) => ({
-                  ...prev,
-                  quantityBySize: res.data
-                    .filter((r) => r.quantity > 0)
-                    .map((r) => ({ sizeCode: r.sizeCode, quantity: r.quantity })),
-                }));
-              }
-            })
-            .catch(() => {});
-        }
+      // If product is sized but came back with no rows, fetch from DB
+      if (sizeKind === 'sized' && quantityBySize.length === 0) {
+        apiGet<{ data: Array<{ sizeCode: string; quantity: number }> }>(
+          API_BASE_URL,
+          `/api/products/${currentProduct.id}/inventory-by-size?warehouse_id=${encodeURIComponent(effectiveWarehouseId)}`
+        )
+          .then((res) => {
+            if (res?.data && res.data.length > 0) {
+              setFormData((prev) => ({
+                ...prev,
+                // Include ALL rows from DB — no quantity filter
+                quantityBySize: res.data.map((r) => ({
+                  sizeCode: r.sizeCode,
+                  quantity: r.quantity,
+                })),
+              }));
+            }
+          })
+          .catch(() => {});
       }
     } else {
+      // New product
       setFormData((prev) => ({
         sku: generateSKU(),
         barcode: '',
@@ -244,8 +263,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         imagesLengthRef.current = 0;
       }
     }
-    // Intentionally only isOpen: re-run only when modal opens, not when product/warehouse refs change while open.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   useEffect(() => {
@@ -402,61 +420,83 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-    if (import.meta.env?.DEV) console.time('ProductForm Submit (total)');
+
+    // Rows with a real sizeCode (not blank, not synthetic ONE_SIZE)
     const validSizeRows = (formData.quantityBySize ?? [])
       .filter((r) => (r.sizeCode ?? '').trim() !== '')
       .filter((r) => !isSyntheticOneSizeRow(r.sizeCode ?? ''));
+
+    // Rows that have a quantity but no size code — user forgot to fill in the size
     const rowsWithQtyButNoSize = (formData.quantityBySize ?? []).filter(
-      (r) => (r.sizeCode ?? '').trim() === '' && Number(r.quantity ?? 0) > 0
+      (r) =>
+        (r.sizeCode ?? '').trim() === '' && Number(r.quantity ?? 0) > 0
     );
+
     if (formData.sizeKind === 'sized' && validSizeRows.length === 0) {
       showToast('error', 'Add at least one size row to save.');
       return;
     }
     if (formData.sizeKind === 'sized' && rowsWithQtyButNoSize.length > 0) {
-      showToast('error', 'Enter a size (e.g. S, M, EU30) for every row that has a quantity. Rows without a size are ignored.');
+      showToast(
+        'error',
+        'Enter a size (e.g. S, M, EU30) for every row that has a quantity.'
+      );
       return;
     }
+
     const name = nameRef.current?.value ?? formData.name;
     const sku = skuRef.current?.value ?? formData.sku;
     const barcode = barcodeRef.current?.value ?? formData.barcode;
     const category = categoryRef.current?.value ?? formData.category;
     const description = descriptionRef.current?.value ?? formData.description;
+
+    // For sized products the total quantity IS the sum of size rows
+    const totalQuantity =
+      formData.sizeKind === 'sized'
+        ? validSizeRows.reduce((sum, r) => sum + (r.quantity ?? 0), 0)
+        : Number(formData.quantity) || 0;
+
     const toValidate = {
       name,
       sku,
       barcode,
       description,
       category,
-      quantity: formData.sizeKind === 'sized' ? validSizeRows.reduce((s, r) => s + (r.quantity || 0), 0) : formData.quantity,
+      quantity: totalQuantity,
       costPrice: formData.costPrice,
       sellingPrice: formData.sellingPrice,
       reorderLevel: formData.reorderLevel,
       location: formData.location,
       supplier: formData.supplier,
       sizeKind: formData.sizeKind,
-      quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize,
+      quantityBySize:
+        formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize,
     };
+
     const validated = safeValidateProductForm(toValidate);
     if (!validated.success) {
       showToast('error', validated.message);
       return;
     }
-    const effectiveWarehouseId = (formData.warehouseId?.trim() || currentWarehouseId?.trim() || '').trim() || undefined;
+
+    const effectiveWarehouseId = (
+      formData.warehouseId?.trim() ||
+      currentWarehouseId?.trim() ||
+      ''
+    ).trim() || undefined;
+
     if (warehouses.length > 0 && !effectiveWarehouseId) {
       showToast('error', 'Please select a warehouse.');
       return;
     }
+
     setIsSubmitting(true);
     try {
-      // Recompute quantity from quantityBySize so we never send stale top-level quantity (e.g. 10 vs sizes summing to 7).
-      const totalQuantity =
-        formData.sizeKind === 'sized' && validSizeRows.length > 0
-          ? validSizeRows.reduce((sum, s) => sum + (s.quantity ?? 0), 0)
-          : Number(formData.quantity) || 0;
-      const quantity = totalQuantity;
-      const imagesToSubmit = formDataImagesRef.current?.length ? formDataImagesRef.current : formData.images;
+      const imagesToSubmit = formDataImagesRef.current?.length
+        ? formDataImagesRef.current
+        : formData.images;
       const payloadImages = Array.isArray(imagesToSubmit) ? imagesToSubmit : [];
+
       const payload = {
         ...formData,
         name,
@@ -464,24 +504,25 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         barcode,
         category,
         description,
-        quantity,
+        quantity: totalQuantity,
         sizeKind: formData.sizeKind,
-        quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize,
+        // For sized: send validSizeRows (non-blank codes). For others: clear.
+        quantityBySize:
+          formData.sizeKind === 'sized' ? validSizeRows : [],
         images: payloadImages,
         warehouseId: effectiveWarehouseId ?? DEFAULT_WAREHOUSE_ID,
       };
-      // Persist images to client store before async submit so list shows them even if API/state path fails or is delayed
+
       if (product?.id && payloadImages.length > 0) {
         setProductImages(product.id, payloadImages);
       }
-      console.log('Submitting sizes:', validSizeRows, 'sizeKind:', formData.sizeKind);
+
       await Promise.resolve(onSubmit(payload, product?.id ?? null));
       onClose();
     } catch {
       // Parent shows toast; keep modal open
     } finally {
       setIsSubmitting(false);
-      if (import.meta.env?.DEV) console.timeEnd('ProductForm Submit (total)');
     }
   };
 
@@ -767,19 +808,28 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
                 <button
                   key={kind}
                   type="button"
-                  onClick={() => setFormData(prev => {
-                    if (kind !== 'sized') return { ...prev, sizeKind: kind, quantityBySize: [] };
-                    // When switching to Multiple sizes: pre-fill one row with current stock. Ignore synthetic "One size" from RPC fallback.
-                    const currentQty = product ? (Number(product.quantity ?? 0) || 0) : 0;
-                    const realRows = (prev.quantityBySize ?? []).filter((r) => !isSyntheticOneSizeRow(r.sizeCode ?? ''));
-                    const hasExistingSizes = realRows.length > 0 && realRows.some((r) => Number(r.quantity ?? 0) > 0);
-                    const quantityBySize = hasExistingSizes
-                      ? realRows
-                      : currentQty > 0
-                        ? [{ sizeCode: '', quantity: currentQty }]
-                        : realRows.length > 0 ? realRows : [{ sizeCode: '', quantity: 0 }];
-                    return { ...prev, sizeKind: kind, quantityBySize };
-                  })}
+                  onClick={() => {
+                    setFormData((prev) => {
+                      if (kind === 'na' || kind === 'one_size') {
+                        // Switching away from sized: clear size rows
+                        return { ...prev, sizeKind: kind, quantityBySize: [] };
+                      }
+                      // Switching TO sized
+                      const realRows = (prev.quantityBySize ?? []).filter(
+                        (r) => !isSyntheticOneSizeRow(r.sizeCode ?? '')
+                      );
+                      if (realRows.length > 0) {
+                        // Keep whatever rows are already there (including zero-qty)
+                        return { ...prev, sizeKind: kind, quantityBySize: realRows };
+                      }
+                      // No existing rows — seed one empty row so user can start typing
+                      return {
+                        ...prev,
+                        sizeKind: kind,
+                        quantityBySize: [{ sizeCode: '', quantity: 0 }],
+                      };
+                    });
+                  }}
                   className={`min-h-[44px] min-w-[44px] px-4 rounded-xl border text-sm font-medium transition-colors ${
                     formData.sizeKind === kind
                       ? 'bg-primary-600 text-white border-primary-600'
