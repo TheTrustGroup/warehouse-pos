@@ -271,6 +271,8 @@ export default function InventoryPage({ apiBaseUrl = '' }: InventoryPageProps) {
         e.status = res.status;
         throw e;
       }
+      // 204 No Content has no body — do not call res.json()
+      if (res.status === 204) return undefined as T;
       return res.json();
     } catch (e: unknown) {
       clearTimeout(timeout);
