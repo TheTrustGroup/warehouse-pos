@@ -1125,6 +1125,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         ...finalProduct,
         quantityBySize: Array.isArray(finalProduct.quantityBySize) ? finalProduct.quantityBySize.map((s) => ({ ...s })) : [],
       };
+      console.log('[SAVE SUCCESS BLOCK HIT]');
+      console.log('Context identity:', lastSaveAtRef);
       lastUpdatedProductRef.current = { product: productForRef, at };
       lastSaveAtRef.current = at;
       // eslint-disable-next-line no-console -- debug: confirm save timestamp
