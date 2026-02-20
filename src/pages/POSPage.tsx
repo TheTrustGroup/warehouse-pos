@@ -139,6 +139,9 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
 
   useEffect(() => {
     if (!sessionOpen) {
+      // Do not refetch after a sale: that would overwrite deducted stock. Only refetch when
+      // user explicitly starts a new session (handleWarehouseSelect clears deductionAppliedRef).
+      if (deductionAppliedRef.current) return;
       loadProducts(warehouse.id);
       setCart([]);
       setSearch('');
@@ -151,6 +154,8 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
   function handleWarehouseSelect(w: Warehouse) {
     setWarehouse(w);
     setSessionOpen(false);
+    // Allow the next effect/load to run so we get fresh products for this warehouse.
+    deductionAppliedRef.current = false;
   }
 
   // ── Cart ──────────────────────────────────────────────────────────────────
