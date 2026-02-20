@@ -6,7 +6,7 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import { StoreProvider } from './contexts/StoreContext';
 import { WarehouseProvider, useWarehouse } from './contexts/WarehouseContext';
 import { InventoryProvider } from './contexts/InventoryContext';
-import { API_BASE_URL, getAuthToken } from './lib/api';
+import { API_BASE_URL } from './lib/api';
 import { POSProvider } from './contexts/POSContext';
 import { OrderProvider } from './contexts/OrderContext';
 import { CriticalDataProvider, CriticalDataGate } from './contexts/CriticalDataContext';
@@ -80,15 +80,13 @@ const Users = () => {
 
 const NotFound = lazyWithRetry(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
 
-/** Wires warehouse, API base URL, and auth token into InventoryPage (used for /inventory route). */
+/** Wires warehouse and API base URL into InventoryPage (used for /inventory route). Auth matches old page: getApiHeaders() + credentials: 'include' inside the page. */
 function InventoryPageRoute() {
   const { currentWarehouseId } = useWarehouse();
-  const authToken = getAuthToken();
   return (
     <InventoryPage
       warehouseId={currentWarehouseId ?? undefined}
       apiBaseUrl={API_BASE_URL}
-      authToken={authToken ?? ''}
     />
   );
 }

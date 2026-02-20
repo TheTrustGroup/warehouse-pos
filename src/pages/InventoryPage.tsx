@@ -18,6 +18,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import ProductCard, { ProductCardSkeleton, type Product } from '../components/inventory/ProductCard';
 import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
+import { getApiHeaders } from '../lib/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -27,7 +28,6 @@ type SortKey = 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_as
 interface InventoryPageProps {
   warehouseId?: string;
   apiBaseUrl?: string;
-  authToken?: string;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -172,7 +172,6 @@ function applyFilters(
 export default function InventoryPage({
   warehouseId = '00000000-0000-0000-0000-000000000001',
   apiBaseUrl = '',
-  authToken = '',
 }: InventoryPageProps) {
 
   // ── Data state ───────────────────────────────────────────────────────────
@@ -198,14 +197,19 @@ export default function InventoryPage({
   const { toasts, show: showToast } = useToast();
 
   // ── API helpers ──────────────────────────────────────────────────────────
-
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
-  };
+  // Matches old page auth exactly:
+  // - getApiHeaders() handles token from localStorage (same as old apiClient)
+  // - credentials: 'include' sends cookies for cookie-based auth (same as old apiClient)
 
   async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${apiBaseUrl}${path}`, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } });
+    const res = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      headers: new Headers({
+        ...getApiHeaders(),
+        ...(init?.headers ?? {}),
+      }),
+      credentials: 'include',
+    });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       const err = new Error((body as { message?: string }).message ?? `Request failed: ${res.status}`) as Error & { status: number };
@@ -236,7 +240,7 @@ export default function InventoryPage({
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [warehouseId, apiBaseUrl, authToken]);
+  }, [warehouseId, apiBaseUrl]);
 
   // ── Load size codes ──────────────────────────────────────────────────────
 
@@ -249,7 +253,7 @@ export default function InventoryPage({
     } catch {
       // Non-critical — autocomplete just won't have suggestions
     }
-  }, [warehouseId, apiBaseUrl, authToken]);
+  }, [warehouseId, apiBaseUrl]);
 
   // ── Polling ──────────────────────────────────────────────────────────────
 
