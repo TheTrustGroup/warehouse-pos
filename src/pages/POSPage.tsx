@@ -89,6 +89,8 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
 
   const { toast, show: showToast } = useToast();
   const isMounted = useRef(true);
+  /** When true, loadProducts must not overwrite state (keeps deducted stock until "New sale"). */
+  const deductionAppliedRef = useRef(false);
 
   useEffect(() => {
     isMounted.current = true;
@@ -126,7 +128,8 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
       );
       const raw = Array.isArray(data) ? data : (data as Record<string, unknown>).data ?? (data as Record<string, unknown>).products;
       const list: POSProduct[] = Array.isArray(raw) ? raw : [];
-      if (isMounted.current) setProducts(list);
+      // Do not overwrite products if we just completed a sale (deduction must stay until "New sale").
+      if (isMounted.current && !deductionAppliedRef.current) setProducts(list);
     } catch (e: unknown) {
       if (!silent) showToast(e instanceof Error ? e.message : 'Failed to load products', 'err');
     } finally {
@@ -243,6 +246,8 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
     // ── Step 2: Deduct stock locally (instant UI feedback) ─────────────────
     // Even though the DB already deducted, the frontend needs to update
     // its local products list so the grid shows correct stock immediately.
+    // Set ref so any in-flight or later loadProducts() won't overwrite this deduction.
+    deductionAppliedRef.current = true;
     setProducts(prev => prev.map(p => {
       const saleLines = payload.lines.filter(l => l.productId === p.id);
       if (saleLines.length === 0) return p;
@@ -289,7 +294,9 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
   function handleNewSale() {
     setSaleResult(null);
     setCart([]);
-    // Re-fetch from server so stock is 100% accurate (DB truth, not optimistic)
+    // Allow the next loadProducts result to apply (server is source of truth after sale).
+    deductionAppliedRef.current = false;
+    // Re-fetch from server so stock is 100% accurate (DB truth)
     loadProducts(warehouse.id, true);
   }
 
