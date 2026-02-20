@@ -1086,6 +1086,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       let normalized: Product;
       try {
+        // Unwrap data array from PUT response so normalization and lastSaveAtRef use correct payload
         const rawResponse = fromApi && (fromApi as { data?: unknown[] }).data
           ? (fromApi as { data: unknown[] }).data[0]
           : fromApi;
