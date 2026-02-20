@@ -199,7 +199,7 @@ export default function ProductModal({
   isOpen,
   product,
   sizeCodes = [],
-  warehouseId,
+  warehouseId: defaultWarehouseId,
   onSubmit,
   onClose,
 }: ProductModalProps) {
@@ -309,7 +309,7 @@ export default function ProductModal({
         quantityBySize: form.sizes.quantityBySize,
         location: form.location,
         supplier: form.supplier,
-        warehouseId: warehouseId,
+        warehouseId: defaultWarehouseId,
       };
       await onSubmit(payload, isEdit);
       onClose();

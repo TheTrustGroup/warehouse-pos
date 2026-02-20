@@ -26,7 +26,6 @@ type FilterKey = 'all' | string;
 type SortKey = 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc';
 
 interface InventoryPageProps {
-  warehouseId?: string;
   apiBaseUrl?: string;
 }
 
@@ -34,6 +33,11 @@ interface InventoryPageProps {
 
 const POLL_INTERVAL = 30_000;
 const CATEGORIES = ['Sneakers', 'Slippers', 'Boots', 'Sandals', 'Accessories'];
+
+const WAREHOUSES = [
+  { id: '00000000-0000-0000-0000-000000000001', name: 'Main Store' },
+  { id: '00000000-0000-0000-0000-000000000002', name: 'Main Town' },
+];
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 
@@ -170,9 +174,12 @@ function applyFilters(
 // ── Main Page ──────────────────────────────────────────────────────────────
 
 export default function InventoryPage({
-  warehouseId = '00000000-0000-0000-0000-000000000001',
   apiBaseUrl = '',
 }: InventoryPageProps) {
+
+  // ── Warehouse state (tab switcher) ────────────────────────────────────────
+  const [warehouseId, setWarehouseId] = useState(WAREHOUSES[0].id);
+  const currentWarehouse = WAREHOUSES.find(w => w.id === warehouseId) ?? WAREHOUSES[0];
 
   // ── Data state ───────────────────────────────────────────────────────────
   const [products, setProducts] = useState<Product[]>([]);
@@ -181,6 +188,7 @@ export default function InventoryPage({
   const [error, setError] = useState<string | null>(null);
 
   // ── UI state ─────────────────────────────────────────────────────────────
+  const [warehouseDropdownOpen, setWarehouseDropdownOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<FilterKey>('all');
   const [sort, setSort] = useState<SortKey>('name_asc');
@@ -290,7 +298,7 @@ export default function InventoryPage({
       stopPoll();
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [warehouseId]); // reload when warehouse tab changes
 
   // Sync ref with modal state so poll check is always current
   useEffect(() => {
@@ -407,7 +415,47 @@ export default function InventoryPage({
         <div className="flex items-center justify-between px-4 pt-4 pb-3">
           <div>
             <h1 className="text-[20px] font-bold text-slate-900 leading-tight">Inventory</h1>
-            <p className="text-[12px] text-slate-400 font-medium mt-0.5">Main Store</p>
+            {/* Warehouse dropdown */}
+            <div className="relative mt-0.5">
+              <button
+                type="button"
+                onClick={() => setWarehouseDropdownOpen(o => !o)}
+                className="flex items-center gap-1 text-[12px] font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                {currentWarehouse.name}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </button>
+              {warehouseDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setWarehouseDropdownOpen(false)} aria-hidden />
+                  <div className="absolute left-0 top-6 z-20 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 w-40">
+                    {WAREHOUSES.map(w => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        onClick={() => {
+                          setWarehouseId(w.id);
+                          setActiveEditId(null);
+                          setWarehouseDropdownOpen(false);
+                        }}
+                        className={`
+                          w-full px-4 py-2.5 text-left text-[13px] font-medium transition-colors
+                          ${warehouseId === w.id
+                            ? 'text-red-500 bg-red-50'
+                            : 'text-slate-700 hover:bg-slate-50'
+                          }
+                        `}
+                      >
+                        {warehouseId === w.id && <span className="mr-1.5">✓</span>}
+                        {w.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
