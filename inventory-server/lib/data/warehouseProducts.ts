@@ -554,17 +554,26 @@ export async function updateWarehouseProduct(
   return out;
 }
 
-/** DELETE one. */
+/** DELETE one. Remove child rows first to avoid FK violation (warehouse_inventory, warehouse_inventory_by_size). */
 export async function deleteWarehouseProduct(id: string): Promise<void> {
   const supabase = getSupabase();
+  // Order matters: delete children that reference warehouse_products(id) before deleting the product
+  const { error: errBySize } = await supabase.from('warehouse_inventory_by_size').delete().eq('product_id', id);
+  if (errBySize) throw errBySize;
+  const { error: errInv } = await supabase.from('warehouse_inventory').delete().eq('product_id', id);
+  if (errInv) throw errInv;
   const { error } = await supabase.from(TABLE).delete().eq('id', id);
   if (error) throw error;
 }
 
-/** DELETE many by ids. */
+/** DELETE many by ids. Remove child rows first. */
 export async function deleteWarehouseProductsBulk(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const supabase = getSupabase();
+  const { error: errBySize } = await supabase.from('warehouse_inventory_by_size').delete().in('product_id', ids);
+  if (errBySize) throw errBySize;
+  const { error: errInv } = await supabase.from('warehouse_inventory').delete().in('product_id', ids);
+  if (errInv) throw errInv;
   const { error } = await supabase.from(TABLE).delete().in('id', ids);
   if (error) throw error;
 }
