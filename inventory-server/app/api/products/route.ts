@@ -1,18 +1,18 @@
 // ============================================================
-// GET /api/products — list products with inventory for a warehouse
-// Used by: POS (load products), inventory grid
+// GET  /api/products — list products with inventory for a warehouse
+// POST /api/products — create a new product (inventory "Add product")
 //
-// Query: warehouse_id (required), limit, in_stock, category
-// Returns: { data: ProductRecord[] } — matches v_products_inventory
-//          (quantityBySize populated for sized products)
+// GET Query: warehouse_id (required), limit, in_stock, category
+// Returns: { data: ProductRecord[] }
+// POST Body: product fields + warehouseId; sizeKind + quantityBySize for sized
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getWarehouseProducts } from '../../../lib/data/warehouseProducts';
+import { getWarehouseProducts, createWarehouseProduct } from '../../../lib/data/warehouseProducts';
 
 const CORS = {
   'Access-Control-Allow-Origin':  process.env.ALLOWED_ORIGIN ?? 'https://warehouse.extremedeptkidz.com',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-request-id',
   'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Max-Age': '86400',
@@ -61,6 +61,31 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       { error: message },
       { status: 500, headers: CORS }
+    );
+  }
+}
+
+// ── POST /api/products (create product) ─────────────────────────────────────
+
+export async function POST(req: NextRequest) {
+  const token = getBearerToken(req);
+  if (!token) return unauthorized();
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS });
+  }
+
+  try {
+    const created = await createWarehouseProduct(body);
+    return NextResponse.json(created, { status: 201, headers: CORS });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to create product';
+    return NextResponse.json(
+      { error: message },
+      { status: 400, headers: CORS }
     );
   }
 }

@@ -140,10 +140,129 @@ export async function getWarehouseProductById(
   return data ? normalizeRow(data) : null;
 }
 
-// ── Stubs for admin/API routes (mutations not yet implemented against v_products_inventory) ──
+// ── createWarehouseProduct: insert product + inventory + per-size rows ───────
 
-export async function createWarehouseProduct(_body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  throw new Error('createWarehouseProduct not implemented');
+function toSizeKind(v: unknown): 'na' | 'one_size' | 'sized' {
+  const s = String(v ?? 'na').toLowerCase();
+  if (s === 'one_size' || s === 'onesize') return 'one_size';
+  if (s === 'sized') return 'sized';
+  return 'na';
+}
+
+export async function createWarehouseProduct(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const supabase = getSupabase();
+  const id = (body.id && String(body.id).trim()) || crypto.randomUUID();
+  const warehouseId = String(body.warehouseId ?? '').trim();
+  if (!warehouseId) throw new Error('warehouseId is required');
+
+  const name = String(body.name ?? '').trim();
+  if (!name) throw new Error('name is required');
+  const sku = String(body.sku ?? '').trim() || id;
+  const sizeKind = toSizeKind(body.sizeKind ?? body.size_kind);
+  const quantityBySize = Array.isArray(body.quantityBySize) ? body.quantityBySize as Array<{ sizeCode?: string; quantity?: number }> : [];
+  const totalQty = sizeKind === 'sized' && quantityBySize.length > 0
+    ? quantityBySize.reduce((s, r) => s + Math.max(0, Number(r.quantity ?? 0)), 0)
+    : Math.max(0, Number(body.quantity ?? 0));
+
+  const now = new Date().toISOString();
+  const productRow: Record<string, unknown> = {
+    id,
+    sku,
+    barcode: String(body.barcode ?? '').trim() || '',
+    name,
+    description: body.description != null ? String(body.description) : '',
+    category: String(body.category ?? '').trim() || 'Uncategorized',
+    size_kind: sizeKind,
+    selling_price: Number(body.sellingPrice ?? body.selling_price ?? 0),
+    cost_price: Number(body.costPrice ?? body.cost_price ?? 0),
+    reorder_level: Math.max(0, Number(body.reorderLevel ?? body.reorder_level ?? 0)),
+    location: body.location && typeof body.location === 'object' ? body.location : {},
+    supplier: body.supplier && typeof body.supplier === 'object' ? body.supplier : {},
+    tags: Array.isArray(body.tags) ? body.tags : [],
+    images: Array.isArray(body.images) ? body.images : [],
+    version: 1,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const { error: errProduct } = await supabase.from('warehouse_products').insert(productRow);
+  if (errProduct) throw new Error(`Failed to create product: ${errProduct.message}`);
+
+  const { error: errInv } = await supabase.from('warehouse_inventory').insert({
+    warehouse_id: warehouseId,
+    product_id: id,
+    quantity: totalQty,
+    updated_at: now,
+  });
+  if (errInv) {
+    if (errInv.code === '23505') {
+      const { error: errUpd } = await supabase
+        .from('warehouse_inventory')
+        .update({ quantity: totalQty, updated_at: now })
+        .eq('warehouse_id', warehouseId)
+        .eq('product_id', id);
+      if (errUpd) throw new Error(`Failed to set inventory: ${errUpd.message}`);
+    } else {
+      throw new Error(`Failed to set inventory: ${errInv.message}`);
+    }
+  }
+
+  if (sizeKind === 'sized' && quantityBySize.length > 0) {
+    for (const row of quantityBySize) {
+      const code = String(row.sizeCode ?? '').trim();
+      if (!code) continue;
+      const qty = Math.max(0, Number(row.quantity ?? 0));
+      const sizeCodeNorm = code.replace(/\s+/g, ' ');
+      const { data: existing } = await supabase.from('size_codes').select('size_code').eq('size_code', sizeCodeNorm).maybeSingle();
+      if (!existing) {
+        await supabase.from('size_codes').insert({ size_code: sizeCodeNorm, size_label: code.trim(), size_order: 999 });
+      }
+      const { error: errSize } = await supabase.from('warehouse_inventory_by_size').insert({
+        warehouse_id: warehouseId,
+        product_id: id,
+        size_code: sizeCodeNorm,
+        quantity: qty,
+        updated_at: now,
+      });
+      if (errSize) {
+        if (errSize.code === '23505') {
+          await supabase
+            .from('warehouse_inventory_by_size')
+            .update({ quantity: qty, updated_at: now })
+            .eq('warehouse_id', warehouseId)
+            .eq('product_id', id)
+            .eq('size_code', sizeCodeNorm);
+        } else {
+          throw new Error(`Failed to set size ${code}: ${errSize.message}`);
+        }
+      }
+    }
+  }
+
+  const created = await getWarehouseProductById(String(id), String(warehouseId));
+  if (!created) return { id, ...productRow, quantity: totalQty, warehouseId };
+  return {
+    id: created.id,
+    warehouseId: created.warehouseId,
+    sku: created.sku,
+    barcode: created.barcode,
+    name: created.name,
+    description: created.description,
+    category: created.category,
+    sizeKind: created.sizeKind,
+    sellingPrice: created.sellingPrice,
+    costPrice: created.costPrice,
+    reorderLevel: created.reorderLevel,
+    quantity: created.quantity,
+    quantityBySize: created.quantityBySize,
+    location: created.location,
+    supplier: created.supplier,
+    tags: created.tags,
+    images: created.images,
+    version: created.version,
+    createdAt: created.createdAt,
+    updatedAt: created.updatedAt,
+  };
 }
 
 export async function updateWarehouseProduct(
