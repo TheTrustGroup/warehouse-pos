@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Product } from '../../types';
-import type { SizeInventoryItem } from '../../types';
 import { formatCurrency } from '../../lib/utils';
+import { ProductSizesFromProduct } from './ProductSizes';
 import { ProductSyncBadge } from '../ProductSyncBadge';
-import { SizesColumn } from './SizesColumn';
 import { Package, Edit, Trash2, AlertTriangle, CloudOff, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useAnimations } from '../../hooks/useAnimations';
@@ -13,9 +12,6 @@ import { hapticFeedback } from '../../lib/haptics';
 
 interface ProductGridViewProps {
   products: Product[];
-  /** Full array of warehouse_inventory_by_size–style rows (SizesColumn filters by product + warehouse). */
-  sizeInventory: SizeInventoryItem[];
-  selectedWarehouse: string;
   onEdit: (product: Product) => void;
   onDelete: (id: string) => void;
   selectedIds: string[];
@@ -29,13 +25,10 @@ interface ProductGridViewProps {
   onRetrySync?: () => void;
   /** When true, disable delete (e.g. server unavailable). */
   disableDestructiveActions?: boolean;
-  /** Called when user deletes a size from the Sizes column: (productId, warehouseId, sizeCode) => void */
 }
 
 export function ProductGridView({
   products,
-  sizeInventory,
-  selectedWarehouse,
   onEdit,
   onDelete,
   selectedIds,
@@ -222,15 +215,8 @@ export function ProductGridView({
                 </span>
               </div>
 
-              {/* Sizes: SizesColumn reads from sizeInventory, reactive after deletes/edits */}
-              <div className="pt-2 border-t border-slate-200/60 flex-shrink-0">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">Size</p>
-                <SizesColumn
-                  product={product}
-                  selectedWarehouse={selectedWarehouse}
-                  sizeInventory={sizeInventory}
-                />
-              </div>
+              {/* Sizes: shared component — always visible on mobile and desktop; no conditional by viewport */}
+              <ProductSizesFromProduct product={product} label="Size" variant="default" className="flex-shrink-0" />
 
               {status.label !== 'In Stock' && (
                 <div className="flex items-center gap-2 text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200/60 mt-3">

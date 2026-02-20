@@ -147,18 +147,17 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
   if (!user) return <>{children}</>;
   if (!internal) return <>{children}</>;
 
-  return (
-    <>
-      <div className={internal.isCriticalDataLoading ? 'pointer-events-none' : ''}>
-        {children}
+  if (internal.isCriticalDataLoading) {
+    return (
+      <div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4" />
+        <p className="text-slate-600 font-medium">Loading your data...</p>
+        <p className="text-slate-500 text-sm mt-1">Stores, warehouses, inventory, orders</p>
       </div>
-      {internal.isCriticalDataLoading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-sm pointer-events-auto">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
-        </div>
-      )}
-    </>
-  );
+    );
+  }
+
+  return <>{children}</>;
 }
 
 export function useCriticalData() {

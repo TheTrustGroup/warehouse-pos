@@ -1,17 +1,13 @@
 import { useState } from 'react';
 import { Product } from '../../types';
-import type { SizeInventoryItem } from '../../types';
 import { formatCurrency, getCategoryDisplay, getLocationDisplay } from '../../lib/utils';
+import { ProductSizesFromProduct } from './ProductSizes';
 import { Button } from '../ui/Button';
 import { ProductSyncBadge } from '../ProductSyncBadge';
-import { SizesColumn } from './SizesColumn';
 import { Pencil, Trash2, Eye, Package, RefreshCw } from 'lucide-react';
 
 interface ProductTableViewProps {
   products: Product[];
-  /** Full array of warehouse_inventory_by_size–style rows (SizesColumn filters by product + warehouse). */
-  sizeInventory: SizeInventoryItem[];
-  selectedWarehouse: string;
   onEdit: (product: Product) => void;
   onDelete: (id: string) => void;
   onView: (product: Product) => void;
@@ -27,13 +23,10 @@ interface ProductTableViewProps {
   onRetrySync?: () => void;
   /** When true, disable delete (e.g. server unavailable). */
   disableDestructiveActions?: boolean;
-  /** Called when user deletes a size from the Sizes column: (productId, warehouseId, sizeCode) => void */
 }
 
 export function ProductTableView({
   products,
-  sizeInventory,
-  selectedWarehouse,
   onEdit,
   onDelete,
   onView,
@@ -236,11 +229,7 @@ export function ProductTableView({
                     </div>
                   </td>
                   <td className="px-4 py-3 align-middle min-w-0">
-                    <SizesColumn
-                      product={product}
-                      selectedWarehouse={selectedWarehouse}
-                      sizeInventory={sizeInventory}
-                    />
+                    <ProductSizesFromProduct product={product} variant="compact" />
                   </td>
                   <td className="px-4 py-3 align-middle">
                     <div>
