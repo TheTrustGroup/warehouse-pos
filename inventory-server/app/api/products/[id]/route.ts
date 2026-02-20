@@ -1,3 +1,7 @@
+/**
+ * Products API — get one, update (product + sizes atomically), delete.
+ * Official surface: GET /api/products/:id, PUT /api/products/:id, DELETE /api/products/:id.
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { getWarehouseProductById, updateWarehouseProduct, deleteWarehouseProduct } from '@/lib/data/warehouseProducts';
 import { requireAuth, requireAdmin } from '@/lib/auth/session';

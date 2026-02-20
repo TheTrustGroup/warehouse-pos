@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Product } from '../../types';
 import { formatCurrency } from '../../lib/utils';
 import { ProductSizesFromProduct } from './ProductSizes';
 import { ProductSyncBadge } from '../ProductSyncBadge';
+import { InventoryCard } from './InventoryCard';
 import { Package, Edit, Trash2, AlertTriangle, CloudOff, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useAnimations } from '../../hooks/useAnimations';
 import { glassReveal, glassHover, liquidMorph, rippleVariants } from '../../animations/liquidGlass';
 import { hapticFeedback } from '../../lib/haptics';
+
+export type SaveStockPayload = { quantityBySize?: Array<{ sizeCode: string; quantity: number }>; quantity?: number };
 
 interface ProductGridViewProps {
   products: Product[];
@@ -25,6 +28,10 @@ interface ProductGridViewProps {
   onRetrySync?: () => void;
   /** When true, disable delete (e.g. server unavailable). */
   disableDestructiveActions?: boolean;
+  /** When provided, grid uses Extreme Dept–style cards with inline quick stock editor. */
+  onSaveStock?: (productId: string, payload: SaveStockPayload) => Promise<void>;
+  /** When provided, selling price is editable inline on the card. */
+  onSavePrice?: (productId: string, sellingPrice: number) => Promise<void>;
 }
 
 export function ProductGridView({
@@ -36,15 +43,53 @@ export function ProductGridView({
   canEdit = true,
   canDelete = true,
   canSelect = true,
-  showCostPrice: _showCostPrice = true,
+  showCostPrice = true,
   isUnsynced,
   onVerifySaved,
   onRetrySync,
   disableDestructiveActions = false,
+  onSaveStock,
+  onSavePrice,
 }: ProductGridViewProps) {
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [ripple, setRipple] = useState<{ productId: string; x: number; y: number; id: number } | null>(null);
+  const [quickStockEditingId, setQuickStockEditingId] = useState<string>('');
   const { reduced } = useAnimations();
+
+  useEffect(() => {
+    if (quickStockEditingId) {
+      document.getElementById(`card-${quickStockEditingId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [quickStockEditingId]);
+
+  if (onSaveStock != null) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
+        {products.map((product) => (
+          <div key={product.id} id={`card-${product.id}`}>
+            <InventoryCard
+              product={product}
+              onEdit={onEdit}
+              onQuickStock={(id) => setQuickStockEditingId(id || '')}
+              onSaveStock={onSaveStock}
+              onSavePrice={onSavePrice}
+              isQuickStockOpen={quickStockEditingId === product.id}
+              canEdit={canEdit}
+              showCostPrice={showCostPrice}
+            />
+          </div>
+        ))}
+        {products.length === 0 && (
+          <div className="col-span-full text-center py-12">
+            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+              <Package className="w-6 h-6 text-slate-400" aria-hidden />
+            </div>
+            <p className="text-slate-600 text-sm font-medium">No products found</p>
+          </div>
+        )}
+      </div>
+    );
+  }
   /* Stable layout: no y/scale on reveal or hover to prevent list jitter (Phase 3). */
   const reveal = glassReveal(true);
   const hover = glassHover(true);

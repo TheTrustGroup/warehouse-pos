@@ -431,6 +431,24 @@ export function Inventory() {
               onVerifySaved={s.verifyProductSaved}
               onRetrySync={s.refreshProducts}
               disableDestructiveActions={disableDestructive}
+              onSaveStock={async (productId, payload) => {
+                try {
+                  await s.updateProduct(productId, { ...payload, warehouseId: s.currentWarehouseId ?? undefined });
+                  s.showToast('success', 'Stock updated');
+                } catch (err) {
+                  s.showToast('error', getUserFriendlyMessage(err));
+                  throw err;
+                }
+              }}
+              onSavePrice={async (productId, sellingPrice) => {
+                try {
+                  await s.updateProduct(productId, { sellingPrice, warehouseId: s.currentWarehouseId ?? undefined });
+                  s.showToast('success', 'Price updated');
+                } catch (err) {
+                  s.showToast('error', getUserFriendlyMessage(err));
+                  throw err;
+                }
+              }}
             />
           )}
         </div>

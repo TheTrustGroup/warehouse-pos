@@ -4,8 +4,9 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { StoreProvider } from './contexts/StoreContext';
-import { WarehouseProvider } from './contexts/WarehouseContext';
+import { WarehouseProvider, useWarehouse } from './contexts/WarehouseContext';
 import { InventoryProvider } from './contexts/InventoryContext';
+import { API_BASE_URL, getAuthToken } from './lib/api';
 import { POSProvider } from './contexts/POSContext';
 import { OrderProvider } from './contexts/OrderContext';
 import { CriticalDataProvider, CriticalDataGate } from './contexts/CriticalDataContext';
@@ -38,7 +39,7 @@ function DefaultRoute() {
 
 // Lazy load pages with retry so first load after login doesn't show "Something went wrong" on chunk failure
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
-const Inventory = lazyWithRetry(() => import('./pages/Inventory').then(m => ({ default: m.Inventory })));
+const InventoryPage = lazyWithRetry(() => import('./pages/InventoryPage').then(m => ({ default: m.default })));
 const POS = lazyWithRetry(() => import('./pages/POS').then(m => ({ default: m.POS })));
 const Orders = lazyWithRetry(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
 const Reports = lazyWithRetry(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
@@ -78,6 +79,19 @@ const Users = () => {
 };
 
 const NotFound = lazyWithRetry(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
+
+/** Wires warehouse, API base URL, and auth token into InventoryPage (used for /inventory route). */
+function InventoryPageRoute() {
+  const { currentWarehouseId } = useWarehouse();
+  const authToken = getAuthToken();
+  return (
+    <InventoryPage
+      warehouseId={currentWarehouseId ?? undefined}
+      apiBaseUrl={API_BASE_URL}
+      authToken={authToken ?? ''}
+    />
+  );
+}
 
 /** Listens for service worker update event and shows toast. Must be inside ToastProvider. */
 function ServiceWorkerUpdateListener() {
@@ -204,7 +218,7 @@ function App() {
                           element={
                             <ProtectedRoute permission={PERMISSIONS.INVENTORY.VIEW}>
                               <RouteErrorBoundary routeName="Inventory">
-                                <Inventory />
+                                <InventoryPageRoute />
                               </RouteErrorBoundary>
                             </ProtectedRoute>
                           }

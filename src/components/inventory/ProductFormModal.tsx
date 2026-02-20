@@ -11,7 +11,8 @@ import { apiGet } from '../../lib/apiClient';
 import { compressImage, MAX_IMAGE_BASE64_LENGTH } from '../../lib/imageUtils';
 import { setProductImages } from '../../lib/productImagesStore';
 import { Button } from '../ui/Button';
-import { X, Upload, Plus, Trash2, CloudOff } from 'lucide-react';
+import SizesSection from './SizesSection';
+import { X, Upload, CloudOff } from 'lucide-react';
 
 const MAX_PRODUCT_IMAGES = 5;
 
@@ -80,7 +81,6 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   const [imageUploading, setImageUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sizeCodes, setSizeCodes] = useState<SizeCodeOption[]>([]);
-  const [sizeCodesLoading, setSizeCodesLoading] = useState(false);
   const wasOpenRef = useRef(false);
   const modalContentRef = useRef<HTMLDivElement>(null);
   const previousActiveRef = useRef<HTMLElement | null>(null);
@@ -219,11 +219,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
 
   useEffect(() => {
     if (!isOpen || !isOnline) return;
-    setSizeCodesLoading(true);
     apiGet<{ data: SizeCodeOption[] }>(API_BASE_URL, '/api/size-codes')
       .then((res) => setSizeCodes(Array.isArray(res?.data) ? res.data : []))
-      .catch(() => setSizeCodes([]))
-      .finally(() => setSizeCodesLoading(false));
+      .catch(() => setSizeCodes([]));
   }, [isOpen, isOnline]);
 
   const readFileAsDataUrl = (file: File): Promise<string> =>
@@ -642,33 +640,6 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            {formData.sizeKind !== 'sized' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                  Quantity *
-                </label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  required
-                  min="0"
-                  value={formData.quantity}
-                  onChange={(e) => setFormData(prev => ({ ...prev, quantity: Number(e.target.value) }))}
-                  className="input-field"
-                />
-              </div>
-            )}
-            {formData.sizeKind === 'sized' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                  Total quantity
-                </label>
-                <div className="min-h-[44px] px-4 py-3 rounded-xl border border-[#e2e8f0] bg-slate-50 text-slate-700 flex items-center">
-                  {formData.quantityBySize.reduce((s, e) => s + (e.quantity || 0), 0)}
-                </div>
-              </div>
-            )}
-
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1.5">
                 Cost price *
@@ -717,112 +688,22 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1.5">
-              Size type
-            </label>
-            <div className="flex flex-wrap gap-2 min-h-touch">
-              {(['na', 'one_size', 'sized'] as const).map((kind) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => setFormData(prev => {
-                    if (kind !== 'sized') return { ...prev, sizeKind: kind, quantityBySize: [] };
-                    // When switching to Multiple sizes: pre-fill one row with current stock. Ignore synthetic "One size" from RPC fallback.
-                    const currentQty = product ? (Number(product.quantity ?? 0) || 0) : 0;
-                    const realRows = (prev.quantityBySize ?? []).filter((r) => !isSyntheticOneSizeRow(r.sizeCode ?? ''));
-                    const hasExistingSizes = realRows.length > 0 && realRows.some((r) => Number(r.quantity ?? 0) > 0);
-                    const quantityBySize = hasExistingSizes
-                      ? realRows
-                      : currentQty > 0
-                        ? [{ sizeCode: '', quantity: currentQty }]
-                        : realRows.length > 0 ? realRows : [{ sizeCode: '', quantity: 0 }];
-                    return { ...prev, sizeKind: kind, quantityBySize };
-                  })}
-                  className={`min-h-[44px] min-w-[44px] px-4 rounded-xl border text-sm font-medium transition-colors ${
-                    formData.sizeKind === kind
-                      ? 'bg-primary-600 text-white border-primary-600'
-                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  {kind === 'na' ? 'No sizes' : kind === 'one_size' ? 'One size' : 'Multiple sizes'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {formData.sizeKind === 'sized' && (
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                Quantity by size
-                {sizeCodesLoading && (
-                  <span className="ml-2 text-slate-400 font-normal">(Loading sizes…)</span>
-                )}
-              </label>
-              {formData.quantityBySize.length === 0 && (
-                <p className="text-amber-600 text-sm mb-2">Add at least one size row to save.</p>
-              )}
-              <div className="space-y-2">
-                <datalist id="size-codes-datalist">
-                  {sizeCodes.map((s) => (
-                    <option key={s.size_code} value={s.size_code} label={s.size_label} />
-                  ))}
-                </datalist>
-                {formData.quantityBySize.map((row, idx) => (
-                  <div key={idx} className="flex flex-wrap items-center gap-2 min-h-touch">
-                    <input
-                      type="text"
-                      list="size-codes-datalist"
-                      value={row.sizeCode}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        quantityBySize: prev.quantityBySize.map((r, i) =>
-                          i === idx ? { ...r, sizeCode: e.target.value } : r
-                        ),
-                      }))}
-                      placeholder="Pick or type size (e.g. US 9, EU 42)"
-                      className="input-field flex-1 min-w-[120px] min-h-[44px]"
-                      autoComplete="off"
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      value={row.quantity}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        quantityBySize: prev.quantityBySize.map((r, i) =>
-                          i === idx ? { ...r, quantity: Number(e.target.value) || 0 } : r
-                        ),
-                      }))}
-                      className="input-field w-24 min-h-[44px]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setFormData(prev => ({
-                        ...prev,
-                        quantityBySize: prev.quantityBySize.filter((_, i) => i !== idx),
-                      }))}
-                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
-                      aria-label="Remove size row"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({
-                    ...prev,
-                    quantityBySize: [...prev.quantityBySize, { sizeCode: '', quantity: 0 }],
-                  }))}
-                  className="min-h-[44px] px-4 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 inline-flex items-center gap-2 text-sm font-medium"
-                >
-                  <Plus className="w-5 h-5" />
-                  Add size
-                </button>
-              </div>
-            </div>
-          )}
+          <SizesSection
+            value={{
+              sizeKind: formData.sizeKind,
+              quantity: formData.quantity,
+              quantityBySize: formData.quantityBySize ?? [],
+            }}
+            onChange={(next) => setFormData(prev => ({
+              ...prev,
+              sizeKind: next.sizeKind,
+              quantity: next.quantity,
+              quantityBySize: next.quantityBySize,
+            }))}
+            sizeCodes={sizeCodes}
+            disabled={readOnlyMode}
+            showValidation
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             <div className="input-select-wrapper">

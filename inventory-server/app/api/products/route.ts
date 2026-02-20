@@ -1,3 +1,7 @@
+/**
+ * Products API — list (with sizes) and create.
+ * Official surface: GET /api/products (list with sizes), POST /api/products (create).
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { getWarehouseProducts, createWarehouseProduct } from '@/lib/data/warehouseProducts';
 import { requireAuth, requireAdmin } from '@/lib/auth/session';
