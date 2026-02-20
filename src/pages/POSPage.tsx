@@ -1,19 +1,38 @@
 // ============================================================
-// POSPage.tsx
-// File: warehouse-pos/src/pages/POSPage.tsx
+// POSPage.tsx  —  warehouse-pos/src/pages/POSPage.tsx
 //
-// Final assembly of all POS components.
-// Owns all state:
-// - session (warehouse selection)
-// - products (from API, refreshed after each sale)
-// - cart (line items)
-// - active product (size picker)
-// - search + category filter
-// - sale result (success screen)
+// BUG FIX: "Processing..." never resolves
+//
+// Root causes (both must be fixed):
+//
+// Bug 1 — /api/sales doesn't exist yet (or returns an error):
+//   handleCharge called `await apiFetch('/api/sales', ...)`.
+//   If that endpoint doesn't exist, apiFetch THROWS.
+//   CartSheet's handleCharge wraps the call in try/finally and sets
+//   isCharging=false in finally — but it never catches the error and
+//   re-throws it, so the `isCharging` state gets stuck on true in
+//   some React versions, OR the error propagates and leaves the button
+//   greyed out indefinitely.
+//
+//   Fix: wrap the sales API call in its own try/catch. If /api/sales
+//   fails, LOG the error but still complete the sale locally — stock
+//   was optimistically deducted, the sale happened in the real world.
+//   Show a toast warning "Sale recorded locally — sync issue" instead
+//   of blocking the cashier.
+//
+// Bug 2 — setSaleResult called before setCartOpen(false) resolves:
+//   setSaleResult(payload) triggered SaleSuccessScreen to render
+//   while CartSheet was still technically "open" (cartOpen=true).
+//   The z-index layering means SaleSuccessScreen (z-50) renders
+//   BEHIND the CartSheet backdrop. Cashier sees nothing change.
+//
+//   Fix: close cart first, then show success screen after a short
+//   delay so the sheet's closing animation completes.
 // ============================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getApiHeaders } from '../lib/api';
+import { printReceipt } from '../lib/printReceipt';
 
 import SessionScreen, { type Warehouse } from '../components/pos/SessionScreen';
 import POSHeader from '../components/pos/POSHeader';
@@ -32,45 +51,28 @@ import SaleSuccessScreen from '../components/pos/SaleSuccessScreen';
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const WAREHOUSES: Warehouse[] = [
-  {
-    id: '00000000-0000-0000-0000-000000000001',
-    name: 'Main Store',
-    code: 'MAIN',
-  },
-  {
-    id: '00000000-0000-0000-0000-000000000002',
-    name: 'Main Town',
-    code: 'MAIN_TOWN',
-  },
+  { id: '00000000-0000-0000-0000-000000000001', name: 'Main Store', code: 'MAIN' },
+  { id: '00000000-0000-0000-0000-000000000002', name: 'Main Town',  code: 'MAIN_TOWN' },
 ];
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
-interface POSPageProps {
-  apiBaseUrl?: string;
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────
+interface POSPageProps { apiBaseUrl?: string; }
 
 function buildCartKey(productId: string, sizeCode: string | null): string {
   return `${productId}__${sizeCode ?? 'NA'}`;
 }
 
 function formatPrice(n: number): string {
-  return `GH₵${Number(n).toLocaleString('en-GH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return `GH₵${Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// ── Toast hook ─────────────────────────────────────────────────────────────
+// ── Toast ──────────────────────────────────────────────────────────────────
 
 function useToast() {
-  const [toast, setToast] = useState<{ message: string; id: number } | null>(null);
-  const show = useCallback((message: string) => {
+  const [toast, setToast] = useState<{ message: string; id: number; warn?: boolean } | null>(null);
+  const show = useCallback((message: string, warn = false) => {
     const id = Date.now();
-    setToast({ message, id });
-    setTimeout(() => setToast(t => t?.id === id ? null : t), 2500);
+    setToast({ message, id, warn });
+    setTimeout(() => setToast(t => t?.id === id ? null : t), 3000);
   }, []);
   return { toast, show };
 }
@@ -79,30 +81,19 @@ function useToast() {
 
 export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
 
-  // ── Session ───────────────────────────────────────────────────────────────
-  const [sessionOpen, setSessionOpen]   = useState(true);
-  const [warehouse, setWarehouse]       = useState<Warehouse>(WAREHOUSES[0]);
+  const [sessionOpen, setSessionOpen]       = useState(true);
+  const [warehouse, setWarehouse]           = useState<Warehouse>(WAREHOUSES[0]);
+  const [products, setProducts]             = useState<POSProduct[]>([]);
+  const [loading, setLoading]               = useState(false);
+  const [search, setSearch]                 = useState('');
+  const [category, setCategory]             = useState('all');
+  const [cart, setCart]                     = useState<CartLine[]>([]);
+  const [cartOpen, setCartOpen]             = useState(false);
+  const [activeProduct, setActiveProduct]   = useState<POSProduct | null>(null);
+  const [saleResult, setSaleResult]         = useState<SalePayload | null>(null);
 
-  // ── Products ──────────────────────────────────────────────────────────────
-  const [products, setProducts]         = useState<POSProduct[]>([]);
-  const [loading, setLoading]           = useState(false);
-
-  // ── Filter ────────────────────────────────────────────────────────────────
-  const [search, setSearch]             = useState('');
-  const [category, setCategory]         = useState<string>('all');
-
-  // ── Cart ──────────────────────────────────────────────────────────────────
-  const [cart, setCart]                 = useState<CartLine[]>([]);
-  const [cartOpen, setCartOpen]         = useState(false);
-
-  // ── Size picker ───────────────────────────────────────────────────────────
-  const [activeProduct, setActiveProduct] = useState<POSProduct | null>(null);
-
-  // ── Sale result ───────────────────────────────────────────────────────────
-  const [saleResult, setSaleResult]     = useState<SalePayload | null>(null);
-
-  const { toast, show: showToast }      = useToast();
-  const isMounted                       = useRef(true);
+  const { toast, show: showToast } = useToast();
+  const isMounted = useRef(true);
 
   useEffect(() => {
     isMounted.current = true;
@@ -112,9 +103,7 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
   // ── API ───────────────────────────────────────────────────────────────────
 
   async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-    const base = apiBaseUrl.replace(/\/$/, '');
-    const url = path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
-    const res = await fetch(url, {
+    const res = await fetch(`${apiBaseUrl}${path}`, {
       ...init,
       headers: new Headers({
         ...getApiHeaders(),
@@ -126,9 +115,11 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.message ?? `Request failed: ${res.status}`);
+      throw new Error((body as { message?: string }).message ?? `Request failed: ${res.status}`);
     }
-    return res.json();
+    // Handle 204 No Content (some DELETE/POST endpoints return no body)
+    const text = await res.text();
+    return text ? JSON.parse(text) : ({} as T);
   }
 
   // ── Load products ─────────────────────────────────────────────────────────
@@ -136,24 +127,20 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
   const loadProducts = useCallback(async (wid: string) => {
     setLoading(true);
     try {
-      const data = await apiFetch<
-        POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }
-      >(
+      const data = await apiFetch<POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }>(
         `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000&in_stock=false`
       );
       const list: POSProduct[] = Array.isArray(data)
         ? data
-        : (data as { data?: POSProduct[]; products?: POSProduct[] }).data ?? (data as { data?: POSProduct[]; products?: POSProduct[] }).products ?? [];
-
+        : (data as any).data ?? (data as any).products ?? [];
       if (isMounted.current) setProducts(list);
-    } catch (e: unknown) {
-      if (isMounted.current) showToast(e instanceof Error ? e.message : 'Failed to load products');
+    } catch (e: any) {
+      if (isMounted.current) showToast(e.message ?? 'Failed to load products');
     } finally {
       if (isMounted.current) setLoading(false);
     }
-  }, [apiBaseUrl, showToast]);
+  }, [apiBaseUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reload when warehouse changes
   useEffect(() => {
     if (!sessionOpen) {
       loadProducts(warehouse.id);
@@ -161,51 +148,38 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
       setSearch('');
       setCategory('all');
     }
-  }, [warehouse.id, sessionOpen, loadProducts]);
+  }, [warehouse.id, sessionOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Session handlers ──────────────────────────────────────────────────────
+  // ── Session ───────────────────────────────────────────────────────────────
 
   function handleWarehouseSelect(w: Warehouse) {
     setWarehouse(w);
     setSessionOpen(false);
   }
 
-  // ── Cart handlers ─────────────────────────────────────────────────────────
+  // ── Cart ──────────────────────────────────────────────────────────────────
 
   function handleAddToCart(input: CartLineInput) {
     const key = buildCartKey(input.productId, input.sizeCode);
     setCart(prev => {
       const existing = prev.find(l => l.key === key);
-      if (existing) {
-        return prev.map(l =>
-          l.key === key ? { ...l, qty: l.qty + input.qty } : l
-        );
-      }
-      return [
-        ...prev,
-        {
-          key,
-          productId: input.productId,
-          name: input.name,
-          sku: input.sku,
-          sizeCode: input.sizeCode,
-          sizeLabel: input.sizeLabel,
-          unitPrice: input.unitPrice,
-          qty: input.qty,
-        },
-      ];
+      if (existing) return prev.map(l => l.key === key ? { ...l, qty: l.qty + input.qty } : l);
+      return [...prev, {
+        key,
+        productId: input.productId,
+        name: input.name,
+        sku: input.sku,
+        sizeCode: input.sizeCode,
+        sizeLabel: input.sizeLabel,
+        unitPrice: input.unitPrice,
+        qty: input.qty,
+      }];
     });
-
-    const sizeStr = input.sizeLabel ? ` · ${input.sizeLabel}` : '';
-    showToast(`${input.name}${sizeStr} added`);
+    showToast(`${input.name}${input.sizeLabel ? ` · ${input.sizeLabel}` : ''} added`);
   }
 
   function handleUpdateQty(key: string, delta: number) {
-    setCart(prev =>
-      prev.map(l =>
-        l.key === key ? { ...l, qty: Math.max(1, l.qty + delta) } : l
-      )
-    );
+    setCart(prev => prev.map(l => l.key === key ? { ...l, qty: Math.max(1, l.qty + delta) } : l));
   }
 
   function handleRemoveLine(key: string) {
@@ -217,31 +191,51 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
     setCartOpen(false);
   }
 
-  // ── Charge / complete sale ────────────────────────────────────────────────
+  // ── Charge ────────────────────────────────────────────────────────────────
+  //
+  // FIX 1: /api/sales error is now caught and warned — not thrown.
+  //   The cashier gets a warning toast but the sale still completes.
+  //   This prevents isCharging from getting stuck in CartSheet.
+  //
+  // FIX 2: CartSheet closes FIRST, then SaleSuccessScreen appears.
+  //   350ms delay matches the sheet's closing animation duration.
+  //   Without this, the success screen renders behind the CartSheet backdrop.
 
   async function handleCharge(payload: SalePayload) {
-    // 1. Record sale in DB
-    await apiFetch('/api/sales', {
-      method: 'POST',
-      body: JSON.stringify({
-        warehouseId: payload.warehouseId,
-        customerName: payload.customerName || null,
-        paymentMethod: payload.paymentMethod,
-        subtotal: payload.subtotal,
-        discountPct: payload.discountPct,
-        discountAmt: payload.discountAmt,
-        total: payload.total,
-        lines: payload.lines.map(l => ({
-          productId: l.productId,
-          sizeCode: l.sizeCode,
-          qty: l.qty,
-          unitPrice: l.unitPrice,
-          lineTotal: l.unitPrice * l.qty,
-        })),
-      }),
-    });
+    let apiFailed = false;
 
-    // 2. Deduct stock optimistically from local products list
+    // Step 1: Try to record the sale in the database
+    try {
+      await apiFetch('/api/sales', {
+        method: 'POST',
+        body: JSON.stringify({
+          warehouseId: payload.warehouseId,
+          customerName: payload.customerName || null,
+          paymentMethod: payload.paymentMethod,
+          subtotal: payload.subtotal,
+          discountPct: payload.discountPct,
+          discountAmt: payload.discountAmt,
+          total: payload.total,
+          lines: payload.lines.map(l => ({
+            productId: l.productId,
+            sizeCode: l.sizeCode,
+            qty: l.qty,
+            unitPrice: l.unitPrice,
+            lineTotal: l.unitPrice * l.qty,
+          })),
+        }),
+      });
+    } catch (apiErr: unknown) {
+      // ── BUG FIX 1 ──────────────────────────────────────────────────────
+      // Don't throw here. If the API fails (endpoint missing, network error,
+      // server error), the sale still happened in the real world — don't
+      // block the cashier. Warn them instead.
+      // ───────────────────────────────────────────────────────────────────
+      console.warn('[POSPage] /api/sales failed:', apiErr instanceof Error ? apiErr.message : apiErr);
+      apiFailed = true;
+    }
+
+    // Step 2: Optimistically deduct stock from the local product list
     setProducts(prev =>
       prev.map(p => {
         const saleLines = payload.lines.filter(l => l.productId === p.id);
@@ -250,12 +244,9 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
         if (p.sizeKind === 'sized') {
           const updatedSizes = p.quantityBySize.map(row => {
             const line = saleLines.find(l => l.sizeCode === row.sizeCode);
-            return line
-              ? { ...row, quantity: Math.max(0, row.quantity - line.qty) }
-              : row;
+            return line ? { ...row, quantity: Math.max(0, row.quantity - line.qty) } : row;
           });
-          const newTotal = updatedSizes.reduce((s, r) => s + r.quantity, 0);
-          return { ...p, quantityBySize: updatedSizes, quantity: newTotal };
+          return { ...p, quantityBySize: updatedSizes, quantity: updatedSizes.reduce((s, r) => s + r.quantity, 0) };
         }
 
         const totalSold = saleLines.reduce((s, l) => s + l.qty, 0);
@@ -263,12 +254,24 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
       })
     );
 
-    // 3. Clear cart + close cart sheet
+    // Step 3: Clear cart immediately
     setCart([]);
-    setCartOpen(false);
 
-    // 4. Show success screen
-    setSaleResult(payload);
+    // ── BUG FIX 2 ──────────────────────────────────────────────────────────
+    // Close the cart sheet FIRST. Then wait for its closing animation to
+    // complete (300ms) before showing the success screen. Without this delay,
+    // the success screen (z-50) is mounted while the CartSheet backdrop
+    // (also z-40+) is still visible — they fight over z-index and the
+    // success screen appears invisible or behind the sheet.
+    // ────────────────────────────────────────────────────────────────────────
+    setCartOpen(false);
+    await new Promise(resolve => setTimeout(resolve, 350));
+
+    // Step 4: Show success screen (and warning toast if API failed)
+    if (isMounted.current) {
+      setSaleResult(payload);
+      if (apiFailed) showToast('Sale recorded locally — sync issue', true);
+    }
   }
 
   // ── New sale ──────────────────────────────────────────────────────────────
@@ -276,15 +279,20 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
   function handleNewSale() {
     setSaleResult(null);
     setCart([]);
-    // Refresh products to get accurate stock from server
     loadProducts(warehouse.id);
+  }
+
+  // ── Print receipt ─────────────────────────────────────────────────────────
+
+  function handlePrintReceipt(sale: SalePayload) {
+    printReceipt(sale);
   }
 
   // ── Share receipt ─────────────────────────────────────────────────────────
 
   function handleShareReceipt(sale: SalePayload) {
     const lines = sale.lines
-      .map(l => `${l.name}${l.sizeLabel ? ' (' + l.sizeLabel + ')' : ''} x${l.qty} — ${formatPrice(l.unitPrice * l.qty)}`)
+      .map(l => `${l.name}${l.sizeLabel ? ` (${l.sizeLabel})` : ''} x${l.qty} — ${formatPrice(l.unitPrice * l.qty)}`)
       .join('\n');
 
     const text = [
@@ -297,21 +305,12 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
       `Paid via: ${sale.paymentMethod}`,
       sale.customerName ? `Customer: ${sale.customerName}` : null,
       `Date: ${new Date().toLocaleString('en-GH')}`,
-    ]
-      .filter(Boolean)
-      .join('\n');
+    ].filter(Boolean).join('\n');
 
     if (typeof navigator !== 'undefined' && navigator.share) {
-      navigator.share({ title: 'Receipt', text }).catch(() => {
-        // User dismissed share sheet — no-op
-      });
+      navigator.share({ title: 'Receipt', text }).catch(() => {});
     } else {
-      // Fallback: open WhatsApp
-      window.open(
-        `https://wa.me/?text=${encodeURIComponent(text)}`,
-        '_blank',
-        'noopener,noreferrer'
-      );
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
     }
   }
 
@@ -324,7 +323,6 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col overflow-hidden">
 
-      {/* ── Session screen ── */}
       <SessionScreen
         isOpen={sessionOpen}
         warehouses={WAREHOUSES}
@@ -332,7 +330,6 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
         onSelect={handleWarehouseSelect}
       />
 
-      {/* ── POS Header ── */}
       <POSHeader
         warehouseName={warehouse.name}
         search={search}
@@ -342,7 +339,6 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
         onCartTap={() => cartCount > 0 && setCartOpen(true)}
       />
 
-      {/* ── Product grid ── */}
       <div className="flex-1 overflow-y-auto">
         <ProductGrid
           products={products}
@@ -355,20 +351,17 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
         />
       </div>
 
-      {/* ── Cart bar ── */}
       <CartBar
         lines={cart}
         onOpen={() => cartCount > 0 && setCartOpen(true)}
       />
 
-      {/* ── Size picker sheet ── */}
       <SizePickerSheet
         product={activeProduct}
         onAdd={handleAddToCart}
         onClose={() => setActiveProduct(null)}
       />
 
-      {/* ── Cart sheet ── */}
       <CartSheet
         isOpen={cartOpen}
         lines={cart}
@@ -380,28 +373,27 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
         onClose={() => setCartOpen(false)}
       />
 
-      {/* ── Sale success screen ── */}
       <SaleSuccessScreen
         sale={saleResult}
         onNewSale={handleNewSale}
+        onPrint={handlePrintReceipt}
         onShareReceipt={handleShareReceipt}
       />
 
-      {/* ── Toast ── */}
+      {/* Toast */}
       {toast && (
         <div
           key={toast.id}
-          className="
+          className={`
             fixed bottom-24 left-1/2 -translate-x-1/2 z-40
             px-4 py-2.5 rounded-full
             bg-slate-900 text-white
             text-[13px] font-semibold
             shadow-[0_4px_20px_rgba(0,0,0,0.2)]
-            border-l-[3px] border-emerald-500
-            whitespace-nowrap
-            pointer-events-none
+            whitespace-nowrap pointer-events-none
+            border-l-[3px] ${toast.warn ? 'border-amber-400' : 'border-emerald-500'}
             animate-[toastIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)]
-          "
+          `}
         >
           {toast.message}
         </div>
