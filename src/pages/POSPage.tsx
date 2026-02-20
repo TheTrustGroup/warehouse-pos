@@ -22,6 +22,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getApiHeaders } from '../lib/api';
 import { printReceipt } from '../lib/printReceipt';
+import { useAuth } from '../contexts/AuthContext';
 
 import SessionScreen, { type Warehouse }         from '../components/pos/SessionScreen';
 import POSHeader                                  from '../components/pos/POSHeader';
@@ -88,6 +89,7 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
   const [charging, setCharging]           = useState(false); // prevents double-tap
 
   const { toast, show: showToast } = useToast();
+  const { tryRefreshSession } = useAuth();
   const isMounted = useRef(true);
   /** When true, loadProducts must not overwrite state (keeps deducted stock until "New sale"). */
   const deductionAppliedRef = useRef(false);
@@ -208,32 +210,50 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
     let syncWarning = false;
 
     // ── Step 1: Record sale in DB (stock deducted atomically in Postgres) ──
+    const saleBody = {
+      warehouseId:   payload.warehouseId,
+      customerName:  payload.customerName || null,
+      paymentMethod: payload.paymentMethod,
+      subtotal:      payload.subtotal,
+      discountPct:   payload.discountPct,
+      discountAmt:   payload.discountAmt,
+      total:         payload.total,
+      lines:         payload.lines.map(l => ({
+        productId: l.productId,
+        sizeCode:  l.sizeCode,
+        qty:       l.qty,
+        unitPrice: l.unitPrice,
+        lineTotal: l.unitPrice * l.qty,
+        name:      l.name,
+        sku:       l.sku,
+      })),
+    };
+
+    type SaleResponse = { id: string; receiptId: string; createdAt: string };
     try {
-      const result = await apiFetch<{
-        id: string;
-        receiptId: string;
-        createdAt: string;
-      }>('/api/sales', {
-        method: 'POST',
-        body: JSON.stringify({
-          warehouseId:   payload.warehouseId,
-          customerName:  payload.customerName || null,
-          paymentMethod: payload.paymentMethod,
-          subtotal:      payload.subtotal,
-          discountPct:   payload.discountPct,
-          discountAmt:   payload.discountAmt,
-          total:         payload.total,
-          lines:         payload.lines.map(l => ({
-            productId: l.productId,
-            sizeCode:  l.sizeCode,
-            qty:       l.qty,
-            unitPrice: l.unitPrice,
-            lineTotal: l.unitPrice * l.qty,
-            name:      l.name,
-            sku:       l.sku,
-          })),
-        }),
-      });
+      let result: SaleResponse;
+      try {
+        result = await apiFetch<SaleResponse>('/api/sales', {
+          method: 'POST',
+          body: JSON.stringify(saleBody),
+        });
+      } catch (firstErr: unknown) {
+        const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+        const is401 = msg.includes('Unauthorized') || msg.includes('401');
+        if (is401 && tryRefreshSession) {
+          const refreshed = await tryRefreshSession();
+          if (refreshed) {
+            result = await apiFetch<SaleResponse>('/api/sales', {
+              method: 'POST',
+              body: JSON.stringify(saleBody),
+            });
+          } else {
+            throw firstErr;
+          }
+        } else {
+          throw firstErr;
+        }
+      }
 
       serverSaleId    = result.id;
       serverReceiptId = result.receiptId;
