@@ -540,14 +540,9 @@ export async function updateWarehouseProduct(id: string, body: Record<string, un
       pQuantityBySize = [];
       pQuantity = normalized[0].quantity;
     } else {
-      const sum = normalized.reduce((s, e) => s + e.quantity, 0);
-      const existingQty = Number(existing.quantity ?? 0) || 0;
-      const bodyQty = typeof (body as { quantity?: number }).quantity === 'number' ? (body as { quantity: number }).quantity : null;
-      if (normalized.length > 0 && sum === 0 && (existingQty > 0 || (bodyQty != null && bodyQty > 0))) {
-        pQuantityBySize = [];
-        pQuantity = bodyQty != null ? bodyQty : existingQty;
-      } else if (normalized.length > 0) {
-        pQuantityBySize = normalized.filter((e) => e.quantity > 0);
+      // Send all rows (including quantity 0) so RPC replace strategy inserts them; no "all zeros" early-exit.
+      if (normalized.length > 0) {
+        pQuantityBySize = normalized;
       } else {
         // CRITICAL: Payload had no size rows (e.g. partial update or form didn't send quantityBySize).
         // Preserve existing per-size inventory instead of passing [] which would DELETE all rows and wipe sizes.
