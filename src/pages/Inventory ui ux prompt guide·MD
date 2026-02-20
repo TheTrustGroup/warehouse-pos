@@ -1,0 +1,302 @@
+# Extreme Dept Kidz — Inventory UI/UX Refactor
+## Complete Prompt-by-Prompt Build Guide
+
+---
+
+## DESIGN DIRECTION
+
+**Aesthetic:** Refined utilitarian — clean, spacious, purposeful. Every element earns its place.
+**Brand:** Red/coral primary (#EF4444), white backgrounds, dark slate text.
+**Layout:** Mobile-first. Single column on mobile, 2-column grid on tablet, 3-column on desktop.
+**Cards:** 1 per row on mobile (large, spacious). 2 per row on tablet+.
+**Typography:** DM Sans for UI text, DM Mono for SKUs and codes.
+**Spacing:** Generous. 24px gaps between cards, 20px internal padding.
+
+---
+
+## PHASE A — PRODUCT CARD
+
+### Prompt A1 — Base Card Component
+Build a `ProductCard` React component (mobile-first, Tailwind) that displays:
+
+**Card layout (top to bottom):**
+1. Product image (16:9 ratio, gray placeholder if none, object-cover)
+2. Category badge (small pill, top-left over image)
+3. Stock status badge (In Stock / Low Stock / Out of Stock — top-right over image)
+4. Card body:
+   - Product name (bold, 16px, 1 line truncated)
+   - SKU (monospace, 12px, slate-400)
+   - Price row: selling price (bold red) + cost price (slate-400, smaller)
+5. Sizes section:
+   - If sizeKind = 'na': show single quantity pill e.g. "Qty: 14"
+   - If sizeKind = 'one_size': show "One size · 14"
+   - If sizeKind = 'sized': show size pills in a horizontal scroll row
+     e.g. [EU30 · 5] [EU31 · 2] [EU32 · 0] — zero qty pills are gray, others are slate-700
+6. Footer row: Edit button (ghost) + Quick stock button (filled red)
+
+**Props:**
+```ts
+interface ProductCardProps {
+  product: Product;
+  onEdit: (product: Product) => void;
+  onQuickStock: (product: Product) => void;
+}
+```
+
+**States:**
+- Default
+- Hover: subtle shadow lift (shadow-lg, translate-y-[-2px])
+- Out of stock: slight opacity reduction on image (opacity-75)
+
+---
+
+### Prompt A2 — Inline Quick Stock Edit
+When user taps "Quick stock" on a card, the card flips into an inline edit mode (no modal).
+
+**Inline edit state:**
+- Card body is replaced with a compact stock editor
+- For 'na' or 'one_size': single number input + Save / Cancel buttons
+- For 'sized': a clean table — one row per size:
+  | Size | Current | New qty |
+  |------|---------|---------|
+  | EU30 | 5       | [input] |
+  | EU31 | 2       | [input] |
+- Save button: red, full width, "Save Stock"
+- Cancel: ghost, full width, "Cancel"
+- On save: call `onSaveStock(productId, quantityBySize)` then flip back to default state
+- Show a green checkmark flash on the card for 1.5s after successful save
+
+**Rules:**
+- Only one card can be in edit mode at a time
+- Inputs: type=number, min=0, no decimal
+- Tab between inputs works naturally
+
+---
+
+### Prompt A3 — Card Grid Layout
+Build the `ProductGrid` component that renders a list of `ProductCard` components.
+
+```
+Mobile:  1 column, full width cards
+Tablet (≥640px): 2 column grid
+Desktop (≥1024px): 3 column grid
+```
+
+**Empty state:**
+- Centered icon (box/package icon)
+- "No products yet" heading
+- "Add your first product to get started" subtext
+- Red "+ Add product" button
+
+**Loading state:**
+- Show 6 skeleton cards (gray animated pulse blocks matching card dimensions)
+- Skeleton shows: image area, two text lines, size pills area
+
+**Search + filter bar (above grid):**
+- Full-width search input with search icon (searches name, SKU, barcode)
+- Filter row below search: Category dropdown + "Low stock" toggle + "Out of stock" toggle
+- Results count: "102 products · Main Store" in small slate text
+
+---
+
+## PHASE B — PRODUCT MODAL (Add / Edit)
+
+### Prompt B1 — Modal Shell
+Build a `ProductModal` component. Mobile-first bottom sheet on mobile, centered modal on desktop.
+
+**Mobile:** Slides up from bottom. 90vh max height. Scrollable content area.
+**Desktop:** Centered, 600px wide, max 85vh, scrollable content.
+
+**Header:**
+- Product name as title (or "New product" for add)
+- X close button top-right
+- Subtle bottom border separator
+
+**Footer (sticky at bottom):**
+- Cancel button (ghost, left)
+- Save button (red, right, shows spinner when submitting)
+- Never scrolls away — always visible
+
+**Sections inside modal (scrollable):**
+1. Basic Info
+2. Pricing
+3. Stock & Sizes
+4. Details (location, supplier, tags — collapsed by default, expandable)
+
+---
+
+### Prompt B2 — Stock & Sizes Section
+This is the most important section. Build it as a self-contained `SizesSection` component.
+
+**Size type selector (3 buttons, full width on mobile):**
+```
+[ No sizes ]  [ One size ]  [ Multiple sizes ]
+```
+- Selected: red background, white text
+- Unselected: white background, slate border
+
+**When "No sizes" selected:**
+- Single input: "Total quantity" — number input
+
+**When "One size" selected:**
+- Single input: "Quantity" — number input
+- Small hint: "Use this for products with no specific size (e.g. accessories, one-size apparel)"
+
+**When "Multiple sizes" selected:**
+- Clean table layout:
+  ```
+  SIZE          QUANTITY     [delete]
+  [text input]  [number]     [×]
+  [text input]  [number]     [×]
+  ```
+- Size input: text, with datalist autocomplete from size_codes table
+- Quantity input: number, min 0
+- "＋ Add size" button below table — ghost, dashed border
+- Total shown at bottom: "Total: 14 units"
+- Validation: show red border on size input if blank but quantity > 0
+
+**Transitions:**
+- Switching between size types: smooth height transition (200ms ease)
+- Adding/removing rows: fade + slide (150ms)
+
+---
+
+### Prompt B3 — Basic Info Section
+Fields:
+- Product name (required, large input, 18px placeholder "e.g. Air Force 1 Black")
+- Category (searchable dropdown or free text)
+- SKU (auto-generated, editable, monospace font, small "Regenerate" link)
+- Barcode (optional)
+- Description (textarea, 3 rows, optional)
+- Product images (upload or URL, preview thumbnails)
+
+---
+
+### Prompt B4 — Pricing Section
+Fields:
+- Selling price (GH₵ prefix, large number input)
+- Cost price (GH₵ prefix, number input)
+- Profit margin (read-only, auto-calculated, shown in green if positive)
+- Reorder level (number input, with tooltip: "We'll alert you when stock falls below this")
+
+---
+
+## PHASE C — PAGE LAYOUT
+
+### Prompt C1 — Inventory Page Shell
+Build the main `InventoryPage` layout:
+
+**Mobile header:**
+- "Inventory" title (left)
+- Notification bell + "＋" add button (right)
+- Warehouse selector below title (dropdown pill)
+
+**Desktop layout:**
+- Left sidebar (existing nav) stays
+- Main content: header bar + search/filter bar + product grid
+
+**Action bar:**
+- Search input (full width on mobile, 320px on desktop)
+- Filter chips: All · Sneakers · Slippers · Boots · etc (horizontally scrollable)
+- Sort dropdown: Name A–Z / Price Low–High / Stock Low–High / Recently Updated
+- View toggle: Grid (default) / List (for power users)
+
+---
+
+### Prompt C2 — List View (Power User Mode)
+When user switches to list view, show a compact table:
+
+```
+□  [image] Name          SKU              Category   Sizes        Stock   Price    [⋮]
+□  [img]   Air Force 1   SKU-ML...        Sneakers   EU30·5       7       GH₵450
+```
+
+- Checkbox for bulk actions (bulk delete, bulk category change)
+- Clicking a row opens the full edit modal
+- Inline edit on price: click price → becomes input → blur to save
+- Mobile: list view is hidden (grid only on mobile)
+
+---
+
+## PHASE D — MICRO-INTERACTIONS & POLISH
+
+### Prompt D1 — Toast Notifications
+Replace any existing toast system with a clean bottom-center toast:
+- Success: green left border, checkmark icon
+- Error: red left border, X icon
+- Info: blue left border, info icon
+- Auto-dismiss: 3 seconds
+- Stack up to 3 toasts
+- Tap to dismiss
+
+### Prompt D2 — Empty & Loading States
+Every data state should feel intentional:
+- Loading: skeleton cards with shimmer animation
+- Empty search: "No products match '[query]'" with clear search button
+- Empty category filter: "No [category] products" with "Add one" button
+- Network error: "Couldn't load products" with Retry button
+
+### Prompt D3 — Confirmation Dialogs
+For destructive actions (delete product, clear sizes):
+- Small bottom sheet on mobile (not full modal)
+- Simple: icon + title + description + Cancel + Confirm (red)
+- Never block the whole screen for a simple yes/no
+
+---
+
+## COMPONENT HIERARCHY
+
+```
+InventoryPage
+├── InventoryHeader
+│   ├── WarehouseSelector
+│   └── AddProductButton
+├── SearchFilterBar
+│   ├── SearchInput
+│   ├── CategoryFilters (horizontal scroll chips)
+│   └── SortDropdown
+├── ProductGrid (or ProductList)
+│   ├── ProductCard (×n)
+│   │   └── QuickStockEditor (inline, when active)
+│   ├── LoadingSkeleton (when loading)
+│   └── EmptyState (when no results)
+└── ProductModal
+    ├── BasicInfoSection
+    ├── PricingSection
+    ├── SizesSection  ← most critical
+    └── DetailsSection (collapsible)
+```
+
+---
+
+## DATA FLOW (SIMPLE)
+
+```
+Open modal
+  → load product from prop (already fetched, no extra call)
+  → user edits form state (local useState only)
+  → submit → call onSubmit(payload)
+    → PUT /api/products/:id
+    → on success: close modal, refresh product in list (optimistic update)
+    → on error: show toast, keep modal open
+
+Quick stock edit (inline)
+  → user changes quantities on card
+  → save → call onSaveStock(id, quantityBySize)
+    → PUT /api/products/:id with only { quantityBySize, quantity }
+    → on success: flash green, update card in place
+    → on error: flash red, revert to original values
+```
+
+---
+
+## RULES FOR EVERY PROMPT
+
+1. Mobile first — build for 390px width, enhance upward
+2. Touch targets minimum 44×44px for all interactive elements
+3. No inline styles — Tailwind only
+4. Every input has a visible label (no placeholder-only labels)
+5. Loading and error states for every async action
+6. Form never resets unless user explicitly cancels or saves
+7. Size rows: always show all rows including zero-qty
+8. sizeKind change always takes effect — never silently reverted

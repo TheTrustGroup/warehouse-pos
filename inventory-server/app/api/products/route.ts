@@ -1,89 +1,66 @@
-/**
- * Products API — list (with sizes) and create.
- * Official surface: GET /api/products (list with sizes), POST /api/products (create).
- */
+// ============================================================
+// GET /api/products — list products with inventory for a warehouse
+// Used by: POS (load products), inventory grid
+//
+// Query: warehouse_id (required), limit, in_stock, category
+// Returns: { data: ProductRecord[] } — matches v_products_inventory
+//          (quantityBySize populated for sized products)
+// ============================================================
+
 import { NextRequest, NextResponse } from 'next/server';
-import { getWarehouseProducts, createWarehouseProduct } from '@/lib/data/warehouseProducts';
-import { requireAuth, requireAdmin } from '@/lib/auth/session';
-import { logDurability } from '@/lib/data/durabilityLogger';
+import { getWarehouseProducts } from '../../../lib/data/warehouseProducts';
 
-export const dynamic = 'force-dynamic';
+const CORS = {
+  'Access-Control-Allow-Origin':  process.env.ALLOWED_ORIGIN ?? 'https://warehouse.extremedeptkidz.com',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-request-id',
+  'Access-Control-Allow-Credentials': 'true',
+  'Access-Control-Max-Age': '86400',
+};
 
-function getRequestId(request: NextRequest): string {
-  return request.headers.get('x-request-id')?.trim() || request.headers.get('x-correlation-id')?.trim() || crypto.randomUUID();
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS });
 }
 
-export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (auth instanceof NextResponse) return auth;
-  try {
-    const { searchParams } = new URL(request.url);
-    const warehouseId = searchParams.get('warehouse_id') ?? undefined;
-    const limit = searchParams.get('limit');
-    const offset = searchParams.get('offset');
-    const q = searchParams.get('q') ?? undefined;
-    const category = searchParams.get('category') ?? undefined;
-    const lowStock = searchParams.get('low_stock') === '1' || searchParams.get('low_stock') === 'true';
-    const outOfStock = searchParams.get('out_of_stock') === '1' || searchParams.get('out_of_stock') === 'true';
-    const pos = searchParams.get('pos') === '1' || searchParams.get('pos') === 'true';
-    const result = await getWarehouseProducts(warehouseId, {
-      limit: limit != null ? parseInt(limit, 10) : undefined,
-      offset: offset != null ? parseInt(offset, 10) : undefined,
-      q,
-      category,
-      lowStock,
-      outOfStock,
-      pos,
-    });
-    return NextResponse.json({ data: result.data, total: result.total });
-  } catch (e) {
-    console.error('[api/products GET]', e);
+function getBearerToken(req: NextRequest): string | null {
+  const auth = req.headers.get('authorization') ?? '';
+  if (auth.startsWith('Bearer ')) return auth.slice(7).trim();
+  return null;
+}
+
+function unauthorized() {
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: CORS });
+}
+
+export async function GET(req: NextRequest) {
+  const token = getBearerToken(req);
+  if (!token) return unauthorized();
+
+  const { searchParams } = new URL(req.url);
+  const warehouseId = searchParams.get('warehouse_id') ?? '';
+  const limit     = Math.min(Math.floor(Number(searchParams.get('limit') ?? 1000)), 2000);
+  const inStock   = searchParams.get('in_stock') === 'true' || searchParams.get('in_stock') === '1';
+  const category  = searchParams.get('category') ?? undefined;
+
+  if (!warehouseId) {
     return NextResponse.json(
-      { message: e instanceof Error ? e.message : 'Failed to load products' },
-      { status: 500 }
+      { error: 'warehouse_id is required' },
+      { status: 400, headers: CORS }
     );
   }
-}
 
-export async function POST(request: NextRequest) {
-  const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
-  const requestId = getRequestId(request);
-  let body: Record<string, unknown>;
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
-  }
-  const warehouseId = (body?.warehouseId as string) ?? undefined;
-  try {
-    const created = await createWarehouseProduct(body);
-    const entityId = (created as { id?: string })?.id ?? '';
-    logDurability({
-      status: 'success',
-      entity_type: 'product',
-      entity_id: entityId,
-      warehouse_id: warehouseId,
-      request_id: requestId,
-      user_role: auth.role,
+    const { data: products } = await getWarehouseProducts(warehouseId, {
+      limit,
+      inStock: inStock || undefined,
+      category,
     });
-    // Return complete saved product so client can update UI without a follow-up GET
-    return NextResponse.json(created, { status: 201 });
-  } catch (e) {
-    const entityId = (body?.id && typeof body.id === 'string' ? body.id : '') || 'unknown';
-    logDurability({
-      status: 'failed',
-      entity_type: 'product',
-      entity_id: entityId,
-      warehouse_id: warehouseId,
-      request_id: requestId,
-      user_role: auth.role,
-      message: e instanceof Error ? e.message : 'Failed to create product',
-    });
-    console.error('[api/products POST]', e);
+    return NextResponse.json({ data: products }, { headers: CORS });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to load products';
     return NextResponse.json(
-      { message: e instanceof Error ? e.message : 'Failed to create product' },
-      { status: 400 }
+      { error: message },
+      { status: 500, headers: CORS }
     );
   }
 }

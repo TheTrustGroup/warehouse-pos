@@ -1,37 +1,46 @@
 // ============================================================
-// POSPage.tsx  —  warehouse-pos/src/pages/POSPage.tsx
+// POSPage.tsx — warehouse-pos/src/pages/POSPage.tsx
 //
-// Complete POS with world-class stock management:
+// STOCK DEDUCTION — HOW IT WORKS:
 //
-// Checkout flow:
-//   1. handleCharge called from CartSheet
-//   2. POST /api/sales → calls record_sale RPC on Supabase
-//      → atomically: inserts sale + lines + deducts stock in DB
-//   3. On API success:
-//      - Get real receiptId from server (RCP-2026-NNNNN)
-//      - Optimistically deduct stock in local UI (instant feedback)
-//      - Clear cart, close sheet, show SaleSuccessScreen
-//   4. On API failure:
-//      - Cashier still sees success (sale happened in real world)
-//      - Warning toast: "Sync issue — sale logged locally"
-//      - Local stock still deducted (will resync on next product reload)
-//   5. After success screen → "New sale" → reloads products from server
-//      (this brings local stock in sync with DB truth)
+//   1. Cashier taps "Charge GH₵450"
+//   2. POST /api/sales → calls record_sale() Supabase RPC
+//      → RPC atomically: inserts sale + sale_lines + deducts
+//        warehouse_inventory_by_size (sized) or warehouse_inventory
+//      → Returns { id, receiptId, createdAt }
+//   3. Frontend ALSO deducts stock locally (instant UI feedback)
+//      — this is optimistic. Even if step 2 failed, cashier sees
+//        correct stock immediately. Step 2 is the ground truth.
+//   4. "New sale" button → reloads products from server
+//      → this re-syncs frontend with DB truth after each sale
+//
+// If POST /api/sales fails (API not deployed, network error):
+//   → Amber toast warning: "⚠ Sale not synced — deploy /api/sales"
+//   → Checkout still completes (cashier not blocked)
+//   → Stock IS deducted optimistically in UI
+//   → Next loadProducts() call will restore real server values
+//
+// REQUIREMENTS:
+//   - Run COMPLETE_SQL_FIX.sql in Supabase SQL Editor
+//   - Deploy route_sales.ts as inventory-server/app/api/sales/route.ts
 // ============================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getApiHeaders } from '../lib/api';
+import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { printReceipt } from '../lib/printReceipt';
-import { useAuth } from '../contexts/AuthContext';
 
 import SessionScreen, { type Warehouse }         from '../components/pos/SessionScreen';
 import POSHeader                                  from '../components/pos/POSHeader';
 import ProductGrid                                from '../components/pos/ProductGrid';
 import CartBar                                    from '../components/pos/CartBar';
-import SizePickerSheet, { type POSProduct, type CartLineInput }
-                                                  from '../components/pos/SizePickerSheet';
-import CartSheet, { type CartLine, type SalePayload }
-                                                  from '../components/pos/CartSheet';
+import SizePickerSheet, {
+  type POSProduct,
+  type CartLineInput,
+}                                                 from '../components/pos/SizePickerSheet';
+import CartSheet, {
+  type CartLine,
+  type SalePayload,
+}                                                 from '../components/pos/CartSheet';
 import SaleSuccessScreen                          from '../components/pos/SaleSuccessScreen';
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -43,11 +52,10 @@ const WAREHOUSES: Warehouse[] = [
 
 interface POSPageProps { apiBaseUrl?: string; }
 
-// Extends SalePayload with server-assigned fields
 export interface CompletedSale extends SalePayload {
-  receiptId?: string;   // e.g. RCP-2026-00001  (from server)
-  saleId?:    string;   // UUID from DB
-  completedAt?: string; // ISO timestamp
+  receiptId?:   string;
+  saleId?:      string;
+  completedAt?: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -60,21 +68,23 @@ function fmt(n: number) {
   return `GH₵${Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// ── Toast hook ─────────────────────────────────────────────────────────────
+// ── Toast ──────────────────────────────────────────────────────────────────
+
+type ToastType = 'ok' | 'warn' | 'err';
 
 function useToast() {
-  const [toast, setToast] = useState<{ message: string; id: number; type: 'ok' | 'warn' | 'err' } | null>(null);
-  const show = useCallback((message: string, type: 'ok' | 'warn' | 'err' = 'ok') => {
+  const [toast, setToast] = useState<{ message: string; id: number; type: ToastType } | null>(null);
+  const show = useCallback((message: string, type: ToastType = 'ok') => {
     const id = Date.now();
     setToast({ message, id, type });
-    setTimeout(() => setToast(t => (t?.id === id ? null : t)), 3200);
+    setTimeout(() => setToast(t => (t?.id === id ? null : t)), type === 'warn' ? 5000 : 3000);
   }, []);
   return { toast, show };
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────
+// ── Main Page ──────────────────────────────────────────────────────────────
 
-export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
+export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   const [sessionOpen, setSessionOpen]     = useState(true);
   const [warehouse, setWarehouse]         = useState<Warehouse>(WAREHOUSES[0]);
@@ -86,13 +96,10 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
   const [cartOpen, setCartOpen]           = useState(false);
   const [activeProduct, setActiveProduct] = useState<POSProduct | null>(null);
   const [saleResult, setSaleResult]       = useState<CompletedSale | null>(null);
-  const [charging, setCharging]           = useState(false); // prevents double-tap
+  const [charging, setCharging]           = useState(false);
 
   const { toast, show: showToast } = useToast();
-  const { tryRefreshSession } = useAuth();
   const isMounted = useRef(true);
-  /** When true, loadProducts must not overwrite state (keeps deducted stock until "New sale"). */
-  const deductionAppliedRef = useRef(false);
 
   useEffect(() => {
     isMounted.current = true;
@@ -101,24 +108,32 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
 
   // ── API ───────────────────────────────────────────────────────────────────
 
-  async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${apiBaseUrl}${path}`, {
-      ...init,
-      headers: new Headers({
-        ...getApiHeaders(),
-        ...(init?.headers
-          ? Object.fromEntries(new Headers(init.headers as HeadersInit).entries())
-          : {}),
-      }),
-      credentials: 'include',
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message ?? body.error ?? `HTTP ${res.status}`);
+  const apiFetch = useCallback(async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    try {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        ...init,
+        headers: new Headers({
+          ...getApiHeaders(),
+          ...(init?.headers ? Object.fromEntries(new Headers(init.headers as HeadersInit).entries()) : {}),
+        }),
+        credentials: 'include',
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? body.error ?? `HTTP ${res.status}`);
+      }
+      const text = await res.text();
+      return (text ? JSON.parse(text) : {}) as T;
+    } catch (e: unknown) {
+      clearTimeout(timeout);
+      if (e instanceof Error && e.name === 'AbortError') throw new Error('Request timed out');
+      throw e;
     }
-    const text = await res.text();
-    return text ? JSON.parse(text) : ({} as T);
-  }
+  }, []);
 
   // ── Load products ─────────────────────────────────────────────────────────
 
@@ -126,38 +141,33 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
     if (!silent) setLoading(true);
     try {
       const data = await apiFetch<POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }>(
-        `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000&in_stock=false`
+        `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000`
       );
-      const raw = Array.isArray(data) ? data : (data as Record<string, unknown>).data ?? (data as Record<string, unknown>).products;
-      const list: POSProduct[] = Array.isArray(raw) ? raw : [];
-      // Do not overwrite products if we just completed a sale (deduction must stay until "New sale").
-      if (isMounted.current && !deductionAppliedRef.current) setProducts(list);
+      const list: POSProduct[] = Array.isArray(data)
+        ? data
+        : (data as { data?: POSProduct[]; products?: POSProduct[] }).data ?? (data as { data?: POSProduct[]; products?: POSProduct[] }).products ?? [];
+      if (isMounted.current) setProducts(list);
     } catch (e: unknown) {
-      if (!silent) showToast(e instanceof Error ? e.message : 'Failed to load products', 'err');
+      if (!silent && isMounted.current) showToast(e instanceof Error ? e.message : 'Failed to load products', 'err');
     } finally {
       if (!silent && isMounted.current) setLoading(false);
     }
-  }, [apiBaseUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [apiFetch, showToast]);
 
   useEffect(() => {
     if (!sessionOpen) {
-      // Do not refetch after a sale: that would overwrite deducted stock. Only refetch when
-      // user explicitly starts a new session (handleWarehouseSelect clears deductionAppliedRef).
-      if (deductionAppliedRef.current) return;
       loadProducts(warehouse.id);
       setCart([]);
       setSearch('');
       setCategory('all');
     }
-  }, [warehouse.id, sessionOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [warehouse.id, sessionOpen, loadProducts]);
 
   // ── Session ───────────────────────────────────────────────────────────────
 
   function handleWarehouseSelect(w: Warehouse) {
     setWarehouse(w);
     setSessionOpen(false);
-    // Allow the next effect/load to run so we get fresh products for this warehouse.
-    deductionAppliedRef.current = false;
   }
 
   // ── Cart ──────────────────────────────────────────────────────────────────
@@ -167,8 +177,11 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
     setCart(prev => {
       const exists = prev.find(l => l.key === key);
       if (exists) return prev.map(l => l.key === key ? { ...l, qty: l.qty + input.qty } : l);
-      return [...prev, { key, productId: input.productId, name: input.name, sku: input.sku,
-        sizeCode: input.sizeCode, sizeLabel: input.sizeLabel, unitPrice: input.unitPrice, qty: input.qty }];
+      return [...prev, {
+        key, productId: input.productId, name: input.name, sku: input.sku ?? '',
+        sizeCode: input.sizeCode, sizeLabel: input.sizeLabel,
+        unitPrice: input.unitPrice, qty: input.qty,
+      }];
     });
     showToast(`${input.name}${input.sizeLabel ? ` · ${input.sizeLabel}` : ''} added`);
   }
@@ -186,146 +199,119 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
     setCartOpen(false);
   }
 
-  // ── Charge / complete sale ────────────────────────────────────────────────
-  //
-  // Order of operations:
-  //   1. POST /api/sales  → record_sale RPC (atomic: sale + lines + stock deduction in DB)
-  //   2. Deduct stock locally (optimistic — instant UI feedback, even if API is slow)
-  //   3. Close cart sheet → wait for animation
-  //   4. Show success screen with real receiptId from server
-  //
-  // If step 1 fails:
-  //   - Skip receipt ID (generate a local one as fallback)
-  //   - Still complete the checkout flow (cashier isn't blocked)
-  //   - Show amber warning toast
-  //   - Local stock still deducted (corrected on next loadProducts)
+  // ── Charge ────────────────────────────────────────────────────────────────
 
   async function handleCharge(payload: SalePayload) {
-    if (charging) return; // prevent double-tap
+    if (charging) return;
     setCharging(true);
 
     let serverSaleId:    string | undefined;
     let serverReceiptId: string | undefined;
     let completedAt:     string | undefined;
-    let syncWarning = false;
+    let syncOk = true;
 
-    // ── Step 1: Record sale in DB (stock deducted atomically in Postgres) ──
-    const saleBody = {
-      warehouseId:   payload.warehouseId,
-      customerName:  payload.customerName || null,
-      paymentMethod: payload.paymentMethod,
-      subtotal:      payload.subtotal,
-      discountPct:   payload.discountPct,
-      discountAmt:   payload.discountAmt,
-      total:         payload.total,
-      lines:         payload.lines.map(l => ({
-        productId: l.productId,
-        sizeCode:  l.sizeCode,
-        qty:       l.qty,
-        unitPrice: l.unitPrice,
-        lineTotal: l.unitPrice * l.qty,
-        name:      l.name,
-        sku:       l.sku,
-      })),
-    };
-
-    type SaleResponse = { id: string; receiptId: string; createdAt: string };
+    // Step 1: POST /api/sales → record_sale() RPC atomically deducts stock in DB
     try {
-      let result: SaleResponse;
-      try {
-        result = await apiFetch<SaleResponse>('/api/sales', {
-          method: 'POST',
-          body: JSON.stringify(saleBody),
-        });
-      } catch (firstErr: unknown) {
-        const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
-        const is401 = msg.includes('Unauthorized') || msg.includes('401');
-        if (is401 && tryRefreshSession) {
-          const refreshed = await tryRefreshSession();
-          if (refreshed) {
-            result = await apiFetch<SaleResponse>('/api/sales', {
-              method: 'POST',
-              body: JSON.stringify(saleBody),
-            });
-          } else {
-            throw firstErr;
-          }
-        } else {
-          throw firstErr;
-        }
-      }
+      const result = await apiFetch<{
+        id:        string;
+        receiptId: string;
+        createdAt: string;
+      }>('/api/sales', {
+        method: 'POST',
+        body: JSON.stringify({
+          warehouseId:   payload.warehouseId,
+          customerName:  payload.customerName || null,
+          paymentMethod: payload.paymentMethod,
+          subtotal:      payload.subtotal,
+          discountPct:   payload.discountPct,
+          discountAmt:   payload.discountAmt,
+          total:         payload.total,
+          lines: payload.lines.map(l => ({
+            productId: l.productId,
+            sizeCode:  l.sizeCode || null,
+            qty:       l.qty,
+            unitPrice: l.unitPrice,
+            lineTotal: l.unitPrice * l.qty,
+            name:      l.name,
+            sku:       l.sku ?? '',
+          })),
+        }),
+      });
 
       serverSaleId    = result.id;
       serverReceiptId = result.receiptId;
       completedAt     = result.createdAt ?? new Date().toISOString();
 
     } catch (apiErr: unknown) {
-      // DB call failed — log but don't block the cashier
-      console.error('[POSPage] /api/sales failed:', apiErr instanceof Error ? apiErr.message : apiErr);
-      syncWarning = true;
-      // Fallback local receipt ID
-      serverReceiptId = 'LOCAL-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+      // API failed — sale happened in real world, don't block cashier.
+      // Show a visible warning so they know stock wasn't deducted in DB.
+      const msg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+      console.error('[POS] /api/sales failed — stock NOT deducted in DB:', msg);
+      syncOk = false;
+      serverReceiptId = 'LOCAL-' + Date.now().toString(36).toUpperCase();
       completedAt = new Date().toISOString();
     }
 
-    // ── Step 2: Deduct stock locally (instant UI feedback) ─────────────────
-    // Even though the DB already deducted, the frontend needs to update
-    // its local products list so the grid shows correct stock immediately.
-    // Set ref so any in-flight or later loadProducts() won't overwrite this deduction.
-    deductionAppliedRef.current = true;
+    // Step 2: Deduct stock locally (instant visual feedback regardless of API result)
     setProducts(prev => prev.map(p => {
       const saleLines = payload.lines.filter(l => l.productId === p.id);
       if (saleLines.length === 0) return p;
 
       if (p.sizeKind === 'sized') {
-        const updatedSizes = p.quantityBySize.map(row => {
-          const line = saleLines.find(l => l.sizeCode === row.sizeCode);
+        const updatedSizes = (p.quantityBySize ?? []).map(row => {
+          const line = saleLines.find(l =>
+            l.sizeCode && row.sizeCode &&
+            l.sizeCode.toUpperCase() === row.sizeCode.toUpperCase()
+          );
           return line ? { ...row, quantity: Math.max(0, row.quantity - line.qty) } : row;
         });
-        return { ...p, quantityBySize: updatedSizes, quantity: updatedSizes.reduce((s, r) => s + r.quantity, 0) };
+        return {
+          ...p,
+          quantityBySize: updatedSizes,
+          quantity: updatedSizes.reduce((s, r) => s + r.quantity, 0),
+        };
       }
 
       const totalSold = saleLines.reduce((s, l) => s + l.qty, 0);
       return { ...p, quantity: Math.max(0, p.quantity - totalSold) };
     }));
 
-    // ── Step 3: Clear cart + close sheet ───────────────────────────────────
+    // Step 3: Clear cart + close sheet
     setCart([]);
     setCartOpen(false);
     setCharging(false);
 
-    // ── Step 4: Wait for sheet close animation then show success screen ────
+    // Step 4: Wait for sheet close animation
     await new Promise(r => setTimeout(r, 350));
 
     if (!isMounted.current) return;
 
-    // Build the completed sale object (payload + server data)
-    const completedSale: CompletedSale = {
+    // Step 5: Show success screen
+    setSaleResult({
       ...payload,
       saleId:      serverSaleId,
       receiptId:   serverReceiptId,
       completedAt,
-    };
+    });
 
-    setSaleResult(completedSale);
-
-    if (syncWarning) {
-      showToast('⚠ Sync issue — check connection', 'warn');
+    // Show sync warning AFTER success screen appears
+    if (!syncOk) {
+      setTimeout(() => {
+        showToast('⚠ Not synced — deploy /api/sales route', 'warn');
+      }, 600);
     }
   }
 
-  // ── New sale (after success screen) ──────────────────────────────────────
+  // ── New sale ──────────────────────────────────────────────────────────────
 
   function handleNewSale() {
     setSaleResult(null);
     setCart([]);
-    // Allow the next loadProducts result to apply (server is source of truth after sale).
-    deductionAppliedRef.current = false;
-    // Re-fetch from server so stock is 100% accurate (DB truth)
+    // Re-fetch from server = ground truth stock after sales
     loadProducts(warehouse.id, true);
   }
 
-  // ── Share receipt ─────────────────────────────────────────────────────────
+  // ── Share ─────────────────────────────────────────────────────────────────
 
   function handleShareReceipt(sale: CompletedSale) {
     const lines = sale.lines
@@ -334,7 +320,7 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
 
     const text = [
       '🧾 Receipt — Extreme Dept Kidz',
-      sale.receiptId ?? '',
+      sale.receiptId ? sale.receiptId : '',
       '─────────────────────',
       lines,
       '─────────────────────',
@@ -345,22 +331,29 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
       `Date: ${new Date(sale.completedAt ?? Date.now()).toLocaleString('en-GH')}`,
     ].filter(Boolean).join('\n');
 
-    if (navigator.share) {
+    if (navigator?.share) {
       navigator.share({ title: 'Receipt', text }).catch(() => {});
     } else {
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
     }
   }
 
-  // ── Print receipt ─────────────────────────────────────────────────────────
+  // ── Print ─────────────────────────────────────────────────────────────────
 
   function handlePrintReceipt(sale: CompletedSale) {
-    printReceipt({ ...sale, receiptId: sale.receiptId });
+    printReceipt({ ...sale, receiptId: sale.receiptId } as Parameters<typeof printReceipt>[0]);
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const cartCount = cart.reduce((s, l) => s + l.qty, 0);
+
+  // ── Toast accent colour ───────────────────────────────────────────────────
+
+  const toastBorder =
+    toast?.type === 'warn' ? 'border-l-amber-400' :
+    toast?.type === 'err'  ? 'border-l-red-500'   :
+                             'border-l-emerald-500';
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -430,10 +423,9 @@ export default function POSPage({ apiBaseUrl = '' }: POSPageProps) {
           fixed bottom-24 left-1/2 -translate-x-1/2 z-40
           px-4 py-2.5 rounded-full
           bg-slate-900 text-white text-[13px] font-semibold
-          shadow-[0_4px_20px_rgba(0,0,0,0.2)]
+          shadow-[0_4px_20px_rgba(0,0,0,0.25)]
           whitespace-nowrap pointer-events-none
-          border-l-[3px]
-          ${toast.type === 'warn' ? 'border-amber-400' : toast.type === 'err' ? 'border-red-500' : 'border-emerald-500'}
+          border-l-[3px] ${toastBorder}
           animate-[posToastIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)]
         `}>
           {toast.message}
