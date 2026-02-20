@@ -97,6 +97,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   useEffect(() => {
     formDataImagesRef.current = formData.images;
   }, [formData.images]);
+  /** True after we've run form init for this open; prevents re-init when product reference changes (e.g. from polling) while modal is open. */
+  const hasInitialized = useRef(false);
   /** Only focus first field when modal first opens; avoid re-running on every render (unstable onClose) so typing doesn't lose focus / dismiss keyboard. */
   const didInitialFocusRef = useRef(false);
   /** Track last focused form field so we can restore focus when mobile browser or re-render steals it. */
@@ -129,16 +131,16 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     };
   }, [isOpen, product]);
 
-  // Only sync form when the modal *first* opens (isOpen: false -> true). Do not overwrite image state if user just added an image (imageUploadingRef).
+  // Only sync form when the modal *first* opens (isOpen: false -> true). Do not overwrite when product reference changes (e.g. polling) while open.
   useEffect(() => {
     if (!isOpen) {
       wasOpenRef.current = false;
+      hasInitialized.current = false;
       imageUploadingRef.current = false;
       return;
     }
-    const justOpened = !wasOpenRef.current;
-    wasOpenRef.current = true;
-    if (!justOpened) return;
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
 
     const currentProduct = product;
     const warehouseId = currentWarehouseId;
@@ -447,10 +449,12 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     }
     setIsSubmitting(true);
     try {
-      const quantity =
+      // Recompute quantity from quantityBySize so we never send stale top-level quantity (e.g. 10 vs sizes summing to 7).
+      const totalQuantity =
         formData.sizeKind === 'sized' && validSizeRows.length > 0
-          ? validSizeRows.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
+          ? validSizeRows.reduce((sum, s) => sum + (s.quantity ?? 0), 0)
           : Number(formData.quantity) || 0;
+      const quantity = totalQuantity;
       const imagesToSubmit = formDataImagesRef.current?.length ? formDataImagesRef.current : formData.images;
       const payloadImages = Array.isArray(imagesToSubmit) ? imagesToSubmit : [];
       const payload = {

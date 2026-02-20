@@ -36,12 +36,14 @@ export function Inventory() {
   };
 
   const handleEditProduct = (product: Product) => {
-    s.setEditingProduct(product);
+    s.setEditingProduct(structuredClone(product));
+    s.setEditingProductOpen(true);
     s.setIsModalOpen(true);
   };
 
   const handleViewProduct = (product: Product) => {
-    s.setEditingProduct(product);
+    s.setEditingProduct(structuredClone(product));
+    s.setEditingProductOpen(true);
     s.setIsModalOpen(true);
   };
 
@@ -86,10 +88,12 @@ export function Inventory() {
         await s.updateProduct(idToUpdate, productData);
         s.setIsModalOpen(false);
         s.setEditingProduct(null);
+        s.setEditingProductOpen(false);
       } catch (error) {
         if ((error as { status?: number })?.status === 404) {
           s.setIsModalOpen(false);
           s.setEditingProduct(null);
+          s.setEditingProductOpen(false);
           s.refreshProducts({ bypassCache: true });
           return;
         }
@@ -100,6 +104,7 @@ export function Inventory() {
     const newId = await s.addProduct(productData);
     s.setIsModalOpen(false);
     s.setEditingProduct(null);
+    s.setEditingProductOpen(false);
     s.setUndoStack((prev) => {
       const next = [{ productId: newId, at: Date.now() }, ...prev].slice(0, s.MAX_UNDO_ENTRIES);
       return next;
@@ -109,7 +114,8 @@ export function Inventory() {
   const handleCloseProductModal = useCallback(() => {
     s.setIsModalOpen(false);
     s.setEditingProduct(null);
-  }, [s.setIsModalOpen, s.setEditingProduct]);
+    s.setEditingProductOpen(false);
+  }, [s.setIsModalOpen, s.setEditingProduct, s.setEditingProductOpen]);
 
   const selectedWarehouse = s.currentWarehouseId ?? '';
   const sizeInventory = useMemo<SizeInventoryItem[]>(() => {

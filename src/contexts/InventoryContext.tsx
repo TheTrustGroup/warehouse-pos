@@ -149,6 +149,8 @@ interface InventoryContextType {
   storagePersistFailed: boolean;
   /** Current save phase for product form: idle | saving | verifying. Use for button label (Saving… / Verifying…). */
   savePhase: 'idle' | 'saving' | 'verifying';
+  /** Call when edit modal opens (true) or closes (false) so polling skips while user is editing. */
+  setEditingProductOpen: (open: boolean) => void;
 }
 
 export interface ProductFilters {
@@ -282,6 +284,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /** After a successful save (add/update), skip background refetch for this long so poll/visibility don't overwrite with stale list. */
   const POST_SAVE_NO_REFETCH_MS = 60_000;
   const lastSaveAtRef = useRef<number>(0);
+  /** When true, skip realtime poll so we don't overwrite list while user has edit modal open. */
+  const isEditingProductRef = useRef(false);
+
+  const setEditingProductOpen = useCallback((open: boolean) => {
+    isEditingProductRef.current = open;
+  }, []);
 
   const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
     const params = new URLSearchParams();
@@ -748,9 +756,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   }, [currentWarehouseId]);
 
-  // Real-time: poll when tab visible so all devices see server truth. 30s reduces jitter. lastSaveAtRef (POST_SAVE_NO_REFETCH_MS 60s) is checked inside loadProducts when silent so we skip the poll for 60s after save; visibility and retry handlers also guard with POST_SAVE_NO_REFETCH_MS.
+  // Real-time: poll when tab visible so all devices see server truth. Skip poll while edit modal is open so we don't overwrite list.
   const INVENTORY_POLL_MS = 30_000;
-  useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }), intervalMs: INVENTORY_POLL_MS });
+  useRealtimeSync({
+    onSync: () => {
+      if (isEditingProductRef.current) return;
+      loadProducts(undefined, { silent: true, bypassCache: true });
+    },
+    intervalMs: INVENTORY_POLL_MS,
+  });
 
   // When user returns to this tab, refetch from server so changes from other devices (e.g. deletes) show immediately.
   useEffect(() => {
@@ -1377,6 +1391,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       verifyProductSaved,
       storagePersistFailed,
       savePhase,
+      setEditingProductOpen,
     }}>
       {children}
     </InventoryContext.Provider>

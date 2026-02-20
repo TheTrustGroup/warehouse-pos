@@ -19,7 +19,7 @@ const MAX_UNDO_ENTRIES = 5;
 export type ViewMode = 'table' | 'grid';
 
 export function useInventoryPageState() {
-  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, undoAddProduct, searchProducts, filterProducts, refreshProducts, isBackgroundRefreshing, unsyncedCount, lastSyncAt, isUnsynced, verifyProductSaved } = useInventory();
+  const { products, isLoading, error, addProduct, updateProduct, deleteProduct, deleteProducts, undoAddProduct, searchProducts, filterProducts, refreshProducts, isBackgroundRefreshing, unsyncedCount, lastSyncAt, isUnsynced, verifyProductSaved, setEditingProductOpen } = useInventory();
   const { hasPermission } = useAuth();
   const { currentWarehouse, currentWarehouseId, setCurrentWarehouseId, warehouses, isWarehouseBoundToSession } = useWarehouse();
   const { showToast } = useToast();
@@ -160,5 +160,6 @@ export function useInventoryPageState() {
     canUndoLatest,
     UNDO_WINDOW_MS,
     MAX_UNDO_ENTRIES,
+    setEditingProductOpen,
   };
 }
