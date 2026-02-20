@@ -23,6 +23,15 @@ export interface QuantityBySizeItem {
   quantity: number;
 }
 
+/** Row from warehouse_inventory_by_size (or snapshot) for sizes column: product/warehouse/size + quantity and order. */
+export interface SizeInventoryItem {
+  product_id: string;
+  warehouse_id: string;
+  size_code: string;
+  quantity: number;
+  size_codes: { size_order: number };
+}
+
 export interface Product {
   id: string;
   sku: string;
