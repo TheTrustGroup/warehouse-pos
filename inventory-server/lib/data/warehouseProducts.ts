@@ -264,17 +264,18 @@ async function fetchSizeEntries(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getWarehouseProducts(
-  warehouseId: string,
+  warehouseId: string | undefined,
   options: { limit?: number; category?: string; inStock?: boolean } = {}
 ): Promise<WarehouseProductApi[]> {
   const supabase = getSupabase();
+  const wid = (warehouseId ?? getDefaultWarehouseId()).trim();
   const { limit = 1000, category, inStock } = options;
 
   // 1. Products + inventory total in one query
   let q = supabase
     .from('warehouse_products')
     .select('*, warehouse_inventory!left(quantity)')
-    .eq('warehouse_id', warehouseId)
+    .eq('warehouse_id', wid)
     .order('name', { ascending: true })
     .limit(limit);
 
@@ -289,7 +290,7 @@ export async function getWarehouseProducts(
   const { data: sizeData } = await supabase
     .from('warehouse_inventory_by_size')
     .select('product_id, size_code, quantity, size_codes!left(size_label, sort_order)')
-    .eq('warehouse_id', warehouseId)
+    .eq('warehouse_id', wid)
     .in('product_id', ids);
 
   // Group sizes by product_id
@@ -678,4 +679,15 @@ export async function deleteWarehouseProduct(
     .eq('warehouse_id', wid);
 
   if (error) throw new Error(`deleteWarehouseProduct: ${error.message}`);
+}
+
+/** Delete multiple products in one warehouse. Uses default warehouse if not provided. */
+export async function deleteWarehouseProductsBulk(
+  ids:         string[],
+  warehouseId?: string
+): Promise<void> {
+  const wid = (warehouseId ?? getDefaultWarehouseId()).trim();
+  for (const id of ids) {
+    await deleteWarehouseProduct(id, wid);
+  }
 }

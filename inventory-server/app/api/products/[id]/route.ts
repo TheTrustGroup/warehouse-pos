@@ -3,7 +3,7 @@
  * Official surface: GET /api/products/:id, PUT /api/products/:id, DELETE /api/products/:id.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { getWarehouseProductById, updateWarehouseProduct, deleteWarehouseProduct } from '@/lib/data/warehouseProducts';
+import { getWarehouseProductById, getDefaultWarehouseId, updateWarehouseProduct, deleteWarehouseProduct } from '@/lib/data/warehouseProducts';
 import { requireAuth, requireAdmin } from '@/lib/auth/session';
 import { logDurability } from '@/lib/data/durabilityLogger';
 
@@ -21,7 +21,7 @@ export async function GET(
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   const { searchParams } = new URL(request.url);
-  const warehouseId = searchParams.get('warehouse_id') ?? undefined;
+  const warehouseId = searchParams.get('warehouse_id') ?? getDefaultWarehouseId();
   try {
     const product = await getWarehouseProductById(id, warehouseId);
     if (!product) return NextResponse.json({ message: 'Product not found' }, { status: 404 });
@@ -90,8 +90,10 @@ export async function DELETE(
   const auth = requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
+  const { searchParams } = new URL(request.url);
+  const warehouseId = searchParams.get('warehouse_id') ?? getDefaultWarehouseId();
   try {
-    await deleteWarehouseProduct(id);
+    await deleteWarehouseProduct(id, warehouseId);
     return new NextResponse(null, { status: 204 });
   } catch (e) {
     console.error('[api/products/[id] DELETE]', e);

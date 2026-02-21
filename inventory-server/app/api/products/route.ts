@@ -37,9 +37,8 @@ export async function GET(req: NextRequest) {
   if (!token) return unauthorized();
 
   const { searchParams } = new URL(req.url);
-  const warehouseId = searchParams.get('warehouse_id') ?? '';
+  const warehouseId = searchParams.get('warehouse_id')?.trim() || undefined;
   const limit     = Math.min(Math.floor(Number(searchParams.get('limit') ?? 1000)), 2000);
-  const offset    = Math.max(0, Math.floor(Number(searchParams.get('offset') ?? 0)));
   const inStock   = searchParams.get('in_stock') === 'true' || searchParams.get('in_stock') === '1';
   const category  = searchParams.get('category') ?? undefined;
 
@@ -51,9 +50,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { data: products } = await getWarehouseProducts(warehouseId, {
+    const products = await getWarehouseProducts(warehouseId, {
       limit,
-      offset,
       inStock: inStock || undefined,
       category,
     });
