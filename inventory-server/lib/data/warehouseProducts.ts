@@ -20,8 +20,8 @@
 //      fallback is inline in this file.
 //
 // SCHEMA:
-//   warehouse_products          — product metadata + size_kind
-//   warehouse_inventory         — total qty (warehouse_id, product_id)
+//   warehouse_products          — global product catalog (id, sku, name, size_kind, etc.). NO warehouse_id.
+//   warehouse_inventory         — total qty per warehouse (warehouse_id, product_id, quantity)
 //   warehouse_inventory_by_size — per-size qty (warehouse_id, product_id, size_code)
 //   size_codes                  — reference (size_code, size_label, sort_order)
 //
@@ -134,11 +134,12 @@ export interface WarehouseProductApi {
 function rowToApi(
   row: Record<string, unknown>,
   quantity: number,
-  sizeEntries: SizeEntry[] = []
+  sizeEntries: SizeEntry[] = [],
+  warehouseIdFromContext?: string
 ): WarehouseProductApi {
   return {
     id:             String(row.id ?? ''),
-    warehouseId:    String(row.warehouse_id ?? ''),
+    warehouseId:    String(warehouseIdFromContext ?? row.warehouse_id ?? ''),
     sku:            String(row.sku ?? ''),
     barcode:        row.barcode ? String(row.barcode) : null,
     name:           String(row.name ?? ''),
@@ -271,11 +272,26 @@ export async function getWarehouseProducts(
   const wid = (warehouseId ?? getDefaultWarehouseId()).trim();
   const { limit = 1000, category, inStock } = options;
 
-  // 1. Products + inventory total in one query
+  // 1. Get product_ids that have inventory in this warehouse (warehouse_products has no warehouse_id)
+  const { data: invRows, error: invErr } = await supabase
+    .from('warehouse_inventory')
+    .select('product_id, quantity')
+    .eq('warehouse_id', wid);
+
+  if (invErr) throw new Error(`getWarehouseProducts: ${invErr.message}`);
+  if (!invRows?.length) return [];
+
+  const productIds = invRows.map((r: { product_id: string }) => r.product_id);
+  const quantityByProductId: Record<string, number> = {};
+  for (const r of invRows as { product_id: string; quantity: number }[]) {
+    quantityByProductId[r.product_id] = Number(r.quantity ?? 0);
+  }
+
+  // 2. Fetch warehouse_products by id (global table, no warehouse_id)
   let q = supabase
     .from('warehouse_products')
-    .select('*, warehouse_inventory!left(quantity)')
-    .eq('warehouse_id', wid)
+    .select('*')
+    .in('id', productIds)
     .order('name', { ascending: true })
     .limit(limit);
 
@@ -285,15 +301,15 @@ export async function getWarehouseProducts(
   if (error) throw new Error(`getWarehouseProducts: ${error.message}`);
   if (!products?.length) return [];
 
-  // 2. All per-size rows for this warehouse in ONE query (no N+1)
   const ids = products.map((p: any) => p.id as string);
+
+  // 3. All per-size rows for this warehouse in ONE query (no N+1)
   const { data: sizeData } = await supabase
     .from('warehouse_inventory_by_size')
     .select('product_id, size_code, quantity, size_codes!left(size_label, sort_order)')
     .eq('warehouse_id', wid)
     .in('product_id', ids);
 
-  // Group sizes by product_id
   const sizeMap: Record<string, SizeEntry[]> = {};
   for (const r of (sizeData ?? []) as any[]) {
     const pid = r.product_id as string;
@@ -305,27 +321,23 @@ export async function getWarehouseProducts(
     });
   }
 
-  // Sort each product's sizes by sort_order then alphabetically
   for (const pid of Object.keys(sizeMap)) {
     sizeMap[pid].sort((a, b) => a.sizeCode.localeCompare(b.sizeCode));
   }
 
-  // 3. Assemble results
+  // 4. Assemble results (warehouse_products has no warehouse_id; pass wid for API response)
   const results: WarehouseProductApi[] = [];
 
   for (const p of products as any[]) {
-    const invRow = Array.isArray(p.warehouse_inventory)
-      ? p.warehouse_inventory[0]
-      : p.warehouse_inventory;
-    const sizes      = sizeMap[p.id] ?? [];
-    const sizeKind   = p.size_kind as SizeKind;
-    const totalQty   = sizeKind === 'sized' && sizes.length > 0
+    const sizes    = sizeMap[p.id] ?? [];
+    const sizeKind = p.size_kind as SizeKind;
+    const totalQty = sizeKind === 'sized' && sizes.length > 0
       ? sizes.reduce((s, r) => s + r.quantity, 0)
-      : Number(invRow?.quantity ?? 0);
+      : Number(quantityByProductId[p.id] ?? 0);
 
     if (inStock && totalQty === 0) continue;
 
-    results.push(rowToApi(p, totalQty, sizes));
+    results.push(rowToApi(p, totalQty, sizes, wid));
   }
 
   return results;
@@ -342,11 +354,11 @@ export async function getWarehouseProductById(
   const supabase = getSupabase();
   const wid = (warehouseId ?? getDefaultWarehouseId()).trim();
 
+  // warehouse_products is global (no warehouse_id); fetch by id only
   const { data: p, error } = await supabase
     .from('warehouse_products')
-    .select('*, warehouse_inventory!left(quantity)')
-    .eq('id',           id)
-    .eq('warehouse_id', wid)
+    .select('*')
+    .eq('id', id)
     .single();
 
   if (error) {
@@ -355,16 +367,21 @@ export async function getWarehouseProductById(
   }
   if (!p) return null;
 
+  // Inventory for this warehouse
+  const { data: invRow } = await supabase
+    .from('warehouse_inventory')
+    .select('quantity')
+    .eq('warehouse_id', wid)
+    .eq('product_id', id)
+    .maybeSingle();
+
   const sizes = await fetchSizeEntries(supabase, wid, id);
 
-  const invRow  = Array.isArray(p.warehouse_inventory)
-    ? p.warehouse_inventory[0]
-    : p.warehouse_inventory;
   const totalQty = (p.size_kind as SizeKind) === 'sized' && sizes.length > 0
     ? sizes.reduce((s, r) => s + r.quantity, 0)
-    : Number(invRow?.quantity ?? 0);
+    : Number((invRow as { quantity?: number } | null)?.quantity ?? 0);
 
-  return rowToApi(p, totalQty, sizes);
+  return rowToApi(p, totalQty, sizes, wid);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -384,15 +401,18 @@ export async function createWarehouseProduct(
     ? validSizes.reduce((s, r) => s + r.quantity, 0)
     : Number((body as any).quantity ?? 0);
 
-  // 1. Insert product
+  // 1. Insert product (warehouse_products is global — no warehouse_id column)
   const newId = crypto.randomUUID();
+  const fullRow = bodyToRow(body, newId, now) as Record<string, unknown>;
+  const rowForTable = Object.fromEntries(
+    Object.entries(fullRow).filter(([k]) => k !== 'warehouse_id')
+  );
   const row = {
-    ...bodyToRow(body, newId, now),
-    warehouse_id: wid,
-    size_kind:    sizeKind,
-    created_at:   now,
-    updated_at:   now,
-    version:      1,
+    ...rowForTable,
+    size_kind:   sizeKind,
+    created_at:  now,
+    updated_at:  now,
+    version:     1,
   };
 
   const { data: created, error: createErr } = await supabase
@@ -490,13 +510,16 @@ export async function updateWarehouseProduct(
 
   const effectiveSizeKind: SizeKind = singleOneSize ? 'one_size' : sizeKind;
 
-  // 4. Build DB row
+  // 4. Build DB row (warehouse_products has no warehouse_id; omit for update)
+  const fullRow = bodyToRow(body, id, now) as Record<string, unknown>;
+  const rowForTable = Object.fromEntries(
+    Object.entries(fullRow).filter(([k]) => k !== 'warehouse_id')
+  );
   const row: Record<string, unknown> = {
-    ...bodyToRow(body, id, now),
-    warehouse_id: wid,
-    size_kind:    effectiveSizeKind,
-    version:      currentVersion + 1,
-    updated_at:   now,
+    ...rowForTable,
+    size_kind:   effectiveSizeKind,
+    version:     currentVersion + 1,
+    updated_at:  now,
   };
 
   // 5. Build RPC params
@@ -606,12 +629,14 @@ async function _manualUpdate(
   now:             string,
 ): Promise<WarehouseProductApi> {
 
-  // Update warehouse_products
+  // Update warehouse_products (global table — no warehouse_id)
+  const rowForTable = Object.fromEntries(
+    Object.entries(row as Record<string, unknown>).filter(([k]) => k !== 'warehouse_id')
+  );
   const { error: updErr } = await supabase
     .from('warehouse_products')
-    .update(row)
-    .eq('id',           id)
-    .eq('warehouse_id', wid);
+    .update(rowForTable)
+    .eq('id', id);
   if (updErr) throw new Error(`_manualUpdate products: ${updErr.message}`);
 
   // Upsert inventory total
@@ -672,11 +697,11 @@ export async function deleteWarehouseProduct(
     .eq('warehouse_id', wid)
     .eq('product_id',   id);
 
+  // warehouse_products is global — delete by id only
   const { error } = await supabase
     .from('warehouse_products')
     .delete()
-    .eq('id',           id)
-    .eq('warehouse_id', wid);
+    .eq('id', id);
 
   if (error) throw new Error(`deleteWarehouseProduct: ${error.message}`);
 }
