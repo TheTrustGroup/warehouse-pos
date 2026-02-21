@@ -204,16 +204,17 @@ function resolveSizeKind(
   return 'na';
 }
 
-// Parse quantityBySize from body, normalise codes
+// Parse quantityBySize from body, normalise codes. Accept array or single object (normalize to array).
 function resolveRawSizes(
   body: Record<string, unknown>
 ): Array<{ sizeCode: string; quantity: number }> {
-  const raw: Array<{ sizeCode?: string; size_code?: string; quantity?: number }> =
-    (body as any).quantityBySize ??
-    (body as any).quantity_by_size ??
-    [];
-  if (!Array.isArray(raw)) return [];
-  return raw.map(e => ({
+  const raw = (body as any).quantityBySize ?? (body as any).quantity_by_size;
+  const arr: Array<{ sizeCode?: string; size_code?: string; quantity?: number }> = Array.isArray(raw)
+    ? raw
+    : raw != null && typeof raw === 'object' && !Array.isArray(raw)
+      ? [raw]
+      : [];
+  return arr.map(e => ({
     sizeCode: String(e.sizeCode ?? e.size_code ?? '')
       .trim().replace(/\s+/g, '').toUpperCase(),
     quantity: Math.max(0, Math.floor(Number(e.quantity ?? 0))),
@@ -561,7 +562,7 @@ export async function updateWarehouseProduct(
     'qty:', pQuantity
   );
 
-  // 6. Try atomic RPC
+  // 6. Try atomic RPC (pass array directly so Postgres receives jsonb array, not scalar string)
   const { error: rpcError } = await supabase.rpc(
     'update_warehouse_product_atomic',
     {
@@ -570,9 +571,7 @@ export async function updateWarehouseProduct(
       p_row:              row,
       p_current_version:  currentVersion,
       p_quantity:         pQuantity,
-      p_quantity_by_size: pQuantityBySize !== null
-        ? JSON.stringify(pQuantityBySize)
-        : null,
+      p_quantity_by_size: pQuantityBySize,
     }
   );
 
