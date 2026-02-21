@@ -1,112 +1,23 @@
 /**
- * API configuration (Phase 5 stability — single source of truth for base URL).
- * All API calls must use API_BASE_URL from this module. No hardcoded domains in production.
- * Production build fails if VITE_API_BASE_URL is unset. Never show "Saved" without confirmed 2xx.
+ * API client config — used by InventoryPage, AuthContext, and other API callers.
+ * API_BASE_URL is the single source of truth so fetch always hits the right host.
  */
+const DEFAULT_API_BASE_URL = 'https://warehouse-pos-api-v2.vercel.app';
 
-/** Dev-only fallback when VITE_API_BASE_URL is unset. Production build requires env. */
-const DEFAULT_API_BASE = import.meta.env.PROD ? '' : 'https://extremedeptkidz.com';
-const _rawApiBase = import.meta.env.VITE_API_BASE_URL;
-const _trimmed = (_rawApiBase && String(_rawApiBase).trim() ? _rawApiBase : DEFAULT_API_BASE).replace(/\/$/, '');
-// Must be a full URL (https://...) so fetch() hits the API host, not the frontend host. If set without protocol, prepend https://.
-const _resolved = _trimmed.startsWith('http://') || _trimmed.startsWith('https://') ? _trimmed : `https://${_trimmed}`;
-export const API_BASE_URL = _resolved;
+export const API_BASE_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
+    ? import.meta.env.VITE_API_BASE_URL
+    : DEFAULT_API_BASE_URL;
 
-// Warn at runtime when default URL is used (dev only; production build fails if unset).
-if (import.meta.env.DEV && _resolved === DEFAULT_API_BASE) {
-  console.warn(
-    '[API] VITE_API_BASE_URL is unset; using default. Set it in .env.local for your backend.'
-  );
-}
-
-/**
- * Get authentication token from stored user session
- * 
- * Priority order:
- * 1. Check localStorage for explicit token (auth_token, access_token, or token)
- * 2. Check user object for token property (if stored after login)
- * 3. Return null (httpOnly cookies will be sent automatically by browser)
- * 
- * Note: In production with httpOnly cookies, the token is automatically
- * included in requests by the browser, so this function may return null
- * and the Authorization header won't be needed.
- */
-export function getAuthToken(): string | null {
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    // First, check for explicit token storage (common patterns)
-    const authToken = localStorage.getItem('auth_token') || 
-                     localStorage.getItem('access_token') || 
-                     localStorage.getItem('token');
-    
-    if (authToken) {
-      // If token doesn't start with "Bearer ", add it
-      return authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
-    }
-    
-    // Check user object for token property (if backend returns token in user object)
-    const stored = localStorage.getItem('current_user');
-    if (stored) {
-      const user = JSON.parse(stored);
-      
-      // Check if user object has a token property
-      if (user?.token) {
-        return user.token.startsWith('Bearer ') ? user.token : `Bearer ${user.token}`;
-      }
-      
-      // Check if user object has an accessToken property
-      if (user?.accessToken) {
-        return user.accessToken.startsWith('Bearer ') ? user.accessToken : `Bearer ${user.accessToken}`;
-      }
-    }
-    
-    // No token found - httpOnly cookies will be sent automatically if configured
-    return null;
-  } catch (error) {
-    console.error('Error retrieving auth token:', error);
-    return null;
-  }
-}
-
-/**
- * Create headers for API requests
- * 
- * Note: If using httpOnly cookies for authentication, the Authorization
- * header may not be needed as cookies are sent automatically by the browser.
- * However, if your backend uses Bearer tokens, this will include them.
- */
-export function getApiHeaders(): HeadersInit {
-  const token = getAuthToken();
-  const headers: HeadersInit = {
+export function getApiHeaders(): Record<string, string> {
+  return {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    Accept: 'application/json',
   };
-  
-  // Only add Authorization header if token is available
-  // If using httpOnly cookies, token will be null and cookies will be sent automatically
-  if (token) {
-    headers['Authorization'] = token;
-  }
-  
-  return headers;
 }
 
-/**
- * API response handler with error checking
- */
+/** Parse JSON from a Response; used by AuthContext and others. */
 export async function handleApiResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ 
-      message: `HTTP ${response.status}: ${response.statusText}` 
-    }));
-    throw new Error(errorData.message || 'API request failed');
-  }
-  
-  // Handle empty responses
-  const contentType = response.headers.get('content-type');
-  if (contentType && contentType.includes('application/json')) {
-    return await response.json();
-  }
-  
-  return null as T;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : {}) as T;
 }

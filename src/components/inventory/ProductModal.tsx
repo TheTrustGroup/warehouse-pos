@@ -23,7 +23,7 @@ export interface Product {
   id?: string;
   name: string;
   sku: string;
-  barcode?: string;
+  barcode?: string | null;
   category: string;
   description?: string;
   sellingPrice: number;
