@@ -336,15 +336,16 @@ export async function getWarehouseProducts(
 
 export async function getWarehouseProductById(
   id:          string,
-  warehouseId: string
+  warehouseId: string | undefined
 ): Promise<WarehouseProductApi | null> {
   const supabase = getSupabase();
+  const wid = (warehouseId ?? getDefaultWarehouseId()).trim();
 
   const { data: p, error } = await supabase
     .from('warehouse_products')
     .select('*, warehouse_inventory!left(quantity)')
     .eq('id',           id)
-    .eq('warehouse_id', warehouseId)
+    .eq('warehouse_id', wid)
     .single();
 
   if (error) {
@@ -353,7 +354,7 @@ export async function getWarehouseProductById(
   }
   if (!p) return null;
 
-  const sizes = await fetchSizeEntries(supabase, warehouseId, id);
+  const sizes = await fetchSizeEntries(supabase, wid, id);
 
   const invRow  = Array.isArray(p.warehouse_inventory)
     ? p.warehouse_inventory[0]
