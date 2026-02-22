@@ -277,17 +277,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   /**
-   * Check if user is authenticated by calling the API
+   * Check if user is authenticated by calling the API.
+   * When there is no stored token, skip the request so the login page does not trigger 401s.
    */
   const checkAuthStatus = async () => {
     try {
       setIsLoading(true);
-      const headers: HeadersInit = { 'Accept': 'application/json' };
       const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
-      if (token) headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      if (!token?.trim()) {
+        setUser(null);
+        setAuthError(null);
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('current_user');
+          localStorage.removeItem('auth_token');
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      const headers: HeadersInit = {
+        'Accept': 'application/json',
+        'Authorization': token.startsWith('Bearer ') ? token : `Bearer ${token}`,
+      };
       const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
 
-      // Always call auth/me on load: /admin/api/me first, then /api/auth/user on 404, 403, or 401 (cross-browser).
       let response = await fetch(`${API_BASE_URL}/admin/api/me`, opts);
       if (response.status === 404 || response.status === 403 || response.status === 401) {
         response = await fetch(`${API_BASE_URL}/api/auth/user`, opts);

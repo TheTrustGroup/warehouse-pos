@@ -49,7 +49,7 @@ function rowToApi(row: WarehouseRow): Warehouse {
   };
 }
 
-/** GET warehouses. Optional filter by store_id; optional allowedWarehouseIds (scope). */
+/** GET warehouses. Optional filter by store_id; optional allowedWarehouseIds (scope). Deduplicated by code so the UI never shows duplicate warehouses (e.g. two "Main town" from different seeds). */
 export async function getWarehouses(options?: { storeId?: string; allowedWarehouseIds?: string[] | null }): Promise<Warehouse[]> {
   const supabase = getSupabase();
   let query = supabase.from(TABLE).select('*').order('name');
@@ -61,7 +61,15 @@ export async function getWarehouses(options?: { storeId?: string; allowedWarehou
   }
   const { data, error } = await query;
   if (error) throw error;
-  return ((data ?? []) as WarehouseRow[]).map(rowToApi);
+  const rows = (data ?? []) as WarehouseRow[];
+  const byCode = new Map<string, Warehouse>();
+  for (const row of rows) {
+    const code = (row.code ?? '').trim().toUpperCase() || row.id;
+    if (!byCode.has(code)) {
+      byCode.set(code, rowToApi(row));
+    }
+  }
+  return Array.from(byCode.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** GET one warehouse by id. */

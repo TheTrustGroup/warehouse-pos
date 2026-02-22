@@ -42,45 +42,6 @@ function normalizeProductFromRaw(p: any): Product {
   });
 }
 
-/** Collect product lists from all warehouse_products_* and legacy warehouse_products keys, dedupe by id, return normalized list. Used when API fails so previous products still show. */
-function getAllCachedProducts(): Product[] {
-  if (typeof window === 'undefined' || !isStorageAvailable()) return [];
-  try {
-    const storage = window.localStorage;
-    const seen = new Set<string>();
-    const rawList: any[] = [];
-    const legacy = getStoredData<any[]>('warehouse_products', []);
-    if (Array.isArray(legacy)) rawList.push(...legacy);
-    for (let i = 0; i < storage.length; i++) {
-      const key = storage.key(i);
-      if (key && key.startsWith('warehouse_products_')) {
-        try {
-          const item = storage.getItem(key);
-          if (item) {
-            const parsed = JSON.parse(item);
-            if (Array.isArray(parsed)) rawList.push(...parsed);
-          }
-        } catch {
-          /* skip */
-        }
-      }
-    }
-    const out: Product[] = [];
-    for (const p of rawList) {
-      if (p == null || typeof p !== 'object' || !p.id || seen.has(p.id)) continue;
-      seen.add(p.id);
-      try {
-        out.push(normalizeProductFromRaw(p));
-      } catch {
-        /* skip malformed */
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
 /** True when quantityBySize is exactly one row and it's the RPC fallback "One size" / "ONESIZE" (so we should prefer cache's real sizes). */
 function isOnlySyntheticOneSize(quantityBySize: unknown): boolean {
   if (!Array.isArray(quantityBySize) || quantityBySize.length !== 1) return false;
@@ -108,7 +69,7 @@ function getCachedProductsForWarehouse(warehouseId: string): Product[] {
     return [];
   }
 }
-import { loadProductsFromDb, saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
+import { saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
 import { reportError } from '../lib/errorReporting';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { isOfflineEnabled } from '../lib/offlineFeatureFlag';
@@ -420,10 +381,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const localOnly: Product[] = [];
         if (isStorageAvailable()) {
           try {
-            let localList = getStoredData<any[]>(productsCacheKey(wid), []);
-            if (!Array.isArray(localList) || localList.length === 0) localList = getStoredData<any[]>('warehouse_products', []);
-            if (!Array.isArray(localList)) localList = [];
-            for (const p of localList) {
+            const localList = getStoredData<any[]>(productsCacheKey(wid), []);
+            const list = Array.isArray(localList) ? localList : [];
+            for (const p of list) {
               if (!p || typeof p !== 'object' || !p.id || apiIds.has(p.id)) continue;
               try {
                 localOnly.push(normalizeProduct(p));
@@ -475,8 +435,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
           merged = merged.map((p) => (p.id === updated.product.id ? updated.product : p));
         }
-        // Persistence: never show empty if we have cached data (avoid data loss from wrong warehouse or transient API empty)
-        if (merged.length === 0 && (isStorageAvailable() || isIndexedDBAvailable())) {
+        // Fallback only when API returned empty: use only this warehouse's cache so we never show another warehouse's data (e.g. Main Store stats when Main Town is selected).
+        if (merged.length === 0 && isStorageAvailable()) {
           const toProducts = (list: any[]): Product[] => {
             const out: Product[] = [];
             for (const p of list) {
@@ -489,27 +449,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             }
             return out;
           };
-          let fallback: Product[] = [];
-          if (isStorageAvailable()) {
-            try {
-              let raw = getStoredData<any[]>(productsCacheKey(wid), []);
-              if (!Array.isArray(raw) || raw.length === 0) raw = getStoredData<any[]>('warehouse_products', []);
-              fallback = toProducts(Array.isArray(raw) ? raw : []);
-            } catch {
-              /* ignore */
-            }
-          }
-          if (fallback.length === 0 && isIndexedDBAvailable()) {
-            try {
-              const fromDb = await loadProductsFromDb<any>();
-              fallback = toProducts(Array.isArray(fromDb) ? fromDb : []);
-            } catch {
-              /* ignore */
-            }
-          }
-          if (fallback.length === 0) {
-            fallback = getAllCachedProducts();
-          }
+          const raw = getStoredData<any[]>(productsCacheKey(wid), []);
+          const fallback = toProducts(Array.isArray(raw) ? raw : []);
           if (fallback.length > 0) {
             setProducts(fallback);
             if (!silent) setError('Server returned no products for this warehouse. Showing last saved list.');
@@ -529,11 +470,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         listToSet = listToSet.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
         const current = productsRef.current;
-        // Never replace list with empty when we have products — avoids empty-state flash and persistent empty
-        if (listToSet.length === 0 && current.length > 0) {
-          cacheRef.current[wid] = { data: current, ts: Date.now() };
-          if (!silent) setError('Server returned no products for this warehouse. Showing last saved list.');
-          return;
+        // When API returned empty for this warehouse, show empty list so Dashboard/Inventory stats match the selected warehouse (do not keep previous warehouse's list).
+        if (listToSet.length === 0 && !silent) {
+          setError('Server returned no products for this warehouse.');
         }
         // During silent refresh, skip setState when list is equivalent (order-independent) to avoid list jitter on mobile
         const currentById = new Map(current.map((p) => [p.id, p]));
@@ -596,28 +535,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         message = errMsg || 'Failed to load products. Please check your connection.';
       }
       if (!silent) setError(message);
-      if (isIndexedDBAvailable()) {
-        const fromDb = await loadProductsFromDb<any>();
-        if (fromDb.length > 0) {
-          const fallbackList = fromDb.map((p: any) => normalizeProduct(p));
-          setProducts(fallbackList);
-          if (!silent) {
-            setError(null);
-            const now = Date.now();
-            if (now - lastCachedToastAtRef.current >= CACHED_TOAST_COOLDOWN_MS) {
-              lastCachedToastAtRef.current = now;
-              showToast('warning', 'Showing cached data. Tap Retry to refresh.');
-            }
-          }
-          return;
-        }
-      }
-      let localRaw = getStoredData<any[]>(productsCacheKey(effectiveWarehouseId), []);
-      if (!Array.isArray(localRaw) || localRaw.length === 0) localRaw = getStoredData<any[]>('warehouse_products', []);
-      let localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
-      if (localProducts.length === 0) {
-        localProducts = getAllCachedProducts();
-      }
+      // On failure, only show this warehouse's cache so we never display another warehouse's stats (e.g. Main Store when Main Town is selected).
+      const localRaw = getStoredData<any[]>(productsCacheKey(effectiveWarehouseId), []);
+      const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
       setProducts(localProducts);
       if (localProducts.length > 0 && !silent) {
         setError(null);
@@ -641,19 +561,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const ac = new AbortController();
     let hadCache = false;
 
-    const toProducts = (list: any[]): Product[] => {
-      const out: Product[] = [];
-      for (const p of list) {
-        if (p == null || typeof p !== 'object') continue;
-        try {
-          out.push(normalizeProduct(p));
-        } catch {
-          // skip malformed cache entries
-        }
-      }
-      return out;
-    };
-
     // Synchronous read: only this warehouse's cache — never show another warehouse's list when switching.
     const productsFromCache = getCachedProductsForWarehouse(effectiveWarehouseId);
     if (productsFromCache.length > 0) {
@@ -661,28 +568,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       setError(null);
       hadCache = true;
+    } else {
+      // No cache for this warehouse: clear list immediately so Dashboard/Inventory never show the previous warehouse's stats under the new warehouse's name.
+      setProducts([]);
+      setIsLoading(true);
+      setError(null);
     }
 
     (async () => {
       // On warehouse change always fetch fresh for the selected warehouse (bypass cache) so the list/quantities match.
-      const loadProductsPromise = loadProducts(ac.signal, hadCache ? { silent: true, bypassCache: true } : { bypassCache: true });
-      if (!hadCache && isIndexedDBAvailable()) {
-        try {
-          const fromDb = await loadProductsFromDb<any>();
-          const list = Array.isArray(fromDb) ? fromDb : [];
-          const productsFromCache = toProducts(list);
-          if (productsFromCache.length > 0 && mountedRef.current) {
-            setProducts(productsFromCache);
-            setIsLoading(false);
-            setError(null);
-            hadCache = true;
-          }
-        } catch {
-          // ignore cache read errors
-        }
-      }
-      if (!mountedRef.current) return;
-      await loadProductsPromise;
+      await loadProducts(ac.signal, hadCache ? { silent: true, bypassCache: true } : { bypassCache: true });
     })();
 
     return () => {
