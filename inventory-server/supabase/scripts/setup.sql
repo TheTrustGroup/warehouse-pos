@@ -4,6 +4,12 @@
 -- This is IDEMPOTENT — safe to run multiple times.
 -- It creates missing tables, fixes inventory sync issues,
 -- and sets up the atomic RPC if not already present.
+--
+-- CANONICAL SCHEMA (global products):
+--   warehouse_products(id, sku, name, ...) — NO warehouse_id. One row per product.
+--   warehouse_inventory(warehouse_id, product_id, quantity) — links warehouse to product.
+--   warehouse_inventory_by_size(warehouse_id, product_id, size_code, quantity) — per-size qty.
+--   warehouse_id is only on inventory tables; never on warehouse_products.
 -- ============================================================
 
 -- ─────────────────────────────────────────────────────────────
@@ -138,34 +144,42 @@ WHERE wi.warehouse_id = sub.warehouse_id
   AND wi.quantity     != sub.total_qty;
 
 -- ─────────────────────────────────────────────────────────────
--- PART 4: Create missing warehouse_inventory rows for products
--- that have no row at all (products with qty=null instead of 0)
+-- PART 4: Create missing warehouse_inventory rows
+-- Schema: warehouse_products has no warehouse_id; warehouse_id comes from
+-- warehouse_inventory / warehouse_inventory_by_size. We derive (warehouse_id, product_id)
+-- from per-size data and join to warehouse_products by product id only.
 -- ─────────────────────────────────────────────────────────────
 INSERT INTO warehouse_inventory (warehouse_id, product_id, quantity, updated_at)
 SELECT
-  wp.warehouse_id,
-  wp.id AS product_id,
-  COALESCE((
-    SELECT SUM(wbs.quantity)
-    FROM warehouse_inventory_by_size wbs
-    WHERE wbs.warehouse_id = wp.warehouse_id AND wbs.product_id = wp.id
-  ), 0) AS quantity,
+  sub.warehouse_id,
+  sub.product_id,
+  sub.total_qty,
   now() AS updated_at
-FROM warehouse_products wp
+FROM (
+  SELECT
+    wbs.warehouse_id,
+    wbs.product_id,
+    COALESCE(SUM(wbs.quantity), 0) AS total_qty
+  FROM warehouse_inventory_by_size wbs
+  GROUP BY wbs.warehouse_id, wbs.product_id
+) sub
+JOIN warehouse_products wp ON wp.id = sub.product_id
 WHERE NOT EXISTS (
   SELECT 1
   FROM warehouse_inventory wi
-  WHERE wi.warehouse_id = wp.warehouse_id AND wi.product_id = wp.id
+  WHERE wi.warehouse_id = sub.warehouse_id AND wi.product_id = sub.product_id
 )
 ON CONFLICT (warehouse_id, product_id) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────
--- PART 5: Create/replace the atomic update RPC
--- This is faster than 3 separate queries and race-condition safe.
--- The route files fall back to 3 queries if this doesn't exist,
--- but having it is recommended for production.
+-- PART 5: (Re)create the atomic update RPC
+-- Drop first so CREATE succeeds even when the old function had parameter
+-- defaults (Postgres 42P13: cannot remove parameter defaults from existing function).
+-- Route code falls back to 3-step update if this RPC is missing.
 -- ─────────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION update_warehouse_product_atomic(
+DROP FUNCTION IF EXISTS public.update_warehouse_product_atomic(uuid, uuid, jsonb, int, int, jsonb);
+
+CREATE FUNCTION public.update_warehouse_product_atomic(
   p_id               uuid,
   p_warehouse_id     uuid,
   p_row              jsonb,
@@ -184,7 +198,7 @@ DECLARE
   v_size_qty     int;
   v_result       jsonb;
 BEGIN
-  -- Optimistic lock: only update if version matches
+  -- Optimistic lock: only update if version matches (global products: no warehouse_id on wp)
   UPDATE warehouse_products wp
   SET
     sku           = COALESCE((p_row->>'sku')::text,           wp.sku),
@@ -202,9 +216,8 @@ BEGIN
     images        = COALESCE((p_row->'images'),               wp.images),
     version       = wp.version + 1,
     updated_at    = v_updated_at
-  WHERE wp.id           = p_id
-    AND wp.warehouse_id = p_warehouse_id
-    AND wp.version      = p_current_version;
+  WHERE wp.id      = p_id
+    AND wp.version = p_current_version;
 
   GET DIAGNOSTICS v_new_version = ROW_COUNT;
 
@@ -220,15 +233,12 @@ BEGIN
 
   -- Handle per-size rows (null = preserve, [] = clear, [...] = replace)
   IF p_quantity_by_size IS NOT NULL THEN
-    -- Delete all existing size rows
     DELETE FROM warehouse_inventory_by_size
     WHERE warehouse_id = p_warehouse_id AND product_id = p_id;
 
-    -- Insert new size rows (if array is non-empty)
     IF jsonb_array_length(p_quantity_by_size) > 0 THEN
       FOR v_entry IN SELECT * FROM jsonb_array_elements(p_quantity_by_size)
       LOOP
-        -- Support both camelCase (sizeCode) and snake_case (size_code)
         v_size_code := upper(trim(COALESCE(v_entry->>'sizeCode', v_entry->>'size_code', '')));
         v_size_qty  := COALESCE((v_entry->>'quantity')::int, 0);
 
@@ -244,17 +254,16 @@ BEGIN
     END IF;
   END IF;
 
-  -- Return updated product row
+  -- Return updated product row (global: one row per id)
   SELECT to_jsonb(wp) INTO v_result
   FROM warehouse_products wp
-  WHERE wp.id = p_id AND wp.warehouse_id = p_warehouse_id;
+  WHERE wp.id = p_id;
 
   RETURN v_result;
 END;
 $$;
 
--- Grant execute permission to authenticated users
-GRANT EXECUTE ON FUNCTION update_warehouse_product_atomic(uuid, uuid, jsonb, int, int, jsonb)
+GRANT EXECUTE ON FUNCTION public.update_warehouse_product_atomic(uuid, uuid, jsonb, int, int, jsonb)
   TO authenticated, anon, service_role;
 
 -- ─────────────────────────────────────────────────────────────

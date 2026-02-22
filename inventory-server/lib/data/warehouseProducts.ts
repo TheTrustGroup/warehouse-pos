@@ -215,7 +215,7 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
       const sizeCodeNorm = code.replace(/\s+/g, ' ');
       const { data: existing } = await supabase.from('size_codes').select('size_code').eq('size_code', sizeCodeNorm).maybeSingle();
       if (!existing) {
-        await supabase.from('size_codes').insert({ size_code: sizeCodeNorm, size_label: code.trim(), size_order: 999 });
+        await supabase.from('size_codes').insert({ size_code: sizeCodeNorm, size_label: code.trim(), sort_order: 999 });
       }
       const { error: errSize } = await supabase.from('warehouse_inventory_by_size').insert({
         warehouse_id: warehouseId,
@@ -291,17 +291,17 @@ function filterSizes(rows: Array<{ sizeCode: string; quantity: number }>): Array
   );
 }
 
+/** Build row for warehouse_products only (global products: no warehouse_id on table). */
 function buildProductRow(
   b: Record<string, unknown>,
   id: string,
-  wid: string,
+  _wid: string,
   sizeKind: string,
   now: string,
   version: number
 ): Record<string, unknown> {
   return {
     id,
-    warehouse_id: wid,
     sku: b.sku ?? '',
     barcode: b.barcode ?? null,
     name: b.name ?? '',
@@ -329,7 +329,7 @@ async function manualProductUpdate(
   sizeRows: Array<{ sizeCode: string; quantity: number }> | null,
   now: string
 ): Promise<void> {
-  await supabase.from('warehouse_products').update(row).eq('id', id).eq('warehouse_id', wid);
+  await supabase.from('warehouse_products').update(row).eq('id', id);
   await supabase
     .from('warehouse_inventory')
     .upsert(
@@ -376,7 +376,6 @@ export async function updateWarehouseProduct(
     .from('warehouse_products')
     .select('id, version, size_kind')
     .eq('id', id)
-    .eq('warehouse_id', wid)
     .single();
 
   if (fetchErr || !existing) {
@@ -461,6 +460,7 @@ export async function updateWarehouseProduct(
   return updated;
 }
 
+/** Remove product from this warehouse; delete product row only if no warehouse references it. */
 export async function deleteWarehouseProduct(id: string, warehouseId: string): Promise<void> {
   const wid = warehouseId.trim();
   if (!wid) throw new Error('warehouseId required');
@@ -468,8 +468,15 @@ export async function deleteWarehouseProduct(id: string, warehouseId: string): P
   const supabase = getSupabase();
   await supabase.from('warehouse_inventory_by_size').delete().eq('warehouse_id', wid).eq('product_id', id);
   await supabase.from('warehouse_inventory').delete().eq('warehouse_id', wid).eq('product_id', id);
-  const { error } = await supabase.from('warehouse_products').delete().eq('id', id).eq('warehouse_id', wid);
-  if (error) throw new Error(error.message);
+  const { data: remaining } = await supabase
+    .from('warehouse_inventory')
+    .select('warehouse_id')
+    .eq('product_id', id)
+    .limit(1);
+  if (!remaining || remaining.length === 0) {
+    const { error } = await supabase.from('warehouse_products').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
 }
 
 export async function deleteWarehouseProductsBulk(_ids: string[]): Promise<void> {
