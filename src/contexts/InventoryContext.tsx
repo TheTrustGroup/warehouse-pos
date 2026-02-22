@@ -498,7 +498,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           if (aSizes.length !== bSizes.length) return false;
           return aSizes.every((s, j) => (bSizes[j] && s.sizeCode === bSizes[j].sizeCode && s.quantity === bSizes[j].quantity));
         });
-        const skipStateUpdate = silent && sameData;
+        // When API returned empty for this warehouse, always update state so Dashboard/Inventory show 0 (never keep previous warehouse's list).
+        const skipStateUpdate = listToSet.length > 0 && silent && sameData;
         if (!skipStateUpdate) {
           setProducts(listToSet);
           if (!silent) setError(null);
@@ -514,7 +515,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           mirrorProductsFromApi(merged).catch(() => {});
         }
         logInventoryRead({ listLength: listToSet.length, environment: import.meta.env.PROD ? 'production' : 'development' });
-        if (isStorageAvailable() && listToSet.length > 0) {
+        // Persist per-warehouse list (including []) so Dashboard/Inventory never show another warehouse's cached data.
+        if (isStorageAvailable()) {
           setStoredData(productsCacheKey(wid), listToSet);
         }
       } catch (apiErr) {
