@@ -24,6 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_wibs_warehouse_product
 
 -- ─────────────────────────────────────────────────────────────
 -- PART 2: Ensure size_codes table exists and is populated
+-- Safe when table already exists with older schema (e.g. size_order, no size_group).
 -- ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS size_codes (
   size_code  text PRIMARY KEY,
@@ -31,6 +32,31 @@ CREATE TABLE IF NOT EXISTS size_codes (
   size_group text NOT NULL DEFAULT 'general',
   sort_order int  NOT NULL DEFAULT 0
 );
+
+-- Migrate older schema: add missing columns or rename size_order → sort_order
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'size_codes' AND column_name = 'size_group'
+  ) THEN
+    ALTER TABLE public.size_codes ADD COLUMN size_group text NOT NULL DEFAULT 'general';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'size_codes' AND column_name = 'sort_order'
+  ) THEN
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'size_codes' AND column_name = 'size_order'
+    ) THEN
+      ALTER TABLE public.size_codes RENAME COLUMN size_order TO sort_order;
+    ELSE
+      ALTER TABLE public.size_codes ADD COLUMN sort_order int NOT NULL DEFAULT 0;
+    END IF;
+  END IF;
+END $$;
 
 -- Insert standard EU shoe sizes (for kids footwear)
 INSERT INTO size_codes (size_code, size_label, size_group, sort_order) VALUES
@@ -65,7 +91,10 @@ INSERT INTO size_codes (size_code, size_label, size_group, sort_order) VALUES
   ('L',    'L',     'apparel', 33),
   ('XL',   'XL',    'apparel', 34),
   ('XXL',  'XXL',   'apparel', 35)
-ON CONFLICT (size_code) DO NOTHING;
+ON CONFLICT (size_code) DO UPDATE SET
+  size_label = EXCLUDED.size_label,
+  size_group = EXCLUDED.size_group,
+  sort_order = EXCLUDED.sort_order;
 
 -- ─────────────────────────────────────────────────────────────
 -- PART 2b: Ensure warehouse_inventory has unique (warehouse_id, product_id)
