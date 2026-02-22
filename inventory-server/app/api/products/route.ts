@@ -26,7 +26,6 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category') ?? undefined;
     const lowStock = searchParams.get('low_stock') === '1' || searchParams.get('low_stock') === 'true';
     const outOfStock = searchParams.get('out_of_stock') === '1' || searchParams.get('out_of_stock') === 'true';
-    const pos = searchParams.get('pos') === '1' || searchParams.get('pos') === 'true';
     const result = await getWarehouseProducts(warehouseId, {
       limit: limit != null ? parseInt(limit, 10) : undefined,
       offset: offset != null ? parseInt(offset, 10) : undefined,
@@ -34,7 +33,6 @@ export async function GET(request: NextRequest) {
       category,
       lowStock,
       outOfStock,
-      pos,
     });
     return NextResponse.json({ data: result.data, total: result.total });
   } catch (e) {
@@ -51,20 +49,19 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const requestId = getRequestId(request);
   let body: Record<string, unknown>;
-  const scope = await getScopeForUser(auth.email);
-  if (scope.allowedWarehouseIds.length > 0 && !scope.allowedWarehouseIds.includes(warehouseId)) {
-    return NextResponse.json(
-      { error: 'Forbidden: you do not have access to this warehouse' },
-      { status: 403, headers: h }
-    );
-  }
-
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
   }
   const warehouseId = (body?.warehouseId as string) ?? undefined;
+  const scope = await getScopeForUser(auth.email);
+  if (scope.allowedWarehouseIds.length > 0 && warehouseId && !scope.allowedWarehouseIds.includes(warehouseId)) {
+    return NextResponse.json(
+      { error: 'Forbidden: you do not have access to this warehouse' },
+      { status: 403 }
+    );
+  }
   try {
     const created = await createWarehouseProduct(body);
     const entityId = (created as { id?: string })?.id ?? '';
@@ -93,39 +90,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { message: e instanceof Error ? e.message : 'Failed to create product' },
       { status: 400 }
-    );
-  }
-}
-
-// ── POST /api/products (create product) ─────────────────────────────────────
-
-export async function POST(req: NextRequest) {
-  const token = getBearerToken(req);
-  if (!token) return unauthorized();
-
-  let body: Record<string, unknown>;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS });
-  }
-
-  const scope = await getScopeForUser(auth.email);
-  if (scope.allowedWarehouseIds.length > 0 && !scope.allowedWarehouseIds.includes(warehouseId)) {
-    return NextResponse.json(
-      { error: 'Forbidden: you do not have access to this warehouse' },
-      { status: 403, headers: h }
-    );
-  }
-
-  try {
-    const created = await createWarehouseProduct(body);
-    return NextResponse.json(created, { status: 201, headers: CORS });
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to create product';
-    return NextResponse.json(
-      { error: message },
-      { status: 400, headers: CORS }
     );
   }
 }
