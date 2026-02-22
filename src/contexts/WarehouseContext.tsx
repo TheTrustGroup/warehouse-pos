@@ -28,6 +28,13 @@ export const DEFAULT_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000001';
 
 const STORAGE_KEY = 'warehouse_current_id';
 
+/** DC was consolidated into Main Store; never show in UI (backend also excludes it). */
+function excludeRemovedWarehouses(arr: Warehouse[]): Warehouse[] {
+  return arr.filter(
+    (w) => w.name !== 'DC' && (w as Warehouse & { code?: string }).code !== 'DC'
+  );
+}
+
 function dedupeWarehouses(arr: Warehouse[]): Warehouse[] {
   const seen = new Set<string>();
   return arr.filter((w: Warehouse) => {
@@ -73,7 +80,8 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
         timeoutMs: options?.timeoutMs,
       });
       const arr = Array.isArray(list) ? list : [];
-      const deduped = dedupeWarehouses(arr);
+      const withoutRemoved = excludeRemovedWarehouses(arr);
+      const deduped = dedupeWarehouses(withoutRemoved);
       setWarehouses(deduped);
       if (deduped.length > 0) {
         setCurrentWarehouseIdState((prev) => {

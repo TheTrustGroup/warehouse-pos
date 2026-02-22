@@ -49,7 +49,10 @@ function rowToApi(row: WarehouseRow): Warehouse {
   };
 }
 
-/** GET warehouses. Optional filter by store_id; optional allowedWarehouseIds (scope). */
+/** DC warehouse was consolidated into Main Store; never expose it. Migration: 20250222110000_consolidate_main_store_remove_dc.sql */
+const EXCLUDED_WAREHOUSE_CODES = ['DC'];
+
+/** GET warehouses. Optional filter by store_id; optional allowedWarehouseIds (scope). Excludes removed warehouses (e.g. DC). */
 export async function getWarehouses(options?: { storeId?: string; allowedWarehouseIds?: string[] | null }): Promise<Warehouse[]> {
   const supabase = getSupabase();
   let query = supabase.from(TABLE).select('*').order('name');
@@ -61,7 +64,9 @@ export async function getWarehouses(options?: { storeId?: string; allowedWarehou
   }
   const { data, error } = await query;
   if (error) throw error;
-  return ((data ?? []) as WarehouseRow[]).map(rowToApi);
+  const rows = (data ?? []) as WarehouseRow[];
+  const filtered = rows.filter((row) => !EXCLUDED_WAREHOUSE_CODES.includes(row.code));
+  return filtered.map(rowToApi);
 }
 
 /** GET one warehouse by id. */
