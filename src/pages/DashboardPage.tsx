@@ -17,6 +17,7 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle } from 'lucide-react';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
@@ -113,7 +114,7 @@ function StatCard({
 }: {
   label:   string;
   value:   string | number;
-  icon:    React.ComponentType<{ className?: string; size?: number }>;
+  icon:    LucideIcon;
   accent?: boolean;
   warning?: boolean;
   danger?:  boolean;
@@ -135,7 +136,7 @@ function StatCard({
     <div className={`flex flex-col justify-between p-6 rounded-2xl border ${bg} shadow-sm`}>
       <div className="flex items-center justify-between mb-4">
         <span className="text-[13px] font-semibold text-slate-500">{label}</span>
-        <Icon className={iconColor} size={28} strokeWidth={1.8} aria-hidden />
+        <Icon className={iconColor} size={28} aria-hidden />
       </div>
       <p className={`text-[28px] font-black tabular-nums leading-none ${valColor}`}>{value}</p>
     </div>
