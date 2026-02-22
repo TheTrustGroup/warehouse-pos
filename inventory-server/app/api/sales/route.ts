@@ -139,7 +139,13 @@ export async function POST(request: NextRequest) {
       p_lines: pLines,
     });
     if (error) throw error;
-    const result = data as { id?: string; receiptId?: string; createdAt?: string } | null;
+    const result = data as {
+      id?: string;
+      receiptId?: string;
+      receipt_id?: string;
+      createdAt?: string;
+      created_at?: string;
+    } | null;
     if (!result) {
       return NextResponse.json({ message: 'record_sale returned no data' }, { status: 500 });
     }
