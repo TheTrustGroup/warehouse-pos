@@ -47,9 +47,14 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
+    type ScopeInput = { storeId?: unknown; warehouseId?: unknown };
     const scopes = raw
-      .filter((s: unknown) => s && typeof s === 'object' && typeof (s as any).storeId === 'string' && typeof (s as any).warehouseId === 'string')
-      .map((s: { storeId: string; warehouseId: string }) => ({ storeId: String(s.storeId).trim(), warehouseId: String(s.warehouseId).trim() }));
+      .filter((s: unknown): s is ScopeInput => {
+        if (!s || typeof s !== 'object') return false;
+        const o = s as ScopeInput;
+        return typeof o.storeId === 'string' && typeof o.warehouseId === 'string';
+      })
+      .map((s) => ({ storeId: String(s.storeId).trim(), warehouseId: String(s.warehouseId).trim() }));
     await setScopesForUser(email, scopes);
     return NextResponse.json({ ok: true, scopes });
   } catch (e) {

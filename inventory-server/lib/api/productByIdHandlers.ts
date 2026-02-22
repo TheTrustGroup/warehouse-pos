@@ -2,6 +2,11 @@
  * Shared handlers for GET/PUT/DELETE product by id.
  * Used by app/api/products/[id] and app/admin/api/products/[id].
  * Single implementation; routes differ only by auth (requireAuth vs requireAdmin) and CORS.
+ *
+ * warehouse_id contract:
+ * - GET: query param warehouse_id required.
+ * - PUT/DELETE: body warehouseId or warehouse_id (or query for DELETE); session can override via getEffectiveWarehouseId on public API.
+ * - All product-by-id operations require an effective warehouse.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
