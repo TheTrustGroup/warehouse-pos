@@ -154,6 +154,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   offlineRef.current = offline;
   /** Mirror of current products for equivalence check during silent refresh (avoids setState when nothing changed → no jitter). */
   const productsRef = useRef<Product[]>([]);
+  /** Current warehouse id so in-flight loadProducts can discard stale responses (avoid Main Store data overwriting Main Town after switch). */
+  const effectiveWarehouseIdRef = useRef<string>(effectiveWarehouseId);
+  useEffect(() => {
+    effectiveWarehouseIdRef.current = effectiveWarehouseId;
+  }, [effectiveWarehouseId]);
   /** Throttle silent refresh so poll + visibility + mount don't cause back-to-back requests (reduces list jitter). */
   const lastSilentRefreshAtRef = useRef<number>(0);
   const SILENT_REFRESH_THROTTLE_MS = 2000;
@@ -372,6 +377,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           setError(parsed.message);
           return;
         }
+        // Discard response if user switched warehouse so we never show previous warehouse's data (e.g. Main Store stats when Main Town is selected).
+        if (effectiveWarehouseIdRef.current !== wid) {
+          setBackgroundRefreshing(false);
+          setIsLoading(false);
+          return;
+        }
         let apiProducts = parsed.items.map((p) => normalizeProduct(p));
         if (apiProducts.length >= INITIAL_LIMIT) {
           const path2 = productsPath('/api/products', { limit: REMAINING_LIMIT, offset: INITIAL_LIMIT });
@@ -446,6 +457,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         // Fallback only when API returned empty: use only this warehouse's cache so we never show another warehouse's data (e.g. Main Store stats when Main Town is selected).
         if (merged.length === 0 && isStorageAvailable()) {
+          if (effectiveWarehouseIdRef.current !== wid) {
+            setBackgroundRefreshing(false);
+            setIsLoading(false);
+            return;
+          }
           const toProducts = (list: any[]): Product[] => {
             const out: Product[] = [];
             for (const p of list) {
@@ -478,6 +494,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           }
         }
         listToSet = listToSet.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
+        // Do not apply if user switched warehouse (avoids overwriting Main Town with Main Store data from in-flight request).
+        if (effectiveWarehouseIdRef.current !== wid) {
+          setBackgroundRefreshing(false);
+          setIsLoading(false);
+          return;
+        }
         const current = productsRef.current;
         // When API returned empty for this warehouse, show empty list so Dashboard/Inventory stats match the selected warehouse (do not keep previous warehouse's list).
         if (listToSet.length === 0 && !silent) {

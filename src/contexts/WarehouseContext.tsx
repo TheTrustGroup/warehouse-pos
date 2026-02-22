@@ -41,7 +41,27 @@ function dedupeWarehouses(list: Warehouse[]): Warehouse[] {
     if (nameNorm && nameNorm !== 'main store' && isDefaultId) continue;
     byKey.set(key, w);
   }
-  return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
+  // Ensure unique ids so the dropdown never has two options with the same value (would send wrong warehouse_id when selecting the second).
+  const byId = new Map<string, Warehouse>();
+  for (const w of Array.from(byKey.values())) {
+    const id = w.id;
+    if (!byId.has(id)) {
+      byId.set(id, w);
+      continue;
+    }
+    const existing = byId.get(id)!;
+    const nameNorm = (w.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const code = (w.code ?? '').trim().toUpperCase();
+    const existingCode = (existing.code ?? '').trim().toUpperCase();
+    const preferW =
+      (id === DEFAULT_WAREHOUSE_ID && nameNorm === 'main store') ||
+      (code === CANONICAL_MAINTOWN_CODE && existingCode !== CANONICAL_MAINTOWN_CODE);
+    const preferExisting =
+      (id === DEFAULT_WAREHOUSE_ID && (existing.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ') === 'main store') ||
+      existingCode === CANONICAL_MAINTOWN_CODE;
+    if (preferW && !preferExisting) byId.set(id, w);
+  }
+  return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 interface WarehouseContextType {
