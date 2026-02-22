@@ -17,15 +17,14 @@ import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { useWarehouse } from '../contexts/WarehouseContext';
+import type { Warehouse } from '../types';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
 type FilterKey = 'all' | string;
 type SortKey   = 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc';
 
-interface InventoryPageProps {
-  apiBaseUrl?: string; // kept for backward compat but unused
-}
+interface InventoryPageProps {}
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -33,7 +32,7 @@ const POLL_MS    = 30_000;
 const CATEGORIES = ['Sneakers', 'Slippers', 'Boots', 'Sandals', 'Accessories'];
 
 /** Fallback list when WarehouseContext has not yet loaded. IDs must match backend. */
-const FALLBACK_WAREHOUSES = [
+const FALLBACK_WAREHOUSES: Pick<Warehouse, 'id' | 'name'>[] = [
   { id: '00000000-0000-0000-0000-000000000001', name: 'Main Store' },
   { id: '00000000-0000-0000-0000-000000000002', name: 'Main Town' },
 ];
@@ -268,7 +267,7 @@ const BoxIcon = () => (
 
 // ── Main Page ──────────────────────────────────────────────────────────────
 
-export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPageProps) {
+export default function InventoryPage(_props: InventoryPageProps) {
 
   // ── Warehouse from context (SINGLE SOURCE OF TRUTH) ──────────────────────
   const {

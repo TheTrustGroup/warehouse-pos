@@ -12,6 +12,7 @@ dist
 # IDE / OS
 .idea
 .vscode
+.cursor
 .DS_Store
 *.log
 npm-debug.log*

@@ -26,3 +26,8 @@ Set these in your host (e.g. Vercel, Railway) or in `.env.local` for local runs.
 | `ALLOWED_ORIGIN_SUFFIXES` | No | Comma-separated hostname suffixes (e.g. `.vercel.app`). Request origin is allowed if its hostname ends with one. Defaults include `.vercel.app`, `.extremedeptkidz.com` so health and API work from Vercel frontends. |
 
 **Local:** Copy `inventory-server/.env.example` to `inventory-server/.env` or `.env.local` and set the required values.
+
+## Inventory (frontend)
+
+- **Warehouse scope:** Dashboard, Inventory, and POS use the warehouse selected in the sidebar (single source of truth in `WarehouseContext`). All product and sales requests include `warehouse_id`.
+- **API:** Products and size-codes are loaded from `VITE_API_BASE_URL` (e.g. `GET /api/products?warehouse_id=...`, `GET /api/size-codes?warehouse_id=...`). Product create/update/delete use the same base URL; delete is `DELETE /api/products/:id` with body `{ warehouseId }`.

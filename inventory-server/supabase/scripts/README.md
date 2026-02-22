@@ -11,6 +11,10 @@ Run in Supabase SQL Editor unless noted.
 - **Consolidation:** Migration `20250222110000_consolidate_main_store_remove_dc.sql` merges DC inventory into MAIN and removes DC. Run once if you had DC.
 - **Orphan cleanup:** Migration `20250222100000_clean_orphans_after_main_town_merge.sql` removes inventory/user_scopes for deleted warehouse IDs.
 
+### Rollback (DC consolidation)
+
+There is no safe rollback for `20250222110000_consolidate_main_store_remove_dc.sql` after it has run: DC rows and inventory are deleted and merged into MAIN. If you must re-create DC for testing, re-insert a warehouse with code `DC` and link it to the Main Store; the app will still exclude DC from the warehouse list (see `getWarehouses` and `WarehouseContext`).
+
 ## Scripts
 
 | Script | Purpose |

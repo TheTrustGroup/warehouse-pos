@@ -32,6 +32,10 @@ npm run build
 npm run preview
 ```
 
+### Configuration
+
+Set `VITE_API_BASE_URL` for the backend API (required in production). See [docs/ENVIRONMENT.md](./docs/ENVIRONMENT.md) for all env vars and inventory/warehouse behaviour.
+
 ## 🎨 Design System
 
 ### Glass Morphism
