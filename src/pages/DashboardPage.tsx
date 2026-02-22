@@ -17,6 +17,7 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
+import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle } from 'lucide-react';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 
@@ -100,24 +101,19 @@ async function apiFetch<T = unknown>(path: string): Promise<T> {
   }
 }
 
-// ── Icons ─────────────────────────────────────────────────────────────────
-
-const CartIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-  </svg>
-);
-
 // ── Stat card ─────────────────────────────────────────────────────────────
 
 function StatCard({
-  label, value, icon, accent = false, warning = false, danger = false,
+  label,
+  value,
+  icon: Icon,
+  accent = false,
+  warning = false,
+  danger = false,
 }: {
   label:   string;
   value:   string | number;
-  icon:    string;
+  icon:    React.ComponentType<{ className?: string; size?: number }>;
   accent?: boolean;
   warning?: boolean;
   danger?:  boolean;
@@ -131,11 +127,15 @@ function StatCard({
                    warning ? 'text-amber-500' :
                              'text-slate-900';
 
+  const iconColor = danger  ? 'text-red-500'   :
+                    warning ? 'text-amber-500' :
+                              'text-slate-400';
+
   return (
     <div className={`flex flex-col justify-between p-6 rounded-2xl border ${bg} shadow-sm`}>
       <div className="flex items-center justify-between mb-4">
         <span className="text-[13px] font-semibold text-slate-500">{label}</span>
-        <span className="text-2xl">{icon}</span>
+        <Icon className={iconColor} size={28} strokeWidth={1.8} aria-hidden />
       </div>
       <p className={`text-[28px] font-black tabular-nums leading-none ${valColor}`}>{value}</p>
     </div>
@@ -156,7 +156,7 @@ function LowStockTable({ products }: { products: Product[] }) {
   if (alerts.length === 0) {
     return (
       <div className="flex items-center gap-3 py-6 px-4 text-emerald-600">
-        <span className="text-xl">✅</span>
+        <CheckCircle className="w-6 h-6 flex-shrink-0" aria-hidden />
         <span className="text-[14px] font-semibold">All products are sufficiently stocked</span>
       </div>
     );
@@ -283,7 +283,7 @@ export default function DashboardPage() {
              className="flex items-center gap-2 h-10 px-5 rounded-xl bg-red-500 hover:bg-red-600
                         text-white text-[14px] font-bold transition-colors
                         shadow-[0_4px_12px_rgba(239,68,68,0.3)]">
-            <CartIcon/>
+            <ShoppingCart className="w-5 h-5" aria-hidden />
             New sale
           </a>
         </div>
@@ -303,7 +303,7 @@ export default function DashboardPage() {
         {/* ── Error ── */}
         {error && !loading && (
           <div className="flex items-center gap-3 p-4 rounded-2xl bg-red-50 border border-red-100">
-            <span className="text-red-500 text-lg">⚠</span>
+            <AlertTriangle className="w-6 h-6 flex-shrink-0 text-red-500" aria-hidden />
             <div>
               <p className="text-[14px] font-bold text-red-700">Failed to load data</p>
               <p className="text-[12px] text-red-500 mt-0.5">{error}</p>
@@ -320,24 +320,24 @@ export default function DashboardPage() {
           <StatCard
             label="Total Stock Value"
             value={loading ? '—' : formatGHC(stats.totalStockValue)}
-            icon="💰"
+            icon={DollarSign}
             accent
           />
           <StatCard
             label="Total Products"
             value={loading ? '—' : stats.totalProducts}
-            icon="📦"
+            icon={Package}
           />
           <StatCard
             label="Low Stock Items"
             value={loading ? '—' : stats.lowStockCount + stats.outOfStockCount}
-            icon="⚠️"
+            icon={AlertTriangle}
             warning={stats.lowStockCount + stats.outOfStockCount > 0}
           />
           <StatCard
             label="Today's Sales"
             value={loading ? '—' : formatGHC(stats.todaysSales)}
-            icon="🧾"
+            icon={Receipt}
           />
         </div>
 

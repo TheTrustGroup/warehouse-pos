@@ -23,5 +23,6 @@ Set these in your host (e.g. Vercel, Railway) or in `.env.local` for local runs.
 | `SESSION_SECRET` | **Yes** (production) | Session signing secret, min 16 chars. |
 | `BASE_URL` | No | Base URL of this API (health checks). Default: `http://localhost:3001`. |
 | `ALLOWED_ORIGINS` | No | Comma-separated CORS origins. Defaults in lib/cors.ts if unset. |
+| `ALLOWED_ORIGIN_SUFFIXES` | No | Comma-separated hostname suffixes (e.g. `.vercel.app`). Request origin is allowed if its hostname ends with one. Defaults include `.vercel.app`, `.extremedeptkidz.com` so health and API work from Vercel frontends. |
 
 **Local:** Copy `inventory-server/.env.example` to `inventory-server/.env` or `.env.local` and set the required values.
