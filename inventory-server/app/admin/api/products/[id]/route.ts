@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getWarehouseProductById, updateWarehouseProduct, deleteWarehouseProduct } from '@/lib/data/warehouseProducts';
+import { getWarehouseProductById, updateWarehouseProduct, deleteWarehouseProduct, type PutProductBody } from '@/lib/data/warehouseProducts';
 import { requireAdmin } from '@/lib/auth/session';
 import { logDurability } from '@/lib/data/durabilityLogger';
 
@@ -42,13 +42,13 @@ export async function PUT(
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   const requestId = getRequestId(request);
-  let body: Record<string, unknown>;
+  let body: PutProductBody;
   try {
-    body = await request.json();
+    body = (await request.json()) as PutProductBody;
   } catch {
     return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
   }
-  const warehouseId = (body?.warehouseId as string) ?? undefined;
+  const warehouseId = body?.warehouseId ?? body?.warehouse_id ?? undefined;
   try {
     const updated = await updateWarehouseProduct(id, body);
     logDurability({

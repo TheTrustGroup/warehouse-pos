@@ -50,6 +50,32 @@ export interface ProductRecord {
   updatedAt: string;
 }
 
+/** API body for PUT /api/products/:id. Accepts camelCase; warehouse_id accepted as alias. */
+export interface PutProductBody {
+  warehouseId?: string;
+  warehouse_id?: string;
+  quantityBySize?: Array<{ sizeCode?: string; size_code?: string; quantity?: number }>;
+  quantity_by_size?: Array<{ sizeCode?: string; size_code?: string; quantity?: number }>;
+  sizeKind?: 'na' | 'one_size' | 'sized';
+  size_kind?: string;
+  quantity?: number;
+  sku?: string;
+  barcode?: string | null;
+  name?: string;
+  description?: string | null;
+  category?: string;
+  sellingPrice?: number;
+  selling_price?: number;
+  costPrice?: number;
+  cost_price?: number;
+  reorderLevel?: number;
+  reorder_level?: number;
+  location?: Record<string, string> | null;
+  supplier?: Record<string, string> | null;
+  tags?: string[];
+  images?: string[];
+}
+
 // ── getWarehouseProducts (replaces existing function) ─────────────────────
 //
 // CHANGE from existing code:
@@ -270,16 +296,17 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
 // ── updateWarehouseProduct: size-aware atomic update ───────────────────────
 // Uses update_warehouse_product_atomic RPC only (no fallback).
 
-function normSizeKind(b: Record<string, unknown>, fallback: string): string {
+function normSizeKind(b: PutProductBody | Record<string, unknown>, fallback: string): string {
   const s = String(b.sizeKind ?? b.size_kind ?? fallback ?? 'na').toLowerCase().trim();
   return s === 'sized' ? 'sized' : s === 'one_size' ? 'one_size' : 'na';
 }
 
-function parseRawSizes(b: Record<string, unknown>): Array<{ sizeCode: string; quantity: number }> {
-  const arr = (b.quantityBySize ?? b.quantity_by_size) as unknown[] | undefined;
+function parseRawSizes(b: PutProductBody | Record<string, unknown>): Array<{ sizeCode: string; quantity: number }> {
+  const r = b as Record<string, unknown>;
+  const arr = r.quantityBySize ?? r.quantity_by_size;
   if (!Array.isArray(arr)) return [];
-  return arr.map((r: unknown) => {
-    const item = r as { sizeCode?: string; size_code?: string; quantity?: number };
+  return arr.map((x: unknown): { sizeCode: string; quantity: number } => {
+    const item = x as { sizeCode?: string; size_code?: string; quantity?: number };
     return {
       sizeCode: String(item.sizeCode ?? item.size_code ?? '').trim().toUpperCase().replace(/\s+/g, ''),
       quantity: Math.max(0, Math.floor(Number(item.quantity ?? 0))),
@@ -295,7 +322,7 @@ function filterSizes(rows: Array<{ sizeCode: string; quantity: number }>): Array
 
 /** Build row for warehouse_products only (global products: no warehouse_id on table). */
 function buildProductRow(
-  b: Record<string, unknown>,
+  b: PutProductBody | Record<string, unknown>,
   id: string,
   _wid: string,
   sizeKind: string,
@@ -334,7 +361,7 @@ export class ProductUpdateError extends Error {
 
 export async function updateWarehouseProduct(
   id: string,
-  body: Record<string, unknown>
+  body: PutProductBody
 ): Promise<ProductRecord> {
   const supabase = getSupabase();
   const wid = String(body.warehouseId ?? body.warehouse_id ?? '').trim();

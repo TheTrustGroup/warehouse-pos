@@ -10,6 +10,7 @@ import {
   updateWarehouseProduct,
   deleteWarehouseProduct,
   ProductUpdateError,
+  type PutProductBody,
 } from '@/lib/data/warehouseProducts';
 import { requireAuth, requireAdmin, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { corsHeaders } from '@/lib/cors';
@@ -68,9 +69,9 @@ export async function PUT(req: NextRequest, ctx: RouteCtx) {
   const { id } = await ctx.params;
   const requestId = getRequestId(req);
 
-  let body: Record<string, unknown>;
+  let body: PutProductBody;
   try {
-    body = await req.json();
+    body = (await req.json()) as PutProductBody;
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: h });
   }
@@ -84,7 +85,7 @@ export async function PUT(req: NextRequest, ctx: RouteCtx) {
     return NextResponse.json({ error: 'warehouseId required' }, { status: 400, headers: h });
   }
 
-  const effectiveBody = { ...body, warehouseId, warehouse_id: warehouseId };
+  const effectiveBody: PutProductBody = { ...body, warehouseId, warehouse_id: warehouseId };
 
   try {
     const updated = await updateWarehouseProduct(id, effectiveBody);
