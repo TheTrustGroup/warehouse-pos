@@ -17,14 +17,20 @@ export const DEFAULT_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000001';
 
 const STORAGE_KEY = 'warehouse_current_id';
 
-/** Dedupe by code, then by normalized name, so "Main Town" and "Main town" never both appear (works even if API returns duplicates). */
+/** Dedupe by normalized name so "Main Town" and "Main town" are one entry (works even if API returns duplicates). */
 function dedupeWarehouses(list: Warehouse[]): Warehouse[] {
   const byKey = new Map<string, Warehouse>();
   for (const w of list) {
-    const code = (w.code ?? '').trim().toUpperCase();
     const nameNorm = (w.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const key = code || nameNorm || w.id;
-    if (!byKey.has(key)) byKey.set(key, w);
+    const key = nameNorm || w.id;
+    if (byKey.has(key)) {
+      const existing = byKey.get(key)!;
+      const code = (w.code ?? '').trim().toUpperCase();
+      const existingCode = (existing.code ?? '').trim().toUpperCase();
+      if (code && !existingCode) byKey.set(key, w);
+      continue;
+    }
+    byKey.set(key, w);
   }
   return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
 }

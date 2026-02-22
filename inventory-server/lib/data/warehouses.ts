@@ -49,7 +49,7 @@ function rowToApi(row: WarehouseRow): Warehouse {
   };
 }
 
-/** GET warehouses. Optional filter by store_id; optional allowedWarehouseIds (scope). Deduplicated by code so the UI never shows duplicate warehouses (e.g. two "Main town" from different seeds). */
+/** GET warehouses. Optional filter by store_id; optional allowedWarehouseIds (scope). Deduplicated by normalized name so "Main Town" and "Main town" appear once; when two rows share a name we keep the one with a code (e.g. MAINTOWN). */
 export async function getWarehouses(options?: { storeId?: string; allowedWarehouseIds?: string[] | null }): Promise<Warehouse[]> {
   const supabase = getSupabase();
   let query = supabase.from(TABLE).select('*').order('name');
@@ -64,12 +64,16 @@ export async function getWarehouses(options?: { storeId?: string; allowedWarehou
   const rows = (data ?? []) as WarehouseRow[];
   const byKey = new Map<string, Warehouse>();
   for (const row of rows) {
-    const code = (row.code ?? '').trim().toUpperCase();
     const nameNorm = (row.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const key = code || nameNorm || row.id;
-    if (!byKey.has(key)) {
-      byKey.set(key, rowToApi(row));
+    const key = nameNorm || row.id;
+    if (byKey.has(key)) {
+      const existing = byKey.get(key)!;
+      const code = (row.code ?? '').trim().toUpperCase();
+      const existingCode = (existing.code ?? '').trim().toUpperCase();
+      if (code && !existingCode) byKey.set(key, rowToApi(row));
+      continue;
     }
+    byKey.set(key, rowToApi(row));
   }
   return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
