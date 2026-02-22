@@ -20,3 +20,6 @@ npm-debug.log*
 playwright-report
 test-results
 coverage
+
+# Deploy
+.vercel
