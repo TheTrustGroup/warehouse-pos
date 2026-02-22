@@ -10,7 +10,7 @@
  * server response on success; on failure remove temp and show error. No full refetch after add.
  * No "saved" without confirmed 2xx. Offline path still uses local-first; ADD_PRODUCT_SAVED_LOCALLY for that flow.
  */
-import { createContext, useContext, useState, useRef, ReactNode, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useRef, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL } from '../lib/api';
@@ -154,11 +154,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   offlineRef.current = offline;
   /** Mirror of current products for equivalence check during silent refresh (avoids setState when nothing changed → no jitter). */
   const productsRef = useRef<Product[]>([]);
-  /** Updated every render so loadProducts always uses current selection (no effect-order dependency). When true, request must use sentinel id so we never load Main Store data for a "Main Town" selection. */
-  const effectiveWarehouseIdRef = useRef<string>(effectiveWarehouseId);
-  const useSentinelForProductsRef = useRef<boolean>(isMainStoreIdWithWrongLabel);
-  effectiveWarehouseIdRef.current = effectiveWarehouseId;
-  useSentinelForProductsRef.current = isMainStoreIdWithWrongLabel;
+  /** Refs for loadProducts so request uses current selection; when true, use sentinel id so we never load Main Store data for a "Main Town" selection. */
+  const effectiveWarehouseIdRef = useRef(effectiveWarehouseId) as React.MutableRefObject<string>;
+  const useSentinelForProductsRef = useRef<boolean>(isMainStoreIdWithWrongLabel) as React.MutableRefObject<boolean>;
+  useEffect(() => {
+    effectiveWarehouseIdRef.current = effectiveWarehouseId;
+    useSentinelForProductsRef.current = Boolean(isMainStoreIdWithWrongLabel);
+  }, [effectiveWarehouseId, isMainStoreIdWithWrongLabel]);
   /** Throttle silent refresh so poll + visibility + mount don't cause back-to-back requests (reduces list jitter). */
   const lastSilentRefreshAtRef = useRef<number>(0);
   const SILENT_REFRESH_THROTTLE_MS = 2000;
