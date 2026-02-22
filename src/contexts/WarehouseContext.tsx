@@ -2,8 +2,19 @@
  * Current warehouse (location) for inventory and POS. All product quantities and
  * POS deductions are scoped to the selected warehouse.
  *
+ * THE FIX for "Main Town selected but Main Store stats showing":
+ *   ROOT CAUSE: Dashboard was fetching warehouse_id=...0001 (Main Store) even when
+ *   sidebar showed "Main Town". Sidebar, Dashboard, InventoryPage, and POS each had
+ *   disconnected warehouse state.
+ *   This context is the SINGLE source of truth. Every page (Dashboard, Inventory, POS)
+ *   reads from here. When the sidebar changes the warehouse, ALL pages re-fetch.
+ *   Selection persists to localStorage so it survives refresh.
+ *
  * IMPORTANT: /api/warehouses requires auth. We only fetch after auth is ready and
  * user is authenticated so the dropdown list loads reliably (no 401 race).
+ *
+ * WIRING: See CURSOR_WIRING.md for exact instructions. Use useWarehouse() in every
+ * component that needs the selected warehouse (Dashboard, Inventory, POS, Sidebar).
  */
 
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
@@ -17,51 +28,13 @@ export const DEFAULT_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000001';
 
 const STORAGE_KEY = 'warehouse_current_id';
 
-const CANONICAL_MAINTOWN_CODE = 'MAINTOWN';
-
-/** Dedupe by normalized name; prefer warehouse with code MAINTOWN for "Main Town" (matches cleanup script). */
-function dedupeWarehouses(list: Warehouse[]): Warehouse[] {
-  const byKey = new Map<string, Warehouse>();
-  for (const w of list) {
-    const nameNorm = (w.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const key = nameNorm || w.id;
-    const isDefaultId = w.id === DEFAULT_WAREHOUSE_ID;
-    if (byKey.has(key)) {
-      const existing = byKey.get(key)!;
-      const code = (w.code ?? '').trim().toUpperCase();
-      const existingCode = (existing.code ?? '').trim().toUpperCase();
-      const existingIsDefaultId = existing.id === DEFAULT_WAREHOUSE_ID;
-      const preferNew =
-        (!isDefaultId && existingIsDefaultId) ||
-        (isDefaultId === existingIsDefaultId && code && !existingCode) ||
-        (code === CANONICAL_MAINTOWN_CODE && existingCode !== CANONICAL_MAINTOWN_CODE);
-      if (preferNew) byKey.set(key, w);
-      continue;
-    }
-    if (nameNorm && nameNorm !== 'main store' && isDefaultId) continue;
-    byKey.set(key, w);
-  }
-  // Ensure unique ids so the dropdown never has two options with the same value (would send wrong warehouse_id when selecting the second).
-  const byId = new Map<string, Warehouse>();
-  for (const w of Array.from(byKey.values())) {
-    const id = w.id;
-    if (!byId.has(id)) {
-      byId.set(id, w);
-      continue;
-    }
-    const existing = byId.get(id)!;
-    const nameNorm = (w.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const code = (w.code ?? '').trim().toUpperCase();
-    const existingCode = (existing.code ?? '').trim().toUpperCase();
-    const preferW =
-      (id === DEFAULT_WAREHOUSE_ID && nameNorm === 'main store') ||
-      (code === CANONICAL_MAINTOWN_CODE && existingCode !== CANONICAL_MAINTOWN_CODE);
-    const preferExisting =
-      (id === DEFAULT_WAREHOUSE_ID && (existing.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ') === 'main store') ||
-      existingCode === CANONICAL_MAINTOWN_CODE;
-    if (preferW && !preferExisting) byId.set(id, w);
-  }
-  return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+function dedupeWarehouses(arr: Warehouse[]): Warehouse[] {
+  const seen = new Set<string>();
+  return arr.filter((w: Warehouse) => {
+    if (seen.has(w.id)) return false;
+    seen.add(w.id);
+    return true;
+  });
 }
 
 interface WarehouseContextType {

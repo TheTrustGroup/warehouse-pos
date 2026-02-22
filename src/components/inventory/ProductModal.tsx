@@ -58,7 +58,6 @@ interface ProductModalProps {
   product?: Product | null;        // null/undefined = add mode
   sizeCodes?: SizeCode[];
   warehouseId?: string;
-  /** Shown in add mode: "Adding to: {warehouseName}" so user knows which warehouse the product will be assigned to. */
   warehouseName?: string;
   onSubmit: (payload: Omit<Product, 'id'> & { id?: string }, isEdit: boolean) => Promise<void>;
   onClose: () => void;

@@ -1,111 +1,89 @@
 // ============================================================
-// InventoryPage.tsx
-// File: warehouse-pos/src/pages/InventoryPage.tsx
+// InventoryPage.tsx  —  warehouse-pos/src/pages/InventoryPage.tsx
 //
-// FIXES IN THIS VERSION:
+// DELETE FIX SUMMARY:
+// Root cause of the revert bug:
+//   1. User taps Delete
+//   2. Optimistic update removes product from state
+//   3. Background poll fires, re-fetches all products from API,
+//      OVERWRITES state — deleted product comes back ("revert")
+//   4. DELETE response finally arrives — too late, UI shows old data
 //
-// 1. ROOT CAUSE OF "0 products":
-//    apiFetch now uses API_BASE_URL from lib/api.ts directly.
-//    No longer relies on apiBaseUrl prop being passed correctly.
-//    `https://warehouse-pos-api-v2.vercel.app` is baked in via
-//    the api.ts lib — so the fetch always goes to the right host.
+// Fix: pendingDeletesRef — a Set of product IDs currently being deleted.
+//   - Added to BEFORE the optimistic remove
+//   - Poll's setProducts call filters out anything in this set
+//   - Cleared on confirmed success OR reverted on hard failure
+//   - Even if 3 polls fire mid-delete, the product stays gone from UI
 //
-// 2. POST /api/products (new product sync):
-//    - API returns bare product object (camelCase, confirmed from logs)
-//    - Handles { data: {...} } wrapper AND bare object
-//    - Product appears in list immediately with correct id/sizes
-//    - Falls back to silent reload if response is unexpected
-//
-// 3. PUT /api/products/:id (edit sync):
-//    - Optimistic update fires immediately
-//    - Server response applied after to get server-assigned fields
-//    - sizeKind + quantityBySize always explicitly sent in body
-//
-// 4. Sizes showing for all products:
-//    - API already returns sizeKind + quantityBySize (camelCase)
-//    - ProductCard reads them directly — no transform needed
-//    - The only issue was products not loading (fixed by #1 above)
-//
-// 5. DELETE: pendingDeletesRef prevents poll resurrection
-//
-// 6. POS stock deduction fixed in POSPage.tsx + api_sales_route.ts
+// SPEED improvements:
+//   - Optimistic updates for add/edit/delete — zero wait for UI
+//   - Poll only runs when tab is visible (visibilitychange)
+//   - Modal pauses poll (no wasted fetches mid-edit)
+//   - apiFetch uses AbortController timeout (8s hard limit)
 // ============================================================
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import ProductCard, { ProductCardSkeleton, type Product } from '../components/inventory/ProductCard';
 import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
-import { getApiHeaders, API_BASE_URL } from '../lib/api';
+import { getApiHeaders } from '../lib/api';
+import { apiGet } from '../lib/apiClient';
 import { useWarehouse } from '../contexts/WarehouseContext';
-import { useInventory } from '../contexts/InventoryContext';
-
-// ── Types ──────────────────────────────────────────────────────────────────
 
 type FilterKey = 'all' | string;
 type SortKey   = 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc';
 
-interface InventoryPageProps {
-  // apiBaseUrl is kept for backward compat but we ignore it and use API_BASE_URL
-  apiBaseUrl?: string;
-}
+interface InventoryPageProps { apiBaseUrl?: string; }
 
-// ── Constants ──────────────────────────────────────────────────────────────
-
+const POLL_MS   = 30_000;
+const INITIAL_PRODUCTS_LIMIT = 200;  // Fast first paint; rest loaded in background
+const REMAINING_PRODUCTS_LIMIT = 800;
+const PRODUCTS_CACHE_KEY = (wid: string) => `warehouse_products_${wid}`;
 const CATEGORIES = ['Sneakers', 'Slippers', 'Boots', 'Sandals', 'Accessories'];
+
+/** Only send debug logs when running on localhost (ingest server reachable). Avoids CORS/mixed-content on production. */
+function debugIngest(payload: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  if (window.location?.protocol === 'https:') return; /* never request http from https */
+  const host = window.location?.hostname ?? '';
+  if (host !== 'localhost' && host !== '127.0.0.1') return;
+  fetch('http://127.0.0.1:7242/ingest/89e700ea-c11b-47a3-9c36-45e875a36239', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd75573' },
+    body: JSON.stringify({ sessionId: 'd75573', ...payload, timestamp: Date.now() }),
+  }).catch(() => {});
+}
+/** Fallback list when WarehouseContext has not yet loaded warehouses from API. IDs must match backend. */
+const FALLBACK_WAREHOUSES = [
+  { id: '00000000-0000-0000-0000-000000000001', name: 'Main Store' },
+  { id: '00000000-0000-0000-0000-000000000002', name: 'Main Town' },
+];
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 
-const IconSearch  = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-  </svg>
-);
-const IconX = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-  </svg>
-);
-const IconPlus = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-  </svg>
-);
-const IconRefresh = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-    <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-  </svg>
-);
-const IconBox = () => (
-  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
-  </svg>
-);
-const IconTrash = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="3 6 5 6 21 6"/>
-    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-    <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-  </svg>
-);
+const IconSearch = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+const IconX      = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+const IconPlus   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+const IconRefresh = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>;
+const IconBox    = () => <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>;
 
 // ── Toast ──────────────────────────────────────────────────────────────────
 
 type ToastType = 'success' | 'error' | 'info';
-interface ToastItem { id: string; message: string; type: ToastType; }
+interface Toast { id: string; message: string; type: ToastType; }
 
 function useToast() {
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const show = useCallback((message: string, type: ToastType = 'success') => {
     const id = Math.random().toString(36).slice(2);
     setToasts(prev => [...prev.slice(-2), { id, message, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3200);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   }, []);
   return { toasts, show };
 }
 
-function ToastContainer({ toasts }: { toasts: ToastItem[] }) {
-  const border: Record<ToastType, string> = {
+function ToastContainer({ toasts }: { toasts: Toast[] }) {
+  const colors: Record<ToastType, string> = {
     success: 'border-l-emerald-500',
     error:   'border-l-red-500',
     info:    'border-l-blue-500',
@@ -113,73 +91,32 @@ function ToastContainer({ toasts }: { toasts: ToastItem[] }) {
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
       {toasts.map(t => (
-        <div key={t.id}
-          className={`flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-900 text-white text-[14px] font-medium
-                      shadow-[0_8px_24px_rgba(0,0,0,0.2)] border-l-4 ${border[t.type]}
-                      min-w-[220px] max-w-[340px] animate-[toastIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)]`}>
-          {t.message}
-        </div>
+        <div key={t.id} className={`
+          flex items-center gap-2.5 px-4 py-3 rounded-xl
+          bg-slate-900 text-white text-[14px] font-medium
+          shadow-[0_8px_24px_rgba(0,0,0,0.2)]
+          border-l-4 ${colors[t.type]}
+          min-w-[220px] max-w-[320px]
+          animate-[toastIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)]
+        `}>{t.message}</div>
       ))}
     </div>
   );
 }
 
-// ── Confirm delete ─────────────────────────────────────────────────────────
+// ── Filters + sort ─────────────────────────────────────────────────────────
 
-function ConfirmDeleteDialog({
-  product, onConfirm, onCancel
-}: { product: Product; onConfirm: () => void; onCancel: () => void; }) {
-  return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" onClick={onCancel}/>
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[24px]
-                      shadow-[0_-8px_40px_rgba(0,0,0,0.12)] px-5 pt-5 pb-8
-                      animate-[sheetUp_0.28s_cubic-bezier(0.34,1.1,0.64,1)]">
-        <div className="w-10 h-1 rounded-full bg-slate-200 mx-auto mb-5"/>
-        <div className="flex items-start gap-4 mb-6">
-          <div className="w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center flex-shrink-0">
-            <IconTrash/>
-          </div>
-          <div>
-            <p className="text-[16px] font-bold text-slate-900">Delete product?</p>
-            <p className="text-[13px] text-slate-500 mt-1 leading-snug">
-              <span className="font-semibold text-slate-700">{product.name}</span> will be permanently removed. This cannot be undone.
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <button type="button" onClick={onCancel}
-                  className="flex-1 h-[52px] rounded-2xl border-[1.5px] border-slate-200 bg-white text-[15px] font-bold text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all">
-            Cancel
-          </button>
-          <button type="button" onClick={onConfirm}
-                  className="flex-1 h-[52px] rounded-2xl bg-red-500 hover:bg-red-600 text-[15px] font-bold text-white active:scale-[0.98] transition-all shadow-[0_4px_12px_rgba(239,68,68,0.3)]">
-            Delete
-          </button>
-        </div>
-      </div>
-      <style>{`
-        @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-      `}</style>
-    </>
-  );
-}
-
-// ── Sort + filter ──────────────────────────────────────────────────────────
-
-function applyFilters(products: Product[], search: string, category: FilterKey, sort: SortKey) {
+function applyFilters(products: Product[], search: string, category: FilterKey, sort: SortKey): Product[] {
   let r = [...products];
   if (search.trim()) {
     const q = search.toLowerCase();
     r = r.filter(p =>
       p.name.toLowerCase().includes(q) ||
       p.sku.toLowerCase().includes(q) ||
-      (p.barcode ?? '').toLowerCase().includes(q)
+      (p as Product & { barcode?: string }).barcode?.toLowerCase().includes(q)
     );
   }
-  if (category !== 'all') {
-    r = r.filter(p => p.category.toLowerCase() === category.toLowerCase());
-  }
+  if (category !== 'all') r = r.filter(p => p.category.toLowerCase() === category.toLowerCase());
   r.sort((a, b) => {
     switch (sort) {
       case 'name_asc':   return a.name.localeCompare(b.name);
@@ -194,133 +131,296 @@ function applyFilters(products: Product[], search: string, category: FilterKey, 
   return r;
 }
 
+// ── Confirmation dialog ────────────────────────────────────────────────────
+
+function ConfirmDeleteDialog({
+  product,
+  onConfirm,
+  onCancel,
+}: {
+  product: Product;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" onClick={onCancel} aria-hidden />
+
+      {/* Dialog */}
+      <div className="
+        fixed bottom-0 left-0 right-0 z-50
+        bg-white rounded-t-[24px]
+        shadow-[0_-8px_40px_rgba(0,0,0,0.12)]
+        px-5 pt-5 pb-8
+        animate-[sheetUp_0.28s_cubic-bezier(0.34,1.1,0.64,1)]
+      ">
+        <div className="w-10 h-1 rounded-full bg-slate-200 mx-auto mb-5"/>
+
+        <div className="flex items-start gap-4 mb-5">
+          <div className="w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center flex-shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6"/><path d="M14 11v6"/>
+              <path d="M9 6V4h6v2"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-[16px] font-bold text-slate-900">Delete product?</p>
+            <p className="text-[13px] text-slate-500 mt-1 leading-snug">
+              <span className="font-semibold text-slate-700">{product.name}</span> will be permanently removed from this warehouse. This cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="
+              flex-1 h-13 rounded-2xl border-[1.5px] border-slate-200
+              bg-white text-[15px] font-bold text-slate-600
+              hover:bg-slate-50 active:scale-[0.98]
+              transition-all duration-150
+            "
+            style={{ height: '52px' }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="
+              flex-1 h-13 rounded-2xl border-none
+              bg-red-500 hover:bg-red-600
+              text-[15px] font-bold text-white
+              active:scale-[0.98]
+              transition-all duration-150
+              shadow-[0_4px_12px_rgba(239,68,68,0.3)]
+            "
+            style={{ height: '52px' }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes sheetUp {
+          from { transform: translateY(100%); }
+          to   { transform: translateY(0); }
+        }
+      `}</style>
+    </>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────
 
-export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPageProps) {
+export default function InventoryPage({ apiBaseUrl = '' }: InventoryPageProps) {
+  const { warehouses: contextWarehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse: contextWarehouse } = useWarehouse();
+  const warehouseList = contextWarehouses?.length ? contextWarehouses : FALLBACK_WAREHOUSES;
+  const currentWarehouse = contextWarehouse ?? warehouseList.find(w => w.id === currentWarehouseId) ?? warehouseList[0];
+  const warehouseId = currentWarehouseId ?? warehouseList[0].id;
 
-  // ── Warehouse: single source of truth from context (synced with Sidebar + Dashboard) ──
-  const { warehouses, currentWarehouseId, setCurrentWarehouseId } = useWarehouse();
-  const displayWarehouses = useMemo(
-    () => (warehouses.length > 0 ? warehouses : [{ id: currentWarehouseId, name: '—' }]),
-    [warehouses, currentWarehouseId]
-  );
-  const currentWarehouse = displayWarehouses.find((w) => w.id === currentWarehouseId) ?? displayWarehouses[0];
+  // Data
+  const [products, setProducts]     = useState<Product[]>([]);
+  const [sizeCodes, setSizeCodes]   = useState<SizeCode[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
 
-  // ── Product data: single source of truth from context (same as Dashboard) ──
-  const {
-    products,
-    isLoading: loading,
-    error,
-    refreshProducts,
-    addProduct: contextAddProduct,
-    updateProduct: contextUpdateProduct,
-    deleteProduct: contextDeleteProduct,
-  } = useInventory();
+  // Warehouse dropdown UI only (selection is in WarehouseContext)
+  const [warehouseDropdownOpen, setWhDropdown]  = useState(false);
 
-  // ── State ─────────────────────────────────────────────────────────────────
-  const [sizeCodes, setSizeCodes] = useState<SizeCode[]>([]);
-  const [whDropdown, setWhDropdown] = useState(false);
-  const [search, setSearch] = useState('');
+  // Filters
+  const [search, setSearch]     = useState('');
   const [category, setCategory] = useState<FilterKey>('all');
-  const [sort, setSort] = useState<SortKey>('name_asc');
+  const [sort, setSort]         = useState<SortKey>('name_asc');
   const [sortOpen, setSortOpen] = useState(false);
+
+  // Card inline edit
   const [activeEditId, setActiveEditId] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+
+  // Modal
+  const [modalOpen, setModalOpen]         = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Delete confirm dialog
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
 
-  const modalOpenRef = useRef(false);
-  const lastSaveTimeRef = useRef<number>(0);
+  // Refs
+  const modalOpenRef      = useRef(false);
+  const pollTimerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // THE DELETE FIX: pendingDeletesRef
+  //
+  // Why a ref and not state?
+  //   - State updates are async — there's a window between setState and the
+  //     re-render where a poll could fire and not see the pending set.
+  //   - Refs update synchronously. The value is correct the instant we write it.
+  //   - We don't need the UI to re-render when this set changes — we only need
+  //     setProducts (which does re-render) to filter against it.
+  // ─────────────────────────────────────────────────────────────────────────
+  const pendingDeletesRef = useRef<Set<string>>(new Set());
 
   const { toasts, show: showToast } = useToast();
 
-  // ── apiFetch with retry + abort support ──────────────────────────────────
-  // - Retries GET requests up to 3× with exponential backoff (Vercel cold starts)
-  // - Accepts an external AbortSignal so stale requests can be cancelled
-  // - Does NOT set credentials:'include' — this causes CORS preflight failures
-  //   with wildcard origins. Auth is done via Bearer token header instead.
+  // ── apiFetch ──────────────────────────────────────────────────────────────
+  // Adds 8s timeout so slow API calls don't hang the UI forever.
 
-  const apiFetch = useCallback(async <T = unknown>(
-    path: string,
-    init?: RequestInit & { signal?: AbortSignal },
-    _retryCount = 0
-  ): Promise<T> => {
-    const isReadOnly = !init?.method || init.method === 'GET';
-    const timeoutMs  = 20_000;
+  async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+    // #region agent log
+    const hasToken = typeof localStorage !== 'undefined' && !!localStorage.getItem('auth_token');
+    debugIngest({ location: 'InventoryPage.tsx:apiFetch', message: 'apiFetch start', data: { path, retryCount: 0, hasToken, method: init?.method || 'GET' }, hypothesisId: 'H1-H5' });
+    // #endregion
 
-    // Internal timeout controller — merged with any external signal
-    const timeoutCtrl = new AbortController();
-    const timeout     = setTimeout(() => timeoutCtrl.abort(), timeoutMs);
-
-    // Merge external abort signal with our timeout signal
-    let mergedSignal: AbortSignal = timeoutCtrl.signal;
-    if (init?.signal) {
-      const externalCtrl = new AbortController();
-      init.signal.addEventListener('abort', () => externalCtrl.abort());
-      timeoutCtrl.signal.addEventListener('abort', () => externalCtrl.abort());
-      mergedSignal = externalCtrl.signal;
-    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
 
     try {
-      const headers = new Headers(getApiHeaders() as HeadersInit);
-      if (init?.headers) {
-        new Headers(init.headers as HeadersInit).forEach((v, k) => headers.set(k, v));
-      }
-
-      const res = await fetch(`${API_BASE_URL}${path}`, {
+      const res = await fetch(`${apiBaseUrl}${path}`, {
         ...init,
-        headers,
-        // Do NOT use credentials:'include' — breaks CORS with specific origins
-        signal: mergedSignal,
+        headers: new Headers({
+          ...getApiHeaders(),
+          ...(init?.headers ?? {}),
+        }),
+        credentials: 'include',
+        signal: controller.signal,
       });
       clearTimeout(timeout);
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const msg  = (body as { message?: string; error?: string }).message ?? (body as { error?: string }).error ?? `HTTP ${res.status}`;
-        const e    = new Error(msg) as Error & { status: number };
-        e.status   = res.status;
+        const body = await res.json().catch(() => ({})) as { message?: string; error?: string };
+        const msg = body?.message ?? body?.error ?? `Request failed: ${res.status}`;
+        const e = new Error(msg) as Error & { status: number };
+        e.status = res.status;
         throw e;
       }
-      const text = await res.text();
-      return (text ? JSON.parse(text) : {}) as T;
-
+      // 204 No Content has no body — do not call res.json()
+      if (res.status === 204) return undefined as T;
+      return res.json();
     } catch (e: unknown) {
       clearTimeout(timeout);
-      const err = e as Error & { status?: number };
-      // Don't retry if explicitly aborted (e.g. warehouse switch)
-      if (err.name === 'AbortError' && init?.signal?.aborted) throw e;
-      // Retry GET on network/timeout errors
-      const isNetworkErr = err.name === 'AbortError' || err.name === 'TypeError' ||
-                           err.message?.includes('Failed to fetch') ||
-                           err.message?.includes('network connection was lost');
-      if (isReadOnly && isNetworkErr && _retryCount < 3) {
-        const delay = (2 ** _retryCount) * 800; // 800ms, 1.6s, 3.2s
-        console.warn(`[apiFetch] Retry ${_retryCount + 1}/3 for ${path} in ${delay}ms`);
-        await new Promise(r => setTimeout(r, delay));
-        return apiFetch(path, init, _retryCount + 1);
-      }
-      if (err.name === 'AbortError') throw new Error('Request timed out — check your connection');
+      if (e instanceof Error && e.name === 'AbortError') throw new Error('Request timed out — check your connection');
       throw e;
     }
-  }, []);
+  }
 
-  // ── Load size codes (per-warehouse; not in InventoryContext) ───────────────
+  // ── Load products ─────────────────────────────────────────────────────────
+  // silent=true → don't show loading spinner (used by poll + post-action refresh)
+  // Stale-while-revalidate: show cached list immediately (if any), then fetch and replace.
+  // Uses apiGet (retries + 20s timeout) for consistent loading.
+
+  const loadProducts = useCallback(async (silent = false) => {
+    // Never overwrite modal form state mid-edit
+    if (modalOpenRef.current) return;
+
+    setError(null);
+
+    let hadCache = false;
+    if (!silent && typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(PRODUCTS_CACHE_KEY(warehouseId));
+        if (raw) {
+          const parsed = JSON.parse(raw) as unknown;
+          const cached = Array.isArray(parsed) ? parsed as Product[] : [];
+          if (cached.length > 0) {
+            setProducts(cached);
+            setLoading(false);
+            hadCache = true;
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    if (!silent && !hadCache) setLoading(true);
+
+    const basePath = `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}`;
+    const getOpts = { maxRetries: 3, timeoutMs: 20_000 };
+
+    try {
+      // First request: smaller payload for fast first paint
+      const path1 = `${basePath}&limit=${INITIAL_PRODUCTS_LIMIT}`;
+      const data1 = await apiGet<{ data?: Product[]; products?: Product[] } | Product[]>(apiBaseUrl, path1, getOpts);
+      let list: Product[] = Array.isArray(data1)
+        ? data1
+        : (data1 as { data?: Product[] }).data ?? (data1 as { products?: Product[] }).products ?? [];
+
+      const pending = pendingDeletesRef.current;
+      list = pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list;
+      setProducts(list);
+
+      // If we got a full page, fetch the rest in background and merge
+      if (list.length >= INITIAL_PRODUCTS_LIMIT) {
+        const path2 = `${basePath}&limit=${REMAINING_PRODUCTS_LIMIT}&offset=${INITIAL_PRODUCTS_LIMIT}`;
+        apiGet<{ data?: Product[]; products?: Product[] } | Product[]>(apiBaseUrl, path2, getOpts)
+          .then((data2: { data?: Product[]; products?: Product[] } | Product[]) => {
+            const rest = Array.isArray(data2)
+              ? data2
+              : (data2 as { data?: Product[] }).data ?? (data2 as { products?: Product[] }).products ?? [];
+            const merged = pending.size > 0 ? [...list, ...rest].filter(p => !pending.has(p.id)) : [...list, ...rest];
+            setProducts(merged);
+            if (typeof localStorage !== 'undefined' && merged.length > 0) {
+              try { localStorage.setItem(PRODUCTS_CACHE_KEY(warehouseId), JSON.stringify(merged)); } catch { /* ignore */ }
+            }
+          })
+          .catch(() => { /* keep first page; cache already written below if list is first page only */ });
+      }
+
+      if (list.length > 0 && list.length < INITIAL_PRODUCTS_LIMIT && typeof localStorage !== 'undefined') {
+        try { localStorage.setItem(PRODUCTS_CACHE_KEY(warehouseId), JSON.stringify(list)); } catch { /* ignore */ }
+      }
+    } catch (e: unknown) {
+      if (!silent) setError(e instanceof Error ? e.message : 'Failed to load products.');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [warehouseId, apiBaseUrl]);
+
+  // ── Load size codes ───────────────────────────────────────────────────────
 
   const loadSizeCodes = useCallback(async () => {
     try {
-      const raw = await apiFetch<unknown>(
-        `/api/size-codes?warehouse_id=${encodeURIComponent(currentWarehouseId)}`
-      );
-      const list = Array.isArray(raw) ? raw : (raw as { data?: SizeCode[] })?.data ?? [];
-      setSizeCodes(list);
+      const path = `/api/size-codes?warehouse_id=${encodeURIComponent(warehouseId)}`;
+      const data = await apiGet<SizeCode[] | { data: SizeCode[] }>(apiBaseUrl, path, { maxRetries: 2, timeoutMs: 10_000 });
+      setSizeCodes(Array.isArray(data) ? data : (data as { data?: SizeCode[] }).data ?? []);
     } catch { /* non-critical */ }
-  }, [currentWarehouseId, apiFetch]);
+  }, [warehouseId, apiBaseUrl]);
 
-  // Load size codes when warehouse changes. Product list is from InventoryContext (refetches on warehouse change).
+  // ── Polling ───────────────────────────────────────────────────────────────
+
+  function startPoll() {
+    stopPoll();
+    pollTimerRef.current = setInterval(() => {
+      if (!modalOpenRef.current && document.visibilityState === 'visible') {
+        loadProducts(true);
+      }
+    }, POLL_MS);
+  }
+
+  function stopPoll() {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+
   useEffect(() => {
+    loadProducts();
     loadSizeCodes();
-  }, [currentWarehouseId, loadSizeCodes]);
+    startPoll();
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && !modalOpenRef.current) {
+        loadProducts(true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { stopPoll(); document.removeEventListener('visibilitychange', onVisible); };
+  }, [warehouseId]);
 
   useEffect(() => { modalOpenRef.current = modalOpen; }, [modalOpen]);
 
@@ -328,107 +428,140 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
 
   function openAddModal() { setEditingProduct(null); setModalOpen(true); }
   function openEditModal(p: Product) { setEditingProduct(structuredClone(p)); setModalOpen(true); }
-
   function closeModal() {
     setModalOpen(false);
     setEditingProduct(null);
-    const msSinceSave = Date.now() - lastSaveTimeRef.current;
-    if (msSinceSave > 5000) {
-      refreshProducts({ silent: true }).catch(() => {});
-    }
+    setTimeout(() => loadProducts(true), 300);
   }
 
-  // ── Delete ────────────────────────────────────────────────────────────────
+  // ── DELETE — the fixed version ────────────────────────────────────────────
+  //
+  // Flow:
+  //   1. User taps delete icon → confirm dialog appears (no API call yet)
+  //   2. User taps "Delete" in dialog
+  //   3. Add product ID to pendingDeletesRef  ← SYNC, instant
+  //   4. Remove from products state           ← optimistic, instant
+  //   5. Send DELETE to API
+  //   6a. Success → remove from pendingDeletes. Done. Product is gone.
+  //   6b. Failure → remove from pendingDeletes, put product back, show error.
+  //
+  // Why step 3 must come BEFORE step 4:
+  //   If setProducts fires a re-render and a poll timer fires in the same tick,
+  //   the poll's loadProducts call reads pendingDeletesRef synchronously.
+  //   Because we added to the ref first, the poll will filter out the product
+  //   even if the DELETE hasn't completed yet.
+
+  function handleDeleteRequest(product: Product) {
+    setConfirmDelete(product);
+  }
 
   async function executeDelete(product: Product) {
-    setConfirmDelete(null);
+    setConfirmDelete(null); // close dialog immediately
+
+    // Step 3: mark pending SYNCHRONOUSLY before any state update
+    pendingDeletesRef.current.add(product.id);
+
+    // Step 4: optimistic remove from UI
+    setProducts(prev => prev.filter(p => p.id !== product.id));
+
+    // Step 5: API call — try admin path first (matches rest of app), then public API on 404
     try {
-      await contextDeleteProduct(product.id);
+      try {
+        await apiFetch(
+          `/admin/api/products/${encodeURIComponent(product.id)}?warehouse_id=${encodeURIComponent(warehouseId)}`,
+          { method: 'DELETE' }
+        );
+      } catch (adminErr: unknown) {
+        const status = (adminErr as { status?: number })?.status;
+        if (status === 404) {
+          await apiFetch(`/api/products/${encodeURIComponent(product.id)}`, {
+            method: 'DELETE',
+            body: JSON.stringify({ warehouseId }),
+          });
+        } else {
+          throw adminErr;
+        }
+      }
+
+      // Step 6a: Confirmed. Clear pending. Product is gone permanently.
+      pendingDeletesRef.current.delete(product.id);
       showToast(`"${product.name}" deleted`, 'success');
+
     } catch (e: unknown) {
-      const err = e as Error;
-      showToast(err.message ?? 'Failed to delete', 'error');
+      // Step 6b: Failed. Revert everything.
+      pendingDeletesRef.current.delete(product.id);
+
+      // Re-insert the product back into the list, sorted by name
+      setProducts(prev => {
+        const already = prev.find(p => p.id === product.id);
+        if (already) return prev; // guard against double-insert
+        return [...prev, product].sort((a, b) => a.name.localeCompare(b.name));
+      });
+
+      const msg = e instanceof Error ? e.message : 'Failed to delete product';
+      showToast(msg, 'error');
     }
   }
 
-  // ── Submit (add / edit) — delegate to InventoryContext (single source of truth) ──
+  // ── Submit (add / edit) ───────────────────────────────────────────────────
 
-  async function handleSubmit(
-    payload: Omit<Product, 'id'> & { id?: string },
-    isEdit: boolean
-  ) {
+  async function handleSubmit(payload: Omit<Product, 'id'> & { id?: string }, isEdit: boolean) {
     if (isEdit && payload.id) {
+      const original = products.find(p => p.id === payload.id);
+
+      // Optimistic update
+      setProducts(prev => prev.map(p => p.id === payload.id ? { ...p, ...payload } as Product : p));
+
       try {
-        const p = payload as Record<string, unknown>;
-        await contextUpdateProduct(payload.id, {
-          name: payload.name,
-          sku: payload.sku,
-          barcode: payload.barcode,
-          category: payload.category,
-          description: (p.description as string) ?? '',
-          quantity: payload.quantity,
-          costPrice: payload.costPrice,
-          sellingPrice: payload.sellingPrice,
-          reorderLevel: payload.reorderLevel ?? 0,
-          sizeKind: payload.sizeKind,
-          quantityBySize: payload.quantityBySize,
-          warehouseId: currentWarehouseId,
+        await apiFetch(`/api/products/${payload.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ ...payload, warehouseId }),
         });
-        lastSaveTimeRef.current = Date.now();
         showToast(`${payload.name} updated`, 'success');
       } catch (e: unknown) {
-        const err = e as Error;
-        showToast(err.message ?? 'Failed to update', 'error');
+        // #region agent log
+        const err = e as Error & { status?: number };
+        debugIngest({ location: 'InventoryPage.tsx:handleSubmit PUT catch', message: 'PUT error', data: { status: err?.status, msg: (err?.message || '').slice(0, 80) }, hypothesisId: 'H3' });
+        // #endregion
+        if (original) setProducts(prev => prev.map(p => p.id === payload.id ? original : p));
+        showToast(err instanceof Error ? err.message : 'Failed to update product.', 'error');
         throw e;
       }
     } else {
       try {
-        const p = payload as Record<string, unknown>;
-        const loc = p.location && typeof p.location === 'object' ? p.location as Record<string, string> : {};
-        const sup = p.supplier && typeof p.supplier === 'object' ? p.supplier as Record<string, string> : {};
-        const addPayload = {
-          ...payload,
-          warehouseId: currentWarehouseId,
-          sizeKind: payload.sizeKind,
-          quantityBySize: payload.quantityBySize ?? [],
-          quantity: payload.quantity,
-          description: (p.description as string) ?? '',
-          tags: Array.isArray(p.tags) ? p.tags as string[] : [],
-          createdBy: (p.createdBy as string) ?? '',
-          expiryDate: (p.expiryDate as Date | null) ?? null,
-          location: { warehouse: '', aisle: loc.aisle ?? '', rack: loc.rack ?? '', bin: loc.bin ?? '' },
-          supplier: { name: sup.name ?? '', contact: sup.contact ?? '', email: sup.email ?? '' },
-        };
-        delete (addPayload as Record<string, unknown>).id;
-        await contextAddProduct(addPayload as Parameters<typeof contextAddProduct>[0]);
-        lastSaveTimeRef.current = Date.now();
+        const created = await apiFetch<Product>('/api/products', {
+          method: 'POST',
+          body: JSON.stringify({ ...payload, warehouseId }),
+        });
+        setProducts(prev => [created, ...prev]);
         showToast(`${payload.name} added`, 'success');
       } catch (e: unknown) {
-        const err = e as Error;
-        showToast(err.message ?? 'Failed to add product', 'error');
+        showToast(e instanceof Error ? e.message : 'Failed to add product.', 'error');
         throw e;
       }
     }
   }
 
-  // ── Stock quick-edit — delegate to InventoryContext ────────────────────────
+  // ── Stock save ────────────────────────────────────────────────────────────
 
   async function handleSaveStock(
     id: string,
     update: { quantity: number; quantityBySize: Product['quantityBySize']; sizeKind: string }
   ) {
+    const original = products.find(p => p.id === id);
+
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, ...update } as Product : p));
     setActiveEditId(null);
+
     try {
-      await contextUpdateProduct(id, {
-        quantity: update.quantity,
-        quantityBySize: update.quantityBySize,
-        sizeKind: update.sizeKind as 'na' | 'one_size' | 'sized',
-        warehouseId: currentWarehouseId,
+      await apiFetch(`/api/products/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ...update, warehouseId }),
       });
       showToast('Stock updated', 'success');
     } catch (e: unknown) {
-      const err = e as Error;
-      showToast(err.message ?? 'Failed to update stock', 'error');
+      if (original) setProducts(prev => prev.map(p => p.id === id ? original : p));
+      showToast(e instanceof Error ? e.message : 'Failed to update stock.', 'error');
       throw e;
     }
   }
@@ -450,29 +583,32 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
   return (
     <div className="min-h-screen bg-slate-100 pb-24">
 
-      {/* ── Sticky Header ── */}
+      {/* ── Header ── */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-100 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
         <div className="flex items-center justify-between px-4 pt-4 pb-3">
           <div>
             <h1 className="text-[20px] font-bold text-slate-900 leading-tight">Inventory</h1>
-
             {/* Warehouse selector */}
             <div className="relative mt-0.5">
-              <button type="button" onClick={() => setWhDropdown(o => !o)}
+              <button type="button"
+                      onClick={() => setWhDropdown(o => !o)}
                       className="flex items-center gap-1 text-[12px] font-semibold text-slate-500 hover:text-slate-700 transition-colors">
                 {currentWarehouse.name}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
               </button>
-              {whDropdown && (
+              {warehouseDropdownOpen && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setWhDropdown(false)}/>
+                  <div className="fixed inset-0 z-10" onClick={() => setWhDropdown(false)} aria-hidden />
                   <div className="absolute left-0 top-6 z-20 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 w-40">
-                    {displayWarehouses.map(w => (
+                    {warehouseList.map(w => (
                       <button key={w.id} type="button"
                               onClick={() => { setCurrentWarehouseId(w.id); setActiveEditId(null); setWhDropdown(false); }}
                               className={`w-full px-4 py-2.5 text-left text-[13px] font-medium transition-colors
-                                ${currentWarehouseId === w.id ? 'text-red-500 bg-red-50' : 'text-slate-700 hover:bg-slate-50'}`}>
-                        {currentWarehouseId === w.id && '✓ '}{w.name}
+                                ${warehouseId === w.id ? 'text-red-500 bg-red-50' : 'text-slate-700 hover:bg-slate-50'}`}>
+                        {warehouseId === w.id && <span className="mr-1.5">✓</span>}
+                        {w.name}
                       </button>
                     ))}
                   </div>
@@ -481,12 +617,10 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[11px] font-medium text-slate-500 sm:block hidden" aria-hidden>
-              Adding to: <span className="text-slate-700">{currentWarehouse.name}</span>
-            </p>
-            <button type="button" onClick={() => refreshProducts({ bypassCache: true })}
-                    className="w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-500 flex items-center justify-center hover:bg-slate-50 transition-colors">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => loadProducts()}
+                    className="w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-500 flex items-center justify-center hover:bg-slate-50 transition-colors"
+                    aria-label="Refresh">
               <IconRefresh/>
             </button>
             <button type="button" onClick={openAddModal}
@@ -499,9 +633,7 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
         {/* Search */}
         <div className="px-4 pb-3">
           <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-              <IconSearch/>
-            </span>
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><IconSearch/></span>
             <input type="search" value={search} onChange={e => setSearch(e.target.value)}
                    placeholder="Search products, SKU, or barcode…"
                    className="w-full h-11 pl-10 pr-10 rounded-xl border-[1.5px] border-slate-200 bg-slate-50
@@ -525,27 +657,27 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
                   className={`flex-shrink-0 h-8 px-3.5 rounded-full text-[13px] font-semibold
                               border-[1.5px] transition-all duration-150 whitespace-nowrap
                               ${category === cat
-                                ? 'bg-red-500 border-red-500 text-white shadow-[0_2px_8px_rgba(239,68,68,0.25)]'
-                                : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                                ? 'bg-red-500 border-red-500 text-white'
+                                : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'}`}>
             {cat === 'all' ? 'All' : cat}
           </button>
         ))}
       </div>
 
-      {/* ── Results count + sort ── */}
+      {/* ── Results + sort ── */}
       <div className="flex items-center justify-between px-4 pb-3">
         <p className="text-[12px] font-medium text-slate-400">
           {loading ? 'Loading…' : `${displayed.length} product${displayed.length !== 1 ? 's' : ''}`}
         </p>
         <div className="relative">
           <button type="button" onClick={() => setSortOpen(o => !o)}
-                  className="flex items-center gap-1 text-[12px] font-semibold text-slate-500 hover:text-slate-700">
+                  className="flex items-center gap-1 text-[12px] font-semibold text-slate-500 hover:text-slate-700 transition-colors">
             {SORT_OPTIONS.find(o => o.key === sort)?.label ?? 'Sort'}
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
           {sortOpen && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)}/>
+              <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} aria-hidden />
               <div className="absolute right-0 top-7 z-20 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 w-44">
                 {SORT_OPTIONS.map(opt => (
                   <button key={opt.key} type="button"
@@ -564,29 +696,24 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
       {/* ── Main content ── */}
       <main className="px-4">
 
-        {/* Error state */}
         {error && (
-          <div className="flex flex-col items-center gap-4 py-16 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center text-red-300"><IconBox/></div>
-            <div>
-              <p className="text-[16px] font-bold text-slate-700">Couldn't load products</p>
-              <p className="text-[13px] text-slate-400 mt-1 max-w-[280px]">{error}</p>
-            </div>
-            <button type="button" onClick={() => refreshProducts({ bypassCache: true })}
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-400"><IconBox/></div>
+            <p className="text-[15px] font-semibold text-slate-700">Couldn't load products</p>
+            <p className="text-[13px] text-slate-400">{error}</p>
+            <button type="button" onClick={() => loadProducts()}
                     className="h-10 px-5 rounded-xl bg-red-500 text-white text-[13px] font-semibold hover:bg-red-600 transition-colors">
               Retry
             </button>
           </div>
         )}
 
-        {/* Loading skeletons */}
         {loading && !error && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => <ProductCardSkeleton key={i}/>)}
           </div>
         )}
 
-        {/* Empty — no products in warehouse */}
         {!loading && !error && products.length === 0 && (
           <div className="flex flex-col items-center gap-4 py-20 text-center">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-300"><IconBox/></div>
@@ -595,24 +722,23 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
               <p className="text-[14px] text-slate-400">Add your first product to get started.</p>
             </div>
             <button type="button" onClick={openAddModal}
-                    className="h-12 px-6 rounded-xl bg-red-500 text-white text-[14px] font-semibold flex items-center gap-2 hover:bg-red-600 transition-colors shadow-[0_4px_12px_rgba(239,68,68,0.3)]">
+                    className="h-12 px-6 rounded-xl bg-red-500 text-white text-[14px] font-semibold flex items-center gap-2 hover:bg-red-600 transition-colors">
               <IconPlus/> Add first product
             </button>
           </div>
         )}
 
-        {/* Empty search/filter */}
         {!loading && !error && products.length > 0 && displayed.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <p className="text-[15px] font-semibold text-slate-700">No results for "{search || category}"</p>
+            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400"><IconSearch/></div>
+            <p className="text-[15px] font-semibold text-slate-700">No results for &quot;{search || category}&quot;</p>
             <button type="button" onClick={() => { setSearch(''); setCategory('all'); }}
-                    className="text-[13px] font-semibold text-red-500 hover:text-red-700">
+                    className="text-[13px] font-semibold text-red-500 hover:text-red-600">
               Clear filters
             </button>
           </div>
         )}
 
-        {/* Product grid */}
         {!loading && !error && displayed.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {displayed.map(product => (
@@ -624,24 +750,25 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
                 onEditClose={() => setActiveEditId(null)}
                 onSaveStock={handleSaveStock}
                 onEditFull={openEditModal}
-                onDelete={p => setConfirmDelete(p)}
+                onDelete={handleDeleteRequest}
               />
             ))}
           </div>
         )}
       </main>
 
-      {/* ── Modals ── */}
+      {/* ── Modal ── */}
       <ProductModal
         isOpen={modalOpen}
         product={editingProduct}
         sizeCodes={sizeCodes}
-        warehouseId={currentWarehouseId}
+        warehouseId={warehouseId}
         warehouseName={currentWarehouse.name}
         onSubmit={handleSubmit}
         onClose={closeModal}
       />
 
+      {/* ── Confirm delete dialog ── */}
       {confirmDelete && (
         <ConfirmDeleteDialog
           product={confirmDelete}
@@ -650,12 +777,13 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
         />
       )}
 
+      {/* ── Toasts ── */}
       <ToastContainer toasts={toasts}/>
 
       <style>{`
         @keyframes toastIn {
-          from { opacity: 0; transform: translateY(10px) scale(0.96); }
-          to   { opacity: 1; transform: translateY(0)    scale(1);    }
+          from { opacity:0; transform:translateY(12px) scale(0.96); }
+          to   { opacity:1; transform:translateY(0) scale(1); }
         }
         .scrollbar-none { scrollbar-width: none; }
         .scrollbar-none::-webkit-scrollbar { display: none; }

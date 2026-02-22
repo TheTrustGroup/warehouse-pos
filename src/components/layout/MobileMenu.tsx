@@ -5,12 +5,12 @@ import {
   LayoutDashboard,
   Package,
   ShoppingCart,
-  Receipt,
   BarChart3,
   Settings,
   Users,
   ClipboardList,
   MapPin,
+  Receipt,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWarehouse } from '../../contexts/WarehouseContext';

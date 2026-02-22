@@ -1,40 +1,56 @@
-// GET + POST /api/products — thin route: CORS, auth, delegate to lib
-// GET Query: warehouse_id (required), limit, category, in_stock
-// POST Body: product fields + warehouseId; sizeKind + quantityBySize for sized
-
+/**
+ * Products API — list (with sizes) and create.
+ * Official surface: GET /api/products (list with sizes), POST /api/products (create).
+ */
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  getWarehouseProducts,
-  createWarehouseProduct,
-} from '@/lib/data/warehouseProducts';
+import { getWarehouseProducts, createWarehouseProduct } from '@/lib/data/warehouseProducts';
 import { getScopeForUser } from '@/lib/data/userScopes';
 import { requireAuth, requireAdmin } from '@/lib/auth/session';
-import { corsHeaders } from '@/lib/cors';
+import { logDurability } from '@/lib/data/durabilityLogger';
 
-export async function OPTIONS(req: NextRequest) {
-  return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
+export const dynamic = 'force-dynamic';
+
+function getRequestId(request: NextRequest): string {
+  return request.headers.get('x-request-id')?.trim() || request.headers.get('x-correlation-id')?.trim() || crypto.randomUUID();
 }
 
-export async function GET(req: NextRequest) {
-  const h = corsHeaders(req);
-  const auth = requireAuth(req);
-  if (auth instanceof NextResponse) {
-    Object.entries(h).forEach(([k, v]) => auth.headers.set(k, v));
-    return auth;
-  }
-  const sp = new URL(req.url).searchParams;
-  const warehouseId = sp.get('warehouse_id') ?? '';
-  const limit = Math.min(Number(sp.get('limit') ?? 1000), 2000);
-  const category = sp.get('category') ?? undefined;
-  const inStock = sp.get('in_stock') === 'true';
-
-  if (!warehouseId) {
+export async function GET(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  try {
+    const { searchParams } = new URL(request.url);
+    const warehouseId = searchParams.get('warehouse_id') ?? undefined;
+    const limit = searchParams.get('limit');
+    const offset = searchParams.get('offset');
+    const q = searchParams.get('q') ?? undefined;
+    const category = searchParams.get('category') ?? undefined;
+    const lowStock = searchParams.get('low_stock') === '1' || searchParams.get('low_stock') === 'true';
+    const outOfStock = searchParams.get('out_of_stock') === '1' || searchParams.get('out_of_stock') === 'true';
+    const pos = searchParams.get('pos') === '1' || searchParams.get('pos') === 'true';
+    const result = await getWarehouseProducts(warehouseId, {
+      limit: limit != null ? parseInt(limit, 10) : undefined,
+      offset: offset != null ? parseInt(offset, 10) : undefined,
+      q,
+      category,
+      lowStock,
+      outOfStock,
+      pos,
+    });
+    return NextResponse.json({ data: result.data, total: result.total });
+  } catch (e) {
+    console.error('[api/products GET]', e);
     return NextResponse.json(
-      { error: 'warehouse_id required' },
-      { status: 400, headers: h }
+      { message: e instanceof Error ? e.message : 'Failed to load products' },
+      { status: 500 }
     );
   }
+}
 
+export async function POST(request: NextRequest) {
+  const auth = requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
+  const requestId = getRequestId(request);
+  let body: Record<string, unknown>;
   const scope = await getScopeForUser(auth.email);
   if (scope.allowedWarehouseIds.length > 0 && !scope.allowedWarehouseIds.includes(warehouseId)) {
     return NextResponse.json(
@@ -44,42 +60,54 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { data } = await getWarehouseProducts(warehouseId, {
-      limit,
-      offset: 0,
-      inStock,
-      category,
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
+  }
+  const warehouseId = (body?.warehouseId as string) ?? undefined;
+  try {
+    const created = await createWarehouseProduct(body);
+    const entityId = (created as { id?: string })?.id ?? '';
+    logDurability({
+      status: 'success',
+      entity_type: 'product',
+      entity_id: entityId,
+      warehouse_id: warehouseId,
+      request_id: requestId,
+      user_role: auth.role,
     });
-    const res = NextResponse.json({ data }, { headers: h });
-    res.headers.set('X-Warehouse-Id', warehouseId);
-    return res;
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[GET /api/products]', err);
-    return NextResponse.json({ error: message }, { status: 500, headers: h });
+    // Return complete saved product so client can update UI without a follow-up GET
+    return NextResponse.json(created, { status: 201 });
+  } catch (e) {
+    const entityId = (body?.id && typeof body.id === 'string' ? body.id : '') || 'unknown';
+    logDurability({
+      status: 'failed',
+      entity_type: 'product',
+      entity_id: entityId,
+      warehouse_id: warehouseId,
+      request_id: requestId,
+      user_role: auth.role,
+      message: e instanceof Error ? e.message : 'Failed to create product',
+    });
+    console.error('[api/products POST]', e);
+    return NextResponse.json(
+      { message: e instanceof Error ? e.message : 'Failed to create product' },
+      { status: 400 }
+    );
   }
 }
 
+// ── POST /api/products (create product) ─────────────────────────────────────
+
 export async function POST(req: NextRequest) {
-  const h = corsHeaders(req);
-  const auth = requireAdmin(req);
-  if (auth instanceof NextResponse) {
-    Object.entries(h).forEach(([k, v]) => auth.headers.set(k, v));
-    return auth;
-  }
+  const token = getBearerToken(req);
+  if (!token) return unauthorized();
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: h });
-  }
-
-  const warehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
-  if (!warehouseId) {
-    return NextResponse.json(
-      { error: 'warehouseId required' },
-      { status: 400, headers: h }
-    );
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS });
   }
 
   const scope = await getScopeForUser(auth.email);
@@ -92,10 +120,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const created = await createWarehouseProduct(body);
-    return NextResponse.json(created, { status: 201, headers: h });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[POST /api/products]', err);
-    return NextResponse.json({ error: message }, { status: 500, headers: h });
+    return NextResponse.json(created, { status: 201, headers: CORS });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to create product';
+    return NextResponse.json(
+      { error: message },
+      { status: 400, headers: CORS }
+    );
   }
 }

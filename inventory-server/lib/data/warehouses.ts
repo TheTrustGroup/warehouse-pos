@@ -49,7 +49,7 @@ function rowToApi(row: WarehouseRow): Warehouse {
   };
 }
 
-/** GET warehouses. Optional filter by store_id; optional allowedWarehouseIds (scope). Deduplicated by normalized name so "Main Town" and "Main town" appear once; when two rows share a name we keep the one with a code (e.g. MAINTOWN). */
+/** GET warehouses. Optional filter by store_id; optional allowedWarehouseIds (scope). */
 export async function getWarehouses(options?: { storeId?: string; allowedWarehouseIds?: string[] | null }): Promise<Warehouse[]> {
   const supabase = getSupabase();
   let query = supabase.from(TABLE).select('*').order('name');
@@ -61,29 +61,7 @@ export async function getWarehouses(options?: { storeId?: string; allowedWarehou
   }
   const { data, error } = await query;
   if (error) throw error;
-  const CANONICAL_MAINTOWN_CODE = 'MAINTOWN';
-  const rows = (data ?? []) as WarehouseRow[];
-  const byKey = new Map<string, Warehouse>();
-  for (const row of rows) {
-    const nameNorm = (row.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const key = nameNorm || row.id;
-    const isDefaultId = row.id === DEFAULT_WAREHOUSE_ID;
-    if (byKey.has(key)) {
-      const existing = byKey.get(key)!;
-      const code = (row.code ?? '').trim().toUpperCase();
-      const existingCode = (existing.code ?? '').trim().toUpperCase();
-      const existingIsDefaultId = existing.id === DEFAULT_WAREHOUSE_ID;
-      const preferNew =
-        (isDefaultId === false && existingIsDefaultId === true) ||
-        (isDefaultId === existingIsDefaultId && code && !existingCode) ||
-        (code === CANONICAL_MAINTOWN_CODE && existingCode !== CANONICAL_MAINTOWN_CODE);
-      if (preferNew) byKey.set(key, rowToApi(row));
-      continue;
-    }
-    if (nameNorm && nameNorm !== 'main store' && isDefaultId) continue;
-    byKey.set(key, rowToApi(row));
-  }
-  return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
+  return ((data ?? []) as WarehouseRow[]).map(rowToApi);
 }
 
 /** GET one warehouse by id. */

@@ -1,63 +1,122 @@
-# Warehouse Inventory & Smart POS
+# 🎨 Extreme Dept Kidz - Premium Warehouse & POS System
 
-Warehouse inventory and point-of-sale for **Extreme Dept Kidz**. Dashboard, inventory, orders, POS, sales, and reports in one app.
+A world-class, premium Figma-inspired warehouse inventory and point-of-sale system with glass morphism design.
 
-## Prerequisites
+## ✨ Features
 
-- **Node 20** and npm
+- **Premium Glass Morphism UI** - Beautiful frosted glass effects throughout
+- **Figma-Inspired Design** - Professional, modern interface
+- **Perfect Alignment** - Pixel-perfect spacing and typography
+- **Smooth Animations** - Butter-smooth transitions on all interactions
+- **Responsive Design** - Works beautifully on all screen sizes
+- **Inventory Management** - Complete product management system
+- **Point of Sale** - Full-featured POS with multiple payment methods
+- **Reports & Analytics** - Comprehensive business insights
+- **User Management** - Complete user and settings management
 
-## Quick start
+## 🚀 Quick Start
 
-### Frontend
-
+### Development
 ```bash
 npm install
-cp .env.example .env.local
-# Set VITE_API_BASE_URL in .env.local to your API URL (e.g. https://your-api.vercel.app)
 npm run dev
 ```
 
-### API (inventory-server)
-
+### Build
 ```bash
-cd inventory-server
-npm install
-cp .env.example .env
-# Set NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SESSION_SECRET in .env
-npm run dev
+npm run build
 ```
 
-Runs at `http://localhost:3001` by default.
+### Preview Production Build
+```bash
+npm run preview
+```
 
-## Environment variables
+## 🎨 Design System
 
-See **[docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)** for all variables (frontend and API). Production must set `VITE_API_BASE_URL` for the frontend; the build fails if it is unset.
+### Glass Morphism
+All cards use the `glass-card` class for premium glass morphism effects:
+```tsx
+<div className="glass-card">
+  {/* Your content */}
+</div>
+```
 
-## Scripts
+### Premium Buttons
+```tsx
+<button className="btn-primary">Primary Action</button>
+<button className="btn-secondary">Secondary Action</button>
+```
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start frontend dev server |
-| `npm run build` | TypeScript check + Vite production build |
-| `npm run test` | Run unit tests (Vitest) |
-| `npm run lint` | ESLint (max 107 warnings; see [CONTRIBUTING.md](CONTRIBUTING.md)) |
-| `npm run test:e2e` | Playwright E2E smoke (requires `PLAYWRIGHT_BASE_URL`) |
-| `npm run ci` | Invariants + test + build |
+### Input Fields
+```tsx
+<input className="input-field" placeholder="Enter value..." />
+```
 
-## Layout and design
+### Status Badges
+```tsx
+<span className="badge badge-success">In Stock</span>
+<span className="badge badge-warning">Low Stock</span>
+<span className="badge badge-error">Out of Stock</span>
+```
 
-New or changed pages should follow **[docs/PAGE_LAYOUT.md](docs/PAGE_LAYOUT.md)** (inventory page is the reference).
+## 📦 Deployment
 
-## Warehouses
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions.
 
-The app supports multiple warehouses (e.g. Main Store and a second location). Dashboard stats and the Inventory list are scoped to the **current warehouse**.
+### Quick Deploy Options:
 
-- **Switching warehouse:** Use the **Warehouse** dropdown in the sidebar (desktop) or in the mobile menu. Selection is persisted in the browser and shared across Dashboard and Inventory.
-- **New products:** Products you add are assigned to the warehouse currently selected in the sidebar. Check the dropdown before adding; the Add Product modal and Inventory header show “Adding to: &lt;warehouse name&gt;”.
-- **Ensuring both warehouses exist:** Run the seed in Supabase so the API returns both. Example: `inventory-server/supabase/scripts/seed_stores_warehouses_dc_maintown.sql` (creates Main Store/DC and Main Town). Then `GET /api/warehouses` returns the list; users with access see both in the switcher.
+**Vercel:**
+```bash
+npm i -g vercel
+vercel
+```
 
-## Security
+**Netlify:**
+```bash
+npm i -g netlify-cli
+netlify deploy --prod --dir=dist
+```
 
-- Run `npm audit` in the repo root and in `inventory-server/`. **Critical and high** findings must be resolved or explicitly accepted (e.g. documented in a security note or ADR). Moderate may be accepted for dev-only tooling.
-- Current high/moderate findings are in dev/build dependencies (e.g. ESLint, Vite, Next.js); fixing them may require major version upgrades.
-- Never commit secrets; use host env (e.g. Vercel, Railway) for production.
+## 🛠️ Tech Stack
+
+- **React 18** - UI Framework
+- **TypeScript** - Type Safety
+- **Vite** - Build Tool
+- **Tailwind CSS** - Styling
+- **React Router** - Navigation
+- **Recharts** - Data Visualization
+- **Lucide React** - Icons
+
+## 📝 Commit Changes
+
+Run the commit script:
+```bash
+./commit.sh
+```
+
+Or manually:
+```bash
+git add .
+git commit -m "Your commit message"
+```
+
+## 🎯 Project Structure
+
+```
+src/
+├── components/     # Reusable UI components
+├── pages/          # Page components
+├── contexts/       # React contexts
+├── services/       # Business logic
+├── types/          # TypeScript types
+└── lib/            # Utility functions
+```
+
+## 📄 License
+
+Private - All rights reserved
+
+---
+
+**Status**: ✅ Production Ready | 🎨 Premium UI | 🚀 Ready to Deploy
