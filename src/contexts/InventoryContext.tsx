@@ -261,6 +261,20 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return `${base}${base.includes('?') ? '&' : '?'}${qs}`;
   };
 
+  /** Build products path with an explicit warehouse id (used in loadProducts so request always uses current selection from ref). */
+  const buildProductsPathWithId = (warehouseId: string, base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
+    const params = new URLSearchParams();
+    params.set('warehouse_id', warehouseId);
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.offset != null) params.set('offset', String(opts.offset));
+    if (opts?.q) params.set('q', opts.q);
+    if (opts?.category) params.set('category', opts.category);
+    if (opts?.low_stock) params.set('low_stock', 'true');
+    if (opts?.out_of_stock) params.set('out_of_stock', 'true');
+    const qs = params.toString();
+    return `${base}${base.includes('?') ? '&' : '?'}${qs}`;
+  };
+
   /**
    * Clear old mock data from localStorage (transactions/orders only).
    * Never touch warehouse_products — user-recorded inventory must persist forever.
@@ -332,7 +346,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const silent = options?.silent === true;
     const bypassCache = options?.bypassCache === true;
     const timeoutMs = options?.timeoutMs;
-    const wid = effectiveWarehouseId;
+    const wid = effectiveWarehouseIdRef.current;
 
     const now = Date.now();
     if (silent) {
@@ -359,7 +373,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       try {
         const INITIAL_LIMIT = 200;
         const REMAINING_LIMIT = 800;
-        const path = productsPath('/api/products', { limit: INITIAL_LIMIT });
+        const path = buildProductsPathWithId(wid, '/api/products', { limit: INITIAL_LIMIT });
         const getOpts = { signal, timeoutMs, maxRetries: 3 };
         let raw: { data?: Product[]; total?: number } | Product[] | null = null;
         try {
@@ -367,7 +381,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         } catch (e) {
           const status = (e as { status?: number })?.status;
           if (status === 404) {
-            raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: 1000 }), getOpts);
+            raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, buildProductsPathWithId(wid, '/admin/api/products', { limit: 1000 }), getOpts);
           } else {
             throw e;
           }
@@ -385,7 +399,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         let apiProducts = parsed.items.map((p) => normalizeProduct(p));
         if (apiProducts.length >= INITIAL_LIMIT) {
-          const path2 = productsPath('/api/products', { limit: REMAINING_LIMIT, offset: INITIAL_LIMIT });
+          const path2 = buildProductsPathWithId(wid, '/api/products', { limit: REMAINING_LIMIT, offset: INITIAL_LIMIT });
           try {
             const raw2 = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path2, getOpts);
             const parsed2 = parseProductsResponse(raw2);

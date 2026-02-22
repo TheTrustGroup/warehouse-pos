@@ -100,15 +100,16 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
         timeoutMs: options?.timeoutMs,
       });
       const arr = Array.isArray(list) ? list : [];
-      setWarehouses(dedupeWarehouses(arr));
-      if (arr.length > 0) {
+      const deduped = dedupeWarehouses(arr);
+      setWarehouses(deduped);
+      if (deduped.length > 0) {
         setCurrentWarehouseIdState((prev) => {
-          const bound = boundWarehouseId && arr.some((w) => w.id === boundWarehouseId) ? boundWarehouseId : null;
+          const bound = boundWarehouseId && deduped.some((w) => w.id === boundWarehouseId) ? boundWarehouseId : null;
           if (bound) return bound;
-          const exists = arr.some((w) => w.id === prev);
+          const exists = deduped.some((w) => w.id === prev);
           if (exists) return prev;
           // Always set a valid selection so the warehouse filter/dropdown works (single or multiple warehouses).
-          return arr[0].id;
+          return deduped[0].id;
         });
       }
       // On empty list from API, keep current selection (don't clear) so products still load for default warehouse.
