@@ -85,8 +85,19 @@ export async function DELETE(
   const auth = requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
+  let body: Record<string, unknown> = {};
   try {
-    await deleteWarehouseProduct(id);
+    body = await request.json();
+  } catch {
+    /* body optional */
+  }
+  const warehouseId =
+    String(body.warehouseId ?? body.warehouse_id ?? new URL(request.url).searchParams.get('warehouse_id') ?? '').trim();
+  if (!warehouseId) {
+    return NextResponse.json({ message: 'warehouseId required' }, { status: 400 });
+  }
+  try {
+    await deleteWarehouseProduct(id, warehouseId);
     return new NextResponse(null, { status: 204 });
   } catch (e) {
     console.error('[admin/api/products/[id] DELETE]', e);

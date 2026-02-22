@@ -152,7 +152,7 @@ function toSizeKind(v: unknown): 'na' | 'one_size' | 'sized' {
 export async function createWarehouseProduct(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const supabase = getSupabase();
   const id = (body.id && String(body.id).trim()) || crypto.randomUUID();
-  const warehouseId = String(body.warehouseId ?? '').trim();
+  const warehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
   if (!warehouseId) throw new Error('warehouseId is required');
 
   const name = String(body.name ?? '').trim();
@@ -265,15 +265,211 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
   };
 }
 
-export async function updateWarehouseProduct(
-  _id: string,
-  _body: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  throw new Error('updateWarehouseProduct not implemented');
+// ── updateWarehouseProduct: size-aware atomic update ───────────────────────
+// Uses update_warehouse_product_atomic RPC when available; falls back to 3-step.
+
+function normSizeKind(b: Record<string, unknown>, fallback: string): string {
+  const s = String(b.sizeKind ?? b.size_kind ?? fallback ?? 'na').toLowerCase().trim();
+  return s === 'sized' ? 'sized' : s === 'one_size' ? 'one_size' : 'na';
 }
 
-export async function deleteWarehouseProduct(_id: string): Promise<void> {
-  throw new Error('deleteWarehouseProduct not implemented');
+function parseRawSizes(b: Record<string, unknown>): Array<{ sizeCode: string; quantity: number }> {
+  const arr = (b.quantityBySize ?? b.quantity_by_size) as unknown[] | undefined;
+  if (!Array.isArray(arr)) return [];
+  return arr.map((r: unknown) => {
+    const item = r as { sizeCode?: string; size_code?: string; quantity?: number };
+    return {
+      sizeCode: String(item.sizeCode ?? item.size_code ?? '').trim().toUpperCase().replace(/\s+/g, ''),
+      quantity: Math.max(0, Math.floor(Number(item.quantity ?? 0))),
+    };
+  });
+}
+
+function filterSizes(rows: Array<{ sizeCode: string; quantity: number }>): Array<{ sizeCode: string; quantity: number }> {
+  return rows.filter(
+    (r) => r.sizeCode && r.sizeCode !== 'NA' && !/^ONE_?SIZE$/i.test(r.sizeCode)
+  );
+}
+
+function buildProductRow(
+  b: Record<string, unknown>,
+  id: string,
+  wid: string,
+  sizeKind: string,
+  now: string,
+  version: number
+): Record<string, unknown> {
+  return {
+    id,
+    warehouse_id: wid,
+    sku: b.sku ?? '',
+    barcode: b.barcode ?? null,
+    name: b.name ?? '',
+    description: b.description ?? null,
+    category: b.category ?? '',
+    size_kind: sizeKind,
+    selling_price: Number(b.sellingPrice ?? b.selling_price ?? 0),
+    cost_price: Number(b.costPrice ?? b.cost_price ?? 0),
+    reorder_level: Number(b.reorderLevel ?? b.reorder_level ?? 0),
+    location: b.location ?? null,
+    supplier: b.supplier ?? null,
+    tags: Array.isArray(b.tags) ? b.tags : [],
+    images: Array.isArray(b.images) ? b.images : [],
+    version,
+    updated_at: now,
+  };
+}
+
+async function manualProductUpdate(
+  supabase: ReturnType<typeof getSupabase>,
+  id: string,
+  wid: string,
+  row: Record<string, unknown>,
+  qty: number,
+  sizeRows: Array<{ sizeCode: string; quantity: number }> | null,
+  now: string
+): Promise<void> {
+  await supabase.from('warehouse_products').update(row).eq('id', id).eq('warehouse_id', wid);
+  await supabase
+    .from('warehouse_inventory')
+    .upsert(
+      { warehouse_id: wid, product_id: id, quantity: qty, updated_at: now },
+      { onConflict: 'warehouse_id,product_id' }
+    );
+  if (sizeRows !== null) {
+    await supabase.from('warehouse_inventory_by_size').delete().eq('warehouse_id', wid).eq('product_id', id);
+    if (sizeRows.length > 0) {
+      await supabase.from('warehouse_inventory_by_size').insert(
+        sizeRows.map((r) => ({
+          warehouse_id: wid,
+          product_id: id,
+          size_code: r.sizeCode,
+          quantity: r.quantity,
+          updated_at: now,
+        }))
+      );
+    }
+  }
+}
+
+export class ProductUpdateError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
+    super(message);
+    this.name = 'ProductUpdateError';
+  }
+}
+
+export async function updateWarehouseProduct(
+  id: string,
+  body: Record<string, unknown>
+): Promise<ProductRecord> {
+  const supabase = getSupabase();
+  const wid = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
+  if (!wid) throw new ProductUpdateError('warehouseId required', 400);
+
+  const now = new Date().toISOString();
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from('warehouse_products')
+    .select('id, version, size_kind')
+    .eq('id', id)
+    .eq('warehouse_id', wid)
+    .single();
+
+  if (fetchErr || !existing) {
+    throw new ProductUpdateError('Product not found', 404);
+  }
+
+  const existingRow = existing as { version?: number; size_kind?: string };
+  const currentVersion = Number(existingRow.version ?? 0);
+  const sizeKind = normSizeKind(body, existingRow.size_kind ?? '');
+  const rawSizes = parseRawSizes(body);
+
+  const singleOneSize =
+    sizeKind === 'sized' &&
+    rawSizes.length === 1 &&
+    /^ONE_?SIZE$/i.test(rawSizes[0]?.sizeCode ?? '');
+  const effectiveSK = singleOneSize ? 'one_size' : sizeKind;
+  const validSizes = effectiveSK === 'sized' ? filterSizes(rawSizes) : [];
+
+  let sizesToWrite: Array<{ sizeCode: string; quantity: number }> | null;
+  let totalQty: number;
+
+  if (singleOneSize) {
+    sizesToWrite = [];
+    totalQty = rawSizes[0].quantity;
+  } else if (effectiveSK === 'sized') {
+    if (validSizes.length > 0) {
+      sizesToWrite = validSizes;
+      totalQty = validSizes.reduce((s, r) => s + r.quantity, 0);
+    } else {
+      sizesToWrite = null;
+      const { data: cur } = await supabase
+        .from('warehouse_inventory_by_size')
+        .select('quantity')
+        .eq('warehouse_id', wid)
+        .eq('product_id', id);
+      totalQty = (cur ?? []).reduce(
+        (s: number, r: { quantity?: number }) => s + Number(r.quantity ?? 0),
+        0
+      );
+    }
+  } else {
+    sizesToWrite = [];
+    totalQty = Number(body.quantity ?? (existing as { quantity?: number }).quantity ?? 0);
+  }
+
+  const productRow = buildProductRow(body, id, wid, effectiveSK, now, currentVersion + 1);
+
+  const { error: rpcErr } = await supabase.rpc('update_warehouse_product_atomic', {
+    p_id: id,
+    p_warehouse_id: wid,
+    p_row: productRow,
+    p_current_version: currentVersion,
+    p_quantity: totalQty,
+    p_quantity_by_size: sizesToWrite !== null ? sizesToWrite : null,
+  });
+
+  if (rpcErr && (rpcErr.code === '42883' || rpcErr.message?.includes('does not exist'))) {
+    await manualProductUpdate(supabase, id, wid, productRow, totalQty, sizesToWrite, now);
+  } else if (rpcErr) {
+    if (rpcErr.message?.includes('someone else') || rpcErr.message?.includes('version conflict')) {
+      throw new ProductUpdateError(rpcErr.message, 409);
+    }
+    throw new ProductUpdateError(rpcErr.message ?? 'Update failed', 500);
+  }
+
+  const updated = await getWarehouseProductById(id, wid);
+  if (!updated) throw new ProductUpdateError('Not found after update', 404);
+
+  if (
+    sizesToWrite &&
+    sizesToWrite.length > 0 &&
+    updated.quantityBySize.length === 0
+  ) {
+    updated.quantityBySize = sizesToWrite.map((r) => ({
+      sizeCode: r.sizeCode,
+      sizeLabel: r.sizeCode,
+      quantity: r.quantity,
+    }));
+    updated.quantity = totalQty;
+  }
+
+  return updated;
+}
+
+export async function deleteWarehouseProduct(id: string, warehouseId: string): Promise<void> {
+  const wid = warehouseId.trim();
+  if (!wid) throw new Error('warehouseId required');
+
+  const supabase = getSupabase();
+  await supabase.from('warehouse_inventory_by_size').delete().eq('warehouse_id', wid).eq('product_id', id);
+  await supabase.from('warehouse_inventory').delete().eq('warehouse_id', wid).eq('product_id', id);
+  const { error } = await supabase.from('warehouse_products').delete().eq('id', id).eq('warehouse_id', wid);
+  if (error) throw new Error(error.message);
 }
 
 export async function deleteWarehouseProductsBulk(_ids: string[]): Promise<void> {

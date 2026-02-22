@@ -1,93 +1,82 @@
-// ============================================================
-// GET  /api/products — list products with inventory for a warehouse
-// POST /api/products — create a new product (inventory "Add product")
-//
-// GET Query: warehouse_id (required), limit, offset, in_stock, category
-// Returns: { data: ProductRecord[] }
+// GET + POST /api/products — thin route: CORS, auth, delegate to lib
+// GET Query: warehouse_id (required), limit, category, in_stock
 // POST Body: product fields + warehouseId; sizeKind + quantityBySize for sized
-// ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getWarehouseProducts, createWarehouseProduct } from '../../../lib/data/warehouseProducts';
+import {
+  getWarehouseProducts,
+  createWarehouseProduct,
+} from '@/lib/data/warehouseProducts';
+import { requireAuth, requireAdmin } from '@/lib/auth/session';
+import { corsHeaders } from '@/lib/cors';
 
-const CORS = {
-  'Access-Control-Allow-Origin':  process.env.ALLOWED_ORIGIN ?? 'https://warehouse.extremedeptkidz.com',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-request-id',
-  'Access-Control-Allow-Credentials': 'true',
-  'Access-Control-Max-Age': '86400',
-};
-
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: CORS });
-}
-
-function getBearerToken(req: NextRequest): string | null {
-  const auth = req.headers.get('authorization') ?? '';
-  if (auth.startsWith('Bearer ')) return auth.slice(7).trim();
-  return null;
-}
-
-function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: CORS });
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
 
 export async function GET(req: NextRequest) {
-  const token = getBearerToken(req);
-  if (!token) return unauthorized();
-
-  const { searchParams } = new URL(req.url);
-  const warehouseId = searchParams.get('warehouse_id') ?? '';
-  const limit     = Math.min(Math.floor(Number(searchParams.get('limit') ?? 1000)), 2000);
-  const offset    = Math.max(0, Math.floor(Number(searchParams.get('offset') ?? 0)));
-  const inStock   = searchParams.get('in_stock') === 'true' || searchParams.get('in_stock') === '1';
-  const category  = searchParams.get('category') ?? undefined;
+  const h = corsHeaders(req);
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) {
+    Object.entries(h).forEach(([k, v]) => auth.headers.set(k, v));
+    return auth;
+  }
+  const sp = new URL(req.url).searchParams;
+  const warehouseId = sp.get('warehouse_id') ?? '';
+  const limit = Math.min(Number(sp.get('limit') ?? 1000), 2000);
+  const category = sp.get('category') ?? undefined;
+  const inStock = sp.get('in_stock') === 'true';
 
   if (!warehouseId) {
     return NextResponse.json(
-      { error: 'warehouse_id is required' },
-      { status: 400, headers: CORS }
+      { error: 'warehouse_id required' },
+      { status: 400, headers: h }
     );
   }
 
   try {
-    const { data: products } = await getWarehouseProducts(warehouseId, {
+    const { data } = await getWarehouseProducts(warehouseId, {
       limit,
-      offset,
-      inStock: inStock || undefined,
+      offset: 0,
+      inStock,
       category,
     });
-    return NextResponse.json({ data: products }, { headers: CORS });
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to load products';
-    return NextResponse.json(
-      { error: message },
-      { status: 500, headers: CORS }
-    );
+    return NextResponse.json({ data }, { headers: h });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[GET /api/products]', err);
+    return NextResponse.json({ error: message }, { status: 500, headers: h });
   }
 }
 
-// ── POST /api/products (create product) ─────────────────────────────────────
-
 export async function POST(req: NextRequest) {
-  const token = getBearerToken(req);
-  if (!token) return unauthorized();
-
+  const h = corsHeaders(req);
+  const auth = requireAdmin(req);
+  if (auth instanceof NextResponse) {
+    Object.entries(h).forEach(([k, v]) => auth.headers.set(k, v));
+    return auth;
+  }
   let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS });
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: h });
+  }
+
+  const warehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
+  if (!warehouseId) {
+    return NextResponse.json(
+      { error: 'warehouseId required' },
+      { status: 400, headers: h }
+    );
   }
 
   try {
     const created = await createWarehouseProduct(body);
-    return NextResponse.json(created, { status: 201, headers: CORS });
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to create product';
-    return NextResponse.json(
-      { error: message },
-      { status: 400, headers: CORS }
-    );
+    return NextResponse.json(created, { status: 201, headers: h });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[POST /api/products]', err);
+    return NextResponse.json({ error: message }, { status: 500, headers: h });
   }
 }
