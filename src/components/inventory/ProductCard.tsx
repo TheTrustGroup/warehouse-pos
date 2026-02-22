@@ -35,26 +35,35 @@ export interface Product {
 
 interface ProductCardProps {
   product: Product;
-  isEditing: boolean;                           // controlled by parent
-  onEditOpen: (id: string) => void;             // parent sets active edit
-  onEditClose: () => void;                      // parent clears active edit
-  onSaveStock: (id: string, update: {
+  /** When omitted, card is view-only (no inline stock edit). */
+  isEditing?: boolean;
+  onEditOpen?: (id: string) => void;
+  onEditClose?: () => void;
+  onSaveStock?: (id: string, update: {
     quantity: number;
     quantityBySize: SizeRow[];
     sizeKind: string;
   }) => Promise<void>;
-  onEditFull: (product: Product) => void;       // open full modal
-  onDelete?: (product: Product) => void;        // request delete (parent shows confirm)
+  onEditFull: (product: Product) => void;
+  onDelete?: (product: Product) => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 type StockStatus = 'in' | 'low' | 'out';
 
+function getTotalQuantity(product: Product): number {
+  if (product.sizeKind === 'sized' && (product.quantityBySize?.length ?? 0) > 0) {
+    return (product.quantityBySize ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
+  }
+  return product.quantity ?? 0;
+}
+
 function getStockStatus(product: Product): StockStatus {
-  if (product.quantity === 0) return 'out';
-  if (product.reorderLevel && product.quantity <= product.reorderLevel) return 'low';
-  if (product.quantity <= 3) return 'low';
+  const qty = getTotalQuantity(product);
+  if (qty === 0) return 'out';
+  if (product.reorderLevel != null && qty <= product.reorderLevel) return 'low';
+  if (qty <= 3) return 'low';
   return 'in';
 }
 
@@ -310,13 +319,15 @@ function StockEditor({ product, onSave, onCancel }: StockEditorProps) {
 
 export default function ProductCard({
   product,
-  isEditing,
+  isEditing = false,
   onEditOpen,
   onEditClose,
   onSaveStock,
   onEditFull,
   onDelete,
 }: ProductCardProps) {
+  const supportsInlineStock = typeof onSaveStock === 'function' && typeof onEditOpen === 'function' && typeof onEditClose === 'function';
+  const editing = supportsInlineStock && isEditing;
 
   const status = getStockStatus(product);
   const locationStr = getLocationString(product.location);
@@ -328,7 +339,7 @@ export default function ProductCard({
         bg-white rounded-2xl overflow-hidden
         shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.06)]
         transition-all duration-200
-        ${isEditing
+        ${editing
           ? 'ring-2 ring-red-400 shadow-[0_4px_8px_rgba(0,0,0,0.08),0_12px_32px_rgba(0,0,0,0.10)]'
           : 'hover:shadow-[0_4px_8px_rgba(0,0,0,0.08),0_12px_32px_rgba(0,0,0,0.10)] hover:-translate-y-0.5'
         }
@@ -359,7 +370,7 @@ export default function ProductCard({
       </div>
 
       {/* ── Card body (hidden when editing) ── */}
-      {!isEditing && (
+      {!editing && (
         <div className="px-4 pt-3.5">
           {/* Name */}
           <h3 className="text-[15px] font-bold text-slate-900 truncate leading-snug mb-1">
@@ -396,7 +407,7 @@ export default function ProductCard({
       )}
 
       {/* ── Inline stock editor ── */}
-      {isEditing && (
+      {editing && onSaveStock && onEditClose && (
         <StockEditor
           product={product}
           onSave={onSaveStock.bind(null, product.id)}
@@ -405,8 +416,8 @@ export default function ProductCard({
       )}
 
       {/* ── Footer (hidden when editing) ── */}
-      {!isEditing && (
-        <div className="grid grid-cols-3 border-t border-slate-100">
+      {!editing && (
+        <div className={`grid border-t border-slate-100 ${supportsInlineStock ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <button
             type="button"
             onClick={() => onEditFull(product)}
@@ -420,20 +431,21 @@ export default function ProductCard({
           >
             <IconEdit /> Edit
           </button>
-          <button
-            type="button"
-            onClick={() => onEditOpen(product.id)}
-            className="
-              h-12 flex items-center justify-center gap-1
-              text-[13px] font-semibold text-red-500
-              border-r border-slate-100
-              hover:bg-red-50
-              transition-colors duration-150
-            "
-          >
-            <IconPlus /> Stock
-          </button>
-          {/* Delete button */}
+          {supportsInlineStock && (
+            <button
+              type="button"
+              onClick={() => onEditOpen?.(product.id)}
+              className="
+                h-12 flex items-center justify-center gap-1
+                text-[13px] font-semibold text-red-500
+                border-r border-slate-100
+                hover:bg-red-50
+                transition-colors duration-150
+              "
+            >
+              <IconPlus /> Stock
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onDelete?.(product)}
