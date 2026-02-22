@@ -2,6 +2,13 @@
 
 If "Main Town" still shows Main Store's stats (e.g. same Total Stock Value / Total Products), follow this in order.
 
+## 0. Deployment (do this first)
+
+1. **Deploy the frontend** that includes the latest Main Town fixes (commit that adds sync refs + sentinel in `loadProducts`). The live site (e.g. `warehouse.extremedeptkidz.com`) must serve this build.
+2. **Hard refresh** the app (or clear site data for the origin) so the browser does not use an old bundle or cache.
+3. **Backend:** Ensure two distinct warehouse rows exist: Main Store (`00000000-0000-0000-0000-000000000001`) and Main Town (a different UUID). Run `SELECT id, name, code FROM warehouses ORDER BY name;` in Supabase. If Main Town is missing or shares Main Store’s id, run `cleanup_single_main_town.sql` and/or seed so Main Town has its own id.
+4. **API:** `GET /api/warehouses` (with auth) must return at least two objects with different `id` values. If it returns one or two with the same `id`, fix data (step 3).
+
 ## 1. Verify what the frontend sends
 
 1. Open the app, select **Main Town** in the sidebar.
@@ -32,4 +39,4 @@ Then the API is returning rows for that id, but those rows are **the same data a
 
 ## 4. Client guard (already in code)
 
-If the UI selection is "Main Town" but the selected id is Main Store’s (e.g. stale list or cache), the app uses a sentinel warehouse id for the products request so the API returns **no products** and we never show Main Store’s stats under the "Main Town" label. You should then fix the list (step 2) so Main Town gets the correct id.
+If the UI selection is "Main Town" but the selected id is Main Store’s (e.g. stale list or cache), the app uses a sentinel warehouse id for the products request so the API returns **no products** and we never show Main Store’s stats under the "Main Town" label. The warehouse id for the products request comes from refs updated every render; in-flight responses for a previous warehouse are discarded. If the Network tab still shows `warehouse_id=00000000-0000-0000-0000-000000000001` when Main Town is selected, redeploy the frontend and hard refresh (section 0).
