@@ -13,7 +13,7 @@ Run these in **Supabase Dashboard → SQL Editor** (or via `supabase db push` fo
 
 3. **Optional:** `scripts/backfill_sized_products_missing_size_rows.sql` — Run once if you have sized products missing per-size rows.
 
-4. **Stores / warehouses / user_scopes:** If you use the app’s warehouse switcher and user scopes, ensure the schema has `stores`, `user_scopes`, and `warehouses.store_id`. Run **`scripts/phase3_stores_and_user_scopes_schema.sql`**, then **`scripts/seed_stores_warehouses.sql`** to create and seed `stores` and two warehouses (Main Store, Main Town). Optionally add rows to `user_scopes` to restrict which user can see which warehouse. If you see duplicate “Main Town” in the warehouse dropdown, run **`scripts/cleanup_single_main_town.sql`** once to keep a single Main Town store and single MAINTOWN warehouse (merges inventory and updates references).
+4. **Stores / warehouses / user_scopes:** If you use the app’s warehouse switcher and user scopes, ensure the schema has `stores`, `user_scopes`, and `warehouses.store_id`. Run **`scripts/phase3_stores_and_user_scopes_schema.sql`**, then **`scripts/seed_stores_warehouses.sql`** to create and seed `stores` and two warehouses (Main Store, Main Town). Optionally add rows to `user_scopes` to restrict which user can see which warehouse. If you see duplicate “Main Town” in the warehouse dropdown, run **`scripts/merge_duplicate_main_town.sql`** (merge MAIN_TOWN into MAINTOWN, then remove duplicate) or **`scripts/cleanup_single_main_town.sql`** (full cleanup: one store + one MAINTOWN warehouse).
 
 **Check:** At the end of `setup.sql` there is a small verification query (PART 6); run it to confirm tables and RPC are present.
 
@@ -45,6 +45,8 @@ Apply with `supabase db push` or run files in timestamp order in SQL Editor. Pre
 | `create_durability_log.sql` | Same table as migration; use if not using migrations | Yes |
 | `backfill_sized_products_missing_size_rows.sql` | One-off backfill for sized products | Run once per env |
 | `cleanup_single_main_town.sql` | One Main Town store + one MAINTOWN warehouse; merges inventory and refs | Yes (idempotent) |
+| `merge_duplicate_main_town.sql` | Merge MAIN_TOWN (00000002) into MAINTOWN (312ee60a-...), then remove duplicate | Yes (idempotent) |
+| `diagnose_warehouse_inventory.sql` | Row counts and total qty per warehouse | Read-only |
 | `inventory_diagnostic_fixed.sql` | Diagnostic queries | Read-only |
 
 Run `setup.sql` first in new environments; then apply migrations or run the create_* scripts.
