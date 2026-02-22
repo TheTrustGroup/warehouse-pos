@@ -12,5 +12,6 @@
 | `create_v_products_inventory_view.sql` | View for list/detail with quantityBySize | Yes (CREATE OR REPLACE) |
 | `backfill_sized_products_missing_size_rows.sql` | One-off backfill for sized products | Run once per env |
 | `inventory_diagnostic_fixed.sql` | Diagnostic queries | Read-only |
+| `create_durability_log.sql` | Table for logDurability() audit entries | Yes |
 
-Run `setup.sql` first in each environment; then `create_v_products_inventory_view.sql` if using the view.
+Run `setup.sql` first in each environment; then `create_v_products_inventory_view.sql` if using the view. Run `create_durability_log.sql` once if using durability logging.
