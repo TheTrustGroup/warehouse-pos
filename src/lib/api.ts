@@ -4,15 +4,21 @@
  * Production build fails if VITE_API_BASE_URL is unset. Never show "Saved" without confirmed 2xx.
  */
 
-/** Dev-only fallback when VITE_API_BASE_URL is unset. Production build requires env. */
+/** Dev-only fallback when VITE_API_BASE_URL is unset. Production requires env. */
 const DEFAULT_API_BASE = import.meta.env.PROD ? '' : 'https://extremedeptkidz.com';
 const _rawApiBase = import.meta.env.VITE_API_BASE_URL;
 const _trimmed = (_rawApiBase && String(_rawApiBase).trim() ? _rawApiBase : DEFAULT_API_BASE).replace(/\/$/, '');
 // Must be a full URL (https://...) so fetch() hits the API host, not the frontend host. If set without protocol, prepend https://.
 const _resolved = _trimmed.startsWith('http://') || _trimmed.startsWith('https://') ? _trimmed : `https://${_trimmed}`;
+
+/** Single source of truth for API base URL. All client requests must use this. */
 export const API_BASE_URL = _resolved;
 
-// Warn at runtime when default URL is used (dev only; production build fails if unset).
+if (import.meta.env.PROD && !_resolved) {
+  throw new Error(
+    '[API] VITE_API_BASE_URL is required in production. Set it in your hosting env (e.g. Vercel).'
+  );
+}
 if (import.meta.env.DEV && _resolved === DEFAULT_API_BASE) {
   console.warn(
     '[API] VITE_API_BASE_URL is unset; using default. Set it in .env.local for your backend.'

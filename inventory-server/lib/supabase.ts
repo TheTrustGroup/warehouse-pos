@@ -1,24 +1,28 @@
 /**
- * Server-side Supabase client for API routes.
- * Uses the service role key so RPCs (e.g. record_sale) can run with full privileges.
+ * Server-side Supabase client. Use only in API routes / server code.
+ * Requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in env.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? '';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 
 let client: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient {
   if (!client) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-    const key =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
-    if (!url || !key) {
+    if (!url || !serviceRoleKey) {
       throw new Error(
-        'Missing Supabase env: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY)'
+        '[supabase] Missing env: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY'
       );
     }
-    client = createClient(url, key, {
-      auth: { persistSession: false },
+    client = createClient(url, serviceRoleKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
     });
   }
   return client;

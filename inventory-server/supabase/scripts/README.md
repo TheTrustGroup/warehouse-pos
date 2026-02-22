@@ -26,3 +26,5 @@ Apply with `supabase db push` or run files in timestamp order in SQL Editor. Pre
 | `inventory_diagnostic_fixed.sql` | Diagnostic queries | Read-only |
 
 Run `setup.sql` first in new environments; then apply migrations or run the create_* scripts.
+
+**Production:** Prefer the versioned files in `../migrations/` and a single migration runner. Use these scripts only for one-off backfills or diagnostics; do not rely on ad-hoc script execution for schema.
