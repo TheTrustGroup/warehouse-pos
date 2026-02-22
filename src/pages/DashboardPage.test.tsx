@@ -25,13 +25,25 @@ vi.mock('../contexts/WarehouseContext', () => ({
 describe('DashboardPage', () => {
   let fetchCalls: string[] = [];
 
+  const mockDashboardResponse = {
+    totalStockValue: 1000,
+    totalProducts: 5,
+    lowStockCount: 1,
+    outOfStockCount: 0,
+    todaySales: 50,
+    lowStockItems: [],
+    categorySummary: { Apparel: { count: 5, value: 1000 } },
+  };
+
   beforeEach(() => {
     fetchCalls = [];
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
         fetchCalls.push(url);
-        return Promise.resolve(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+        return Promise.resolve(
+          new Response(JSON.stringify(mockDashboardResponse), { status: 200 })
+        );
       })
     );
   });
@@ -40,17 +52,17 @@ describe('DashboardPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('fetches products and sales with warehouse_id from context', async () => {
+  it('fetches dashboard with warehouse_id from context', async () => {
     render(<DashboardPage />);
 
     await waitFor(
       () => {
-        const productCall = fetchCalls.find((u) => u.includes('/api/products') && u.includes('warehouse_id='));
-        const salesCall = fetchCalls.find((u) => u.includes('/api/sales') && u.includes('warehouse_id='));
-        expect(productCall, 'products request must include warehouse_id from context').toBeDefined();
-        expect(salesCall, 'sales request must include warehouse_id from context').toBeDefined();
-        expect(productCall).toContain(encodeURIComponent(MOCK_WAREHOUSE_ID));
-        expect(salesCall).toContain(encodeURIComponent(MOCK_WAREHOUSE_ID));
+        const dashboardCall = fetchCalls.find(
+          (u) => u.includes('/api/dashboard') && u.includes('warehouse_id=')
+        );
+        expect(dashboardCall, 'dashboard request must include warehouse_id from context').toBeDefined();
+        expect(dashboardCall).toContain(encodeURIComponent(MOCK_WAREHOUSE_ID));
+        expect(dashboardCall).toMatch(/date=/);
       },
       { timeout: 3000 }
     );

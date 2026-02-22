@@ -22,67 +22,69 @@ import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle 
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 
-// ── Types ─────────────────────────────────────────────────────────────────
+// ── Types (match GET /api/dashboard response) ──────────────────────────────
 
-interface Product {
-  id:             string;
-  name:           string;
-  quantity:       number;
-  sizeKind:       string;
+interface DashboardLowStockItem {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
   quantityBySize: { sizeCode: string; quantity: number }[];
-  sellingPrice:   number;
-  reorderLevel?:  number;
-  category?:      string;
+  reorderLevel: number;
 }
 
-interface DashboardStats {
-  totalStockValue:  number;
-  totalProducts:    number;
-  lowStockCount:    number;
-  outOfStockCount:  number;
-  todaysSales:      number;
+interface DashboardCategorySummary {
+  [category: string]: { count: number; value: number };
+}
+
+interface DashboardData {
+  totalStockValue: number;
+  totalProducts: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  todaySales: number;
+  lowStockItems: DashboardLowStockItem[];
+  categorySummary: DashboardCategorySummary;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-function getProductQty(p: Product): number {
-  if (p.sizeKind === 'sized' && p.quantityBySize?.length > 0) {
-    return p.quantityBySize.reduce((s, r) => s + (r.quantity ?? 0), 0);
-  }
-  return p.quantity ?? 0;
-}
-
-function computeStats(products: Product[], todaysSales: number): DashboardStats {
-  let totalStockValue = 0;
-  let lowStockCount   = 0;
-  let outOfStockCount = 0;
-
-  for (const p of products) {
-    const qty     = getProductQty(p);
-    const reorder = p.reorderLevel ?? 3;
-    totalStockValue += qty * (p.sellingPrice ?? 0);
-    if (qty === 0)         outOfStockCount++;
-    else if (qty <= reorder) lowStockCount++;
-  }
-
-  return {
-    totalStockValue,
-    totalProducts:   products.length,
-    lowStockCount,
-    outOfStockCount,
-    todaysSales,
-  };
-}
 
 function formatGHC(n: number): string {
   return 'GH₵' + n.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// ── apiFetch ──────────────────────────────────────────────────────────────
+/** Rounded/compact so large amounts fit in the stat card (e.g. GH₵585.5K, GH₵1.2M). */
+function formatGHCCompact(n: number): string {
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '−' : '';
+  if (abs >= 1_000_000) {
+    const v = abs / 1_000_000;
+    return `${sign}GH₵${v >= 10 ? Math.round(v) : v.toFixed(1)}M`;
+  }
+  if (abs >= 1_000) {
+    const v = abs / 1_000;
+    return `${sign}GH₵${v >= 100 ? Math.round(v) : v.toFixed(1)}K`;
+  }
+  return sign + 'GH₵' + abs.toLocaleString('en-GH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
 
-async function apiFetch<T = unknown>(path: string): Promise<T> {
+// ── apiFetch (with retry for transient network failures) ───────────────────
+
+const FETCH_TIMEOUT_MS = 15_000;
+const RETRY_DELAYS_MS = [1_000, 2_000];
+
+function isRetryableError(e: unknown): boolean {
+  if (e instanceof Error) {
+    const msg = e.message.toLowerCase();
+    if (e.name === 'AbortError' || msg.includes('timeout')) return true;
+    if (msg.includes('network') || msg.includes('connection') || msg.includes('failed to fetch')) return true;
+  }
+  return false;
+}
+
+async function apiFetchOnce<T = unknown>(path: string): Promise<T> {
   const ctrl = new AbortController();
-  const t    = setTimeout(() => ctrl.abort(), 15_000);
+  const t    = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       headers: getApiHeaders() as HeadersInit,
@@ -100,6 +102,23 @@ async function apiFetch<T = unknown>(path: string): Promise<T> {
     if (e instanceof Error && e.name === 'AbortError') throw new Error('Request timed out');
     throw e;
   }
+}
+
+async function apiFetch<T = unknown>(path: string): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i <= RETRY_DELAYS_MS.length; i++) {
+    try {
+      return await apiFetchOnce<T>(path);
+    } catch (e) {
+      lastErr = e;
+      if (i < RETRY_DELAYS_MS.length && isRetryableError(e)) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[i]));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
 }
 
 // ── Stat card ─────────────────────────────────────────────────────────────
@@ -138,23 +157,15 @@ function StatCard({
         <span className="text-[13px] font-semibold text-slate-500">{label}</span>
         <Icon className={iconColor} size={28} aria-hidden />
       </div>
-      <p className={`text-[28px] font-black tabular-nums leading-none ${valColor}`}>{value}</p>
+      <p className={`text-[28px] font-black tabular-nums leading-none min-w-0 truncate ${valColor}`} title={typeof value === 'string' ? value : String(value)}>{value}</p>
     </div>
   );
 }
 
-// ── Low stock table ───────────────────────────────────────────────────────
+// ── Low stock table (uses pre-aggregated lowStockItems from API) ────────────
 
-function LowStockTable({ products }: { products: Product[] }) {
-  const alerts = products
-    .filter(p => {
-      const qty = getProductQty(p);
-      return qty <= (p.reorderLevel ?? 3);
-    })
-    .sort((a, b) => getProductQty(a) - getProductQty(b))
-    .slice(0, 10);
-
-  if (alerts.length === 0) {
+function LowStockTable({ items }: { items: DashboardLowStockItem[] }) {
+  if (items.length === 0) {
     return (
       <div className="flex items-center gap-3 py-6 px-4 text-emerald-600">
         <CheckCircle className="w-6 h-6 flex-shrink-0" aria-hidden />
@@ -165,14 +176,13 @@ function LowStockTable({ products }: { products: Product[] }) {
 
   return (
     <div className="divide-y divide-slate-100">
-      {alerts.map(p => {
-        const qty     = getProductQty(p);
-        const isOut   = qty === 0;
+      {items.map((p) => {
+        const isOut = p.quantity === 0;
         return (
           <div key={p.id} className="flex items-center justify-between py-3.5 px-4">
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-bold text-slate-900 truncate">{p.name}</p>
-              <p className="text-[11px] text-slate-400 font-medium mt-0.5">{p.category ?? 'Uncategorised'}</p>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">{p.category || 'Uncategorised'}</p>
             </div>
             <div className="flex items-center gap-3 ml-4">
               <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-bold
@@ -180,7 +190,7 @@ function LowStockTable({ products }: { products: Product[] }) {
                   ? 'bg-red-50 text-red-500 border border-red-100'
                   : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${isOut ? 'bg-red-400' : 'bg-amber-400'}`}/>
-                {isOut ? 'Out of stock' : `${qty} left`}
+                {isOut ? 'Out of stock' : `${p.quantity} left`}
               </div>
             </div>
           </div>
@@ -200,48 +210,21 @@ export default function DashboardPage() {
   const warehouseId   = currentWarehouseId;
   const warehouseName = currentWarehouse?.name ?? 'Warehouse';
 
-  const [products,     setProducts]     = useState<Product[]>([]);
-  const [todaysSales,  setTodaysSales]  = useState(0);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState<string | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async (wid: string) => {
     setLoading(true);
     setError(null);
-    setProducts([]);
-    setTodaysSales(0);
+    setDashboard(null);
 
     try {
-      // Fetch products for THIS warehouse (warehouseId from context — always correct)
-      const rawProducts = await apiFetch<unknown>(
-        `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=2000`
+      const today = new Date().toISOString().split('T')[0];
+      const data = await apiFetch<DashboardData>(
+        `/api/dashboard?warehouse_id=${encodeURIComponent(wid)}&date=${today}`
       );
-
-      const list: Product[] = Array.isArray(rawProducts)
-        ? rawProducts as Product[]
-        : ((rawProducts as { data?: Product[] })?.data ?? (rawProducts as { products?: Product[] })?.products ?? []);
-
-      setProducts(list);
-
-      // Fetch today's sales for this warehouse
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        const rawSales = await apiFetch<unknown>(
-          `/api/sales?warehouse_id=${encodeURIComponent(wid)}&date=${today}&limit=500`
-        );
-        const sales: { total?: number }[] = Array.isArray(rawSales)
-          ? rawSales
-          : ((rawSales as { data?: { total?: number }[] })?.data ?? (rawSales as { sales?: { total?: number }[] })?.sales ?? []);
-        const total = sales.reduce((s, sale) => s + Number(sale.total ?? 0), 0);
-        setTodaysSales(total);
-      } catch (salesErr) {
-        // Sales endpoint may not be deployed yet — not fatal; log for observability
-        if (typeof console !== 'undefined' && console.warn) {
-          console.warn('[Dashboard] Today’s sales fetch failed (non-fatal):', salesErr instanceof Error ? salesErr.message : salesErr);
-        }
-        setTodaysSales(0);
-      }
-
+      setDashboard(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load dashboard data');
     } finally {
@@ -249,12 +232,19 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Re-fetch whenever warehouse changes — THIS IS WHAT WAS MISSING
   useEffect(() => {
     loadData(warehouseId);
   }, [warehouseId, loadData]);
 
-  const stats = computeStats(products, todaysSales);
+  const stats = dashboard
+    ? {
+        totalStockValue: dashboard.totalStockValue,
+        totalProducts: dashboard.totalProducts,
+        lowStockCount: dashboard.lowStockCount,
+        outOfStockCount: dashboard.outOfStockCount,
+        todaysSales: dashboard.todaySales,
+      }
+    : null;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -320,24 +310,24 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="Total Stock Value"
-            value={loading ? '—' : formatGHC(stats.totalStockValue)}
+            value={loading || !stats ? '—' : formatGHCCompact(stats.totalStockValue)}
             icon={DollarSign}
             accent
           />
           <StatCard
             label="Total Products"
-            value={loading ? '—' : stats.totalProducts}
+            value={loading || !stats ? '—' : stats.totalProducts}
             icon={Package}
           />
           <StatCard
             label="Low Stock Items"
-            value={loading ? '—' : stats.lowStockCount + stats.outOfStockCount}
+            value={loading || !stats ? '—' : stats.lowStockCount + stats.outOfStockCount}
             icon={AlertTriangle}
-            warning={stats.lowStockCount + stats.outOfStockCount > 0}
+            warning={stats ? stats.lowStockCount + stats.outOfStockCount > 0 : false}
           />
           <StatCard
             label="Today's Sales"
-            value={loading ? '—' : formatGHC(stats.todaysSales)}
+            value={loading || !stats ? '—' : formatGHCCompact(stats.todaysSales)}
             icon={Receipt}
           />
         </div>
@@ -351,7 +341,7 @@ export default function DashboardPage() {
                 {warehouseName} — products at or below reorder level
               </p>
             </div>
-            {stats.outOfStockCount > 0 && (
+            {stats && stats.outOfStockCount > 0 && (
               <span className="px-3 py-1 rounded-full bg-red-50 text-red-500 text-[12px] font-bold border border-red-100">
                 {stats.outOfStockCount} out of stock
               </span>
@@ -364,28 +354,19 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : (
-            <LowStockTable products={products}/>
+            <LowStockTable items={dashboard?.lowStockItems ?? []}/>
           )}
         </div>
 
         {/* ── Category breakdown ── */}
-        {!loading && products.length > 0 && (
+        {!loading && dashboard && Object.keys(dashboard.categorySummary).length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="px-5 py-4 border-b border-slate-100">
               <h2 className="text-[15px] font-black text-slate-900">By Category</h2>
               <p className="text-[12px] text-slate-400 mt-0.5">{warehouseName}</p>
             </div>
             <div className="p-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {Object.entries(
-                products.reduce<Record<string, { count: number; value: number }>>((acc, p) => {
-                  const cat = p.category ?? 'Other';
-                  const qty = getProductQty(p);
-                  if (!acc[cat]) acc[cat] = { count: 0, value: 0 };
-                  acc[cat].count++;
-                  acc[cat].value += qty * (p.sellingPrice ?? 0);
-                  return acc;
-                }, {})
-              )
+              {Object.entries(dashboard.categorySummary)
                 .sort((a, b) => b[1].value - a[1].value)
                 .map(([cat, { count, value }]) => (
                   <div key={cat}
