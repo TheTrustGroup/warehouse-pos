@@ -154,11 +154,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   offlineRef.current = offline;
   /** Mirror of current products for equivalence check during silent refresh (avoids setState when nothing changed → no jitter). */
   const productsRef = useRef<Product[]>([]);
-  /** Current warehouse id so in-flight loadProducts can discard stale responses (avoid Main Store data overwriting Main Town after switch). */
+  /** Updated every render so loadProducts always uses current selection (no effect-order dependency). When true, request must use sentinel id so we never load Main Store data for a "Main Town" selection. */
   const effectiveWarehouseIdRef = useRef<string>(effectiveWarehouseId);
-  useEffect(() => {
-    effectiveWarehouseIdRef.current = effectiveWarehouseId;
-  }, [effectiveWarehouseId]);
+  const useSentinelForProductsRef = useRef<boolean>(isMainStoreIdWithWrongLabel);
+  effectiveWarehouseIdRef.current = effectiveWarehouseId;
+  useSentinelForProductsRef.current = isMainStoreIdWithWrongLabel;
   /** Throttle silent refresh so poll + visibility + mount don't cause back-to-back requests (reduces list jitter). */
   const lastSilentRefreshAtRef = useRef<number>(0);
   const SILENT_REFRESH_THROTTLE_MS = 2000;
@@ -346,7 +346,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const silent = options?.silent === true;
     const bypassCache = options?.bypassCache === true;
     const timeoutMs = options?.timeoutMs;
-    const wid = effectiveWarehouseIdRef.current;
+    const wid = useSentinelForProductsRef.current ? SENTINEL_EMPTY_WAREHOUSE_ID : effectiveWarehouseIdRef.current;
 
     const now = Date.now();
     if (silent) {
