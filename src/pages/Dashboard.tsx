@@ -1,20 +1,18 @@
-import { Package, DollarSign, AlertTriangle, ShoppingBag, Store as StoreIcon, MapPin, Shield, Settings, Users, BarChart3, LayoutGrid, RefreshCw } from 'lucide-react';
+import { Package, DollarSign, AlertTriangle, ShoppingBag, Store as StoreIcon, MapPin, Shield, RefreshCw, ShoppingCart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { StatCard } from '../components/dashboard/StatCard';
 import { SalesChart } from '../components/dashboard/SalesChart';
 import { TopProducts } from '../components/dashboard/TopProducts';
-import { RecentActivity } from '../components/dashboard/RecentActivity';
-import { QuickActions } from '../components/dashboard/QuickActions';
 import { SyncRejectionsCard } from '../components/dashboard/SyncRejectionsCard';
 import { useInventory } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useStore } from '../contexts/StoreContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { InventoryActivity } from '../types';
 import { fetchTransactionsFromApi } from '../services/transactionsApi';
 import { API_BASE_URL } from '../lib/api';
 import { formatCurrency } from '../lib/utils';
+import { computeDashboardStats } from '../lib/dashboardStats';
 import { Button } from '../components/ui/Button';
 
 export function Dashboard() {
@@ -83,35 +81,18 @@ export function Dashboard() {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  const stats = useMemo(() => {
-    const totalProducts = products.length;
-    const q = (p: { quantity?: number; costPrice?: number; reorderLevel?: number }) => Number(p.quantity ?? 0) || 0;
-    const cost = (p: { costPrice?: number }) => Number(p.costPrice ?? 0) || 0;
-    const reorder = (p: { reorderLevel?: number }) => Number(p.reorderLevel ?? 0) || 0;
-    const totalStockValue = products.reduce((sum, p) => sum + (q(p) * cost(p)), 0);
-    const lowStockItems = products.filter(p => q(p) > 0 && q(p) <= reorder(p)).length;
-    const outOfStockItems = products.filter(p => q(p) === 0).length;
-
-    return {
-      totalProducts,
-      totalStockValue,
-      lowStockItems,
-      outOfStockItems,
-      todaySales,
-      todayTransactions,
-      monthSales: 0,
-      topProducts: [],
-    };
-  }, [products, todaySales, todayTransactions]);
+  // Single source of truth: same products as Inventory page (useInventory). Stats reflect current warehouse (WarehouseContext).
+  const stats = useMemo(
+    () => computeDashboardStats(products, todaySales, todayTransactions),
+    [products, todaySales, todayTransactions]
+  );
 
   const inventoryStatsReady = !productsLoading;
 
   const salesData = useMemo(() => [], []);
 
-  const recentActivity = useMemo<InventoryActivity[]>(() => [], []);
-
   return (
-    <div className="space-y-8">
+    <div className="min-h-[60vh] bg-slate-100 rounded-2xl lg:rounded-3xl p-6 lg:p-8 space-y-8">
       {isAdmin && dashboardError && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3 animate-fade-in-up" role="alert">
           <p className="text-amber-900 text-sm font-medium flex items-center gap-2">
@@ -139,106 +120,45 @@ export function Dashboard() {
           ))}
         </div>
       )}
-      <div className="animate-fade-in-up">
-        <div className="flex flex-wrap items-center gap-3 mb-2">
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+      {/* Page header — matches inventory page: text-[20px] font-bold */}
+      <header className="animate-fade-in-up">
+        <div className="flex flex-wrap items-center gap-3 mb-1">
+          <h1 className="text-[20px] font-bold text-slate-900 leading-tight">
             {isAdmin ? 'Admin Control Panel' : 'Dashboard'}
           </h1>
           {isAdmin && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 text-white shadow-sm">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-white">
               <Shield className="w-3.5 h-3.5" aria-hidden />
               {adminRoleLabel}
             </span>
           )}
         </div>
-        <p className="text-slate-500 text-sm mb-2">
-          {isAdmin
-            ? 'Full system access — inventory, POS, reports, users & settings.'
-            : 'Inventory, suppliers & point of sale in one place'}
+        <p className="text-slate-500 text-sm flex items-center gap-2 flex-wrap">
+          {isAdmin ? (
+            'Full system access — inventory, POS, reports, users & settings.'
+          ) : (currentStore || currentWarehouse) ? (
+            <>
+              <StoreIcon className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden />
+              You&apos;re at: {currentStore?.name ?? '—'}{currentStore && currentWarehouse ? ', ' : ''}{currentWarehouse?.name ?? ''}
+            </>
+          ) : (
+            'Inventory, suppliers & point of sale in one place'
+          )}
         </p>
-        {isAdmin ? (
-          <p className="text-slate-600 text-sm">
-            All locations and features are available. Use the sidebar or quick actions below.
-          </p>
-        ) : (
-          <>
-            {(currentStore || currentWarehouse) && (
-              <p className="text-sm text-slate-600 font-medium flex items-center gap-2 flex-wrap">
-                <StoreIcon className="w-4 h-4 text-slate-500" aria-hidden />
-                You&apos;re at: {currentStore?.name ?? '—'}{currentStore && currentWarehouse ? ', ' : ''}{currentWarehouse?.name ?? ''}
-              </p>
-            )}
-            <p className="text-slate-500 text-sm mt-1">Welcome back! Here&apos;s what&apos;s happening today.</p>
-          </>
-        )}
-      </div>
-
-      {/* Admin-only: quick access to all control areas */}
-      {isAdmin && (
-        <div className="solid-card p-6 animate-fade-in-up border-slate-200/60">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <LayoutGrid className="w-5 h-5 text-slate-600" />
-            Admin quick access
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => navigate('/inventory')}
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 text-left"
-            >
-              <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
-                <Package className="w-5 h-5" />
-              </div>
-              <span className="font-medium text-slate-900 text-sm">Inventory</span>
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => navigate('/pos')}
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 text-left"
-            >
-              <div className="p-2 rounded-lg bg-green-100 text-green-600">
-                <ShoppingBag className="w-5 h-5" />
-              </div>
-              <span className="font-medium text-slate-900 text-sm">POS</span>
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => navigate('/reports')}
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 text-left"
-            >
-              <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
-                <BarChart3 className="w-5 h-5" />
-              </div>
-              <span className="font-medium text-slate-900 text-sm">Reports</span>
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => navigate('/settings?tab=users')}
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 text-left"
-            >
-              <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
-                <Users className="w-5 h-5" />
-              </div>
-              <span className="font-medium text-slate-900 text-sm">User management</span>
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => navigate('/settings')}
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 text-left"
-            >
-              <div className="p-2 rounded-lg bg-slate-100 text-slate-600">
-                <Settings className="w-5 h-5" />
-              </div>
-              <span className="font-medium text-slate-900 text-sm">Settings</span>
-            </Button>
-          </div>
+        {/* Single primary CTA: task-focused, does not duplicate sidebar nav */}
+        <div className="mt-4">
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => navigate('/pos')}
+            className="inline-flex items-center gap-2 min-h-[44px] px-5 rounded-xl font-semibold"
+            aria-label="Start a new sale"
+          >
+            <ShoppingCart className="w-5 h-5" aria-hidden />
+            New sale
+          </Button>
         </div>
-      )}
+      </header>
 
       {/* Stats Grid — hide for admin until dashboard data loaded; inventory stats show — until products loaded */}
       {(!isAdmin || !dashboardLoading) && (
@@ -255,7 +175,6 @@ export function Dashboard() {
             icon={DollarSign}
             format={inventoryStatsReady ? 'currency' : 'text'}
             color="blue"
-            trend={inventoryStatsReady ? { value: 12.5, isPositive: true } : undefined}
           />
           <StatCard
             title="Total Products"
@@ -277,7 +196,6 @@ export function Dashboard() {
             icon={ShoppingBag}
             format="currency"
             color="green"
-            trend={{ value: 8.2, isPositive: true }}
           />
         </div>
       </div>
@@ -344,25 +262,21 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Charts and Top Products */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <SalesChart data={salesData} />
+      {/* Charts and Top Products — only when data exists to avoid empty clutter */}
+      {(salesData.length > 0 || stats.topProducts.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {salesData.length > 0 && (
+            <div className="lg:col-span-2">
+              <SalesChart data={salesData} />
+            </div>
+          )}
+          {stats.topProducts.length > 0 && (
+            <div>
+              <TopProducts products={stats.topProducts} />
+            </div>
+          )}
         </div>
-        <div>
-          <TopProducts products={stats.topProducts} />
-        </div>
-      </div>
-
-      {/* Recent Activity and Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <RecentActivity activities={recentActivity} />
-        </div>
-        <div>
-          <QuickActions />
-        </div>
-      </div>
+      )}
 
       {/* Alerts Section */}
       {stats.lowStockItems > 0 && (
