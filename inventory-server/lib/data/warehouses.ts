@@ -66,13 +66,19 @@ export async function getWarehouses(options?: { storeId?: string; allowedWarehou
   for (const row of rows) {
     const nameNorm = (row.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
     const key = nameNorm || row.id;
+    const isDefaultId = row.id === DEFAULT_WAREHOUSE_ID;
     if (byKey.has(key)) {
       const existing = byKey.get(key)!;
       const code = (row.code ?? '').trim().toUpperCase();
       const existingCode = (existing.code ?? '').trim().toUpperCase();
-      if (code && !existingCode) byKey.set(key, rowToApi(row));
+      const existingIsDefaultId = existing.id === DEFAULT_WAREHOUSE_ID;
+      const preferNew =
+        (isDefaultId === false && existingIsDefaultId === true) ||
+        (isDefaultId === existingIsDefaultId && code && !existingCode);
+      if (preferNew) byKey.set(key, rowToApi(row));
       continue;
     }
+    if (nameNorm && nameNorm !== 'main store' && isDefaultId) continue;
     byKey.set(key, rowToApi(row));
   }
   return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
