@@ -81,9 +81,9 @@ const Users = () => {
 
 const NotFound = lazyWithRetry(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
 
-/** Wires API base URL into InventoryPage (used for /inventory route). Warehouse is selected in-page via dropdown. */
+/** Inventory route. Warehouse is selected in-page via dropdown; API base from lib/api. */
 function InventoryPageRoute() {
-  return <InventoryPage apiBaseUrl={API_BASE_URL} />;
+  return <InventoryPage />;
 }
 
 /** Full POS flow: session screen, products grid, cart, charge, success. Uses API_BASE_URL (set VITE_API_BASE_URL e.g. to https://warehouse-pos-api-v2.vercel.app). */
