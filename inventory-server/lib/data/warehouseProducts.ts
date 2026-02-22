@@ -117,19 +117,21 @@ export async function getWarehouseProducts(
   return { data: list, total: list.length };
 }
 
-// ── getWarehouseProductById (replaces existing function) ──────────────────
+// ── getWarehouseProductById ──────────────────────────────────────────────
+// warehouseId is required; returns null when missing or product not in view.
 
 export async function getWarehouseProductById(
   productId: string,
-  warehouseId?: string
+  warehouseId: string
 ): Promise<ProductRecord | null> {
-  if (!warehouseId?.trim()) return null;
+  const wid = warehouseId?.trim();
+  if (!wid) return null;
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('v_products_inventory')
     .select('*')
     .eq('id', productId)
-    .eq('warehouse_id', warehouseId.trim())
+    .eq('warehouse_id', wid)
     .single();
 
   if (error) {

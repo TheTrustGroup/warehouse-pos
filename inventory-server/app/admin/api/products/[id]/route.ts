@@ -17,7 +17,10 @@ export async function GET(
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   const { searchParams } = new URL(request.url);
-  const warehouseId = searchParams.get('warehouse_id') ?? undefined;
+  const warehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
+  if (!warehouseId) {
+    return NextResponse.json({ message: 'warehouse_id required' }, { status: 400 });
+  }
   try {
     const product = await getWarehouseProductById(id, warehouseId);
     if (!product) return NextResponse.json({ message: 'Product not found' }, { status: 404 });
