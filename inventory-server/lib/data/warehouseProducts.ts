@@ -266,7 +266,7 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
 }
 
 // ── updateWarehouseProduct: size-aware atomic update ───────────────────────
-// Uses update_warehouse_product_atomic RPC when available; falls back to 3-step.
+// Uses update_warehouse_product_atomic RPC only (no fallback).
 
 function normSizeKind(b: Record<string, unknown>, fallback: string): string {
   const s = String(b.sizeKind ?? b.size_kind ?? fallback ?? 'na').toLowerCase().trim();
@@ -318,38 +318,6 @@ function buildProductRow(
     version,
     updated_at: now,
   };
-}
-
-async function manualProductUpdate(
-  supabase: ReturnType<typeof getSupabase>,
-  id: string,
-  wid: string,
-  row: Record<string, unknown>,
-  qty: number,
-  sizeRows: Array<{ sizeCode: string; quantity: number }> | null,
-  now: string
-): Promise<void> {
-  await supabase.from('warehouse_products').update(row).eq('id', id);
-  await supabase
-    .from('warehouse_inventory')
-    .upsert(
-      { warehouse_id: wid, product_id: id, quantity: qty, updated_at: now },
-      { onConflict: 'warehouse_id,product_id' }
-    );
-  if (sizeRows !== null) {
-    await supabase.from('warehouse_inventory_by_size').delete().eq('warehouse_id', wid).eq('product_id', id);
-    if (sizeRows.length > 0) {
-      await supabase.from('warehouse_inventory_by_size').insert(
-        sizeRows.map((r) => ({
-          warehouse_id: wid,
-          product_id: id,
-          size_code: r.sizeCode,
-          quantity: r.quantity,
-          updated_at: now,
-        }))
-      );
-    }
-  }
 }
 
 export class ProductUpdateError extends Error {
@@ -432,9 +400,7 @@ export async function updateWarehouseProduct(
     p_quantity_by_size: sizesToWrite !== null ? sizesToWrite : null,
   });
 
-  if (rpcErr && (rpcErr.code === '42883' || rpcErr.message?.includes('does not exist'))) {
-    await manualProductUpdate(supabase, id, wid, productRow, totalQty, sizesToWrite, now);
-  } else if (rpcErr) {
+  if (rpcErr) {
     if (rpcErr.message?.includes('someone else') || rpcErr.message?.includes('version conflict')) {
       throw new ProductUpdateError(rpcErr.message, 409);
     }
