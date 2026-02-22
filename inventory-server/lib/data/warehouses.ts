@@ -62,14 +62,16 @@ export async function getWarehouses(options?: { storeId?: string; allowedWarehou
   const { data, error } = await query;
   if (error) throw error;
   const rows = (data ?? []) as WarehouseRow[];
-  const byCode = new Map<string, Warehouse>();
+  const byKey = new Map<string, Warehouse>();
   for (const row of rows) {
-    const code = (row.code ?? '').trim().toUpperCase() || row.id;
-    if (!byCode.has(code)) {
-      byCode.set(code, rowToApi(row));
+    const code = (row.code ?? '').trim().toUpperCase();
+    const nameNorm = (row.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const key = code || nameNorm || row.id;
+    if (!byKey.has(key)) {
+      byKey.set(key, rowToApi(row));
     }
   }
-  return Array.from(byCode.values()).sort((a, b) => a.name.localeCompare(b.name));
+  return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** GET one warehouse by id. */

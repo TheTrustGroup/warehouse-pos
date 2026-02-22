@@ -561,22 +561,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const ac = new AbortController();
     let hadCache = false;
 
-    // Synchronous read: only this warehouse's cache — never show another warehouse's list when switching.
+    // Always clear first so we never show the previous warehouse's stats under the new warehouse's name.
+    setProducts([]);
+    setError(null);
     const productsFromCache = getCachedProductsForWarehouse(effectiveWarehouseId);
     if (productsFromCache.length > 0) {
       setProducts(productsFromCache);
       setIsLoading(false);
-      setError(null);
       hadCache = true;
     } else {
-      // No cache for this warehouse: clear list immediately so Dashboard/Inventory never show the previous warehouse's stats under the new warehouse's name.
-      setProducts([]);
       setIsLoading(true);
-      setError(null);
     }
 
     (async () => {
-      // On warehouse change always fetch fresh for the selected warehouse (bypass cache) so the list/quantities match.
       await loadProducts(ac.signal, hadCache ? { silent: true, bypassCache: true } : { bypassCache: true });
     })();
 

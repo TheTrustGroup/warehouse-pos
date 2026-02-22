@@ -17,6 +17,18 @@ export const DEFAULT_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000001';
 
 const STORAGE_KEY = 'warehouse_current_id';
 
+/** Dedupe by code, then by normalized name, so "Main Town" and "Main town" never both appear (works even if API returns duplicates). */
+function dedupeWarehouses(list: Warehouse[]): Warehouse[] {
+  const byKey = new Map<string, Warehouse>();
+  for (const w of list) {
+    const code = (w.code ?? '').trim().toUpperCase();
+    const nameNorm = (w.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const key = code || nameNorm || w.id;
+    if (!byKey.has(key)) byKey.set(key, w);
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 interface WarehouseContextType {
   warehouses: Warehouse[];
   currentWarehouseId: string;
@@ -53,7 +65,7 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
         timeoutMs: options?.timeoutMs,
       });
       const arr = Array.isArray(list) ? list : [];
-      setWarehouses(arr);
+      setWarehouses(dedupeWarehouses(arr));
       if (arr.length > 0) {
         setCurrentWarehouseIdState((prev) => {
           const bound = boundWarehouseId && arr.some((w) => w.id === boundWarehouseId) ? boundWarehouseId : null;
