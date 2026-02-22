@@ -61,6 +61,7 @@ export async function getWarehouses(options?: { storeId?: string; allowedWarehou
   }
   const { data, error } = await query;
   if (error) throw error;
+  const CANONICAL_MAINTOWN_CODE = 'MAINTOWN';
   const rows = (data ?? []) as WarehouseRow[];
   const byKey = new Map<string, Warehouse>();
   for (const row of rows) {
@@ -74,7 +75,8 @@ export async function getWarehouses(options?: { storeId?: string; allowedWarehou
       const existingIsDefaultId = existing.id === DEFAULT_WAREHOUSE_ID;
       const preferNew =
         (isDefaultId === false && existingIsDefaultId === true) ||
-        (isDefaultId === existingIsDefaultId && code && !existingCode);
+        (isDefaultId === existingIsDefaultId && code && !existingCode) ||
+        (code === CANONICAL_MAINTOWN_CODE && existingCode !== CANONICAL_MAINTOWN_CODE);
       if (preferNew) byKey.set(key, rowToApi(row));
       continue;
     }

@@ -17,7 +17,9 @@ export const DEFAULT_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000001';
 
 const STORAGE_KEY = 'warehouse_current_id';
 
-/** Dedupe by normalized name; never let "Main Town" use Main Store's id so stats stay per-warehouse. */
+const CANONICAL_MAINTOWN_CODE = 'MAINTOWN';
+
+/** Dedupe by normalized name; prefer warehouse with code MAINTOWN for "Main Town" (matches cleanup script). */
 function dedupeWarehouses(list: Warehouse[]): Warehouse[] {
   const byKey = new Map<string, Warehouse>();
   for (const w of list) {
@@ -31,7 +33,8 @@ function dedupeWarehouses(list: Warehouse[]): Warehouse[] {
       const existingIsDefaultId = existing.id === DEFAULT_WAREHOUSE_ID;
       const preferNew =
         (!isDefaultId && existingIsDefaultId) ||
-        (isDefaultId === existingIsDefaultId && code && !existingCode);
+        (isDefaultId === existingIsDefaultId && code && !existingCode) ||
+        (code === CANONICAL_MAINTOWN_CODE && existingCode !== CANONICAL_MAINTOWN_CODE);
       if (preferNew) byKey.set(key, w);
       continue;
     }
