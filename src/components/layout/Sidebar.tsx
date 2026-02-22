@@ -10,8 +10,10 @@ import {
   BarChart3,
   Settings,
   Users,
+  MapPin,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWarehouse } from '../../contexts/WarehouseContext';
 import { PERMISSIONS, ROLES, type Permission } from '../../types/permissions';
 
 interface NavItem {
@@ -50,8 +52,12 @@ function getRoleDisplayName(roleId: string | undefined): string {
 
 export function Sidebar() {
   const { user, hasPermission, hasAnyPermission, switchRole } = useAuth();
+  const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse, isWarehouseBoundToSession, isLoading: warehousesLoading } = useWarehouse();
   // Hardening: only admins see "Switch role" (testing). Others cannot try to switch; backend enforces 403.
   const canSeeSwitchRole = user?.role === 'admin' || user?.role === 'super_admin';
+
+  const showWarehouseSwitcher = !warehousesLoading && warehouses.length > 0;
+  const canSwitchWarehouse = showWarehouseSwitcher && warehouses.length > 1 && !isWarehouseBoundToSession;
 
   const navigation = baseNavigation.filter(
     (item) =>
@@ -73,6 +79,37 @@ export function Sidebar() {
           </p>
         </div>
       </div>
+
+      {/* Warehouse switcher: global scope for Dashboard + Inventory. Hidden when user is bound to one warehouse (e.g. POS cashier). */}
+      {showWarehouseSwitcher && (
+        <div className="px-3 py-2 border-b border-slate-200/30 flex-shrink-0">
+          <div className="flex items-center gap-2 mb-1.5">
+            <MapPin className="w-4 h-4 text-slate-500 flex-shrink-0" aria-hidden />
+            <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Warehouse</span>
+          </div>
+          {canSwitchWarehouse ? (
+            <label className="block">
+              <span className="sr-only">Select warehouse (dashboard and inventory use this)</span>
+              <select
+                value={currentWarehouseId}
+                onChange={(e) => setCurrentWarehouseId(e.target.value)}
+                className="input-field w-full text-sm font-medium text-slate-800 py-2 pr-8"
+                aria-label="Select warehouse"
+              >
+                {warehouses.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <p className="text-sm font-medium text-slate-700 truncate" title={currentWarehouse?.name ?? ''}>
+              {currentWarehouse?.name ?? '—'}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Nav: vertical rhythm space-y-1, touch targets via .nav-item; fixed item height to avoid resize on role change */}
       <nav className="flex-1 min-h-0 py-5 px-2 space-y-1 overflow-y-auto">

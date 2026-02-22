@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "next lint",
-    "test:health": "node scripts/health-check.mjs"
+"test:health": "node scripts/health-check.mjs",
+    "test:warehouses": "node scripts/warehouses-check.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

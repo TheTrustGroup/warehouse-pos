@@ -54,6 +54,8 @@ jobs:
           npm run start &
           sleep 12
           npm run test:health
+      - name: Warehouses route (auth required)
+        run: npm run test:warehouses
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: placeholder
@@ -61,6 +63,7 @@ jobs:
 
   e2e:
     name: E2E (smoke)
+    if: ${{ vars.PLAYWRIGHT_BASE_URL != '' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -69,12 +72,6 @@ jobs:
       PLAYWRIGHT_BASE_URL: ${{ vars.PLAYWRIGHT_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
-      - name: Require E2E URL
-        run: |
-          if [ -z "${{ vars.PLAYWRIGHT_BASE_URL }}" ]; then
-            echo "::error::E2E skipped: set PLAYWRIGHT_BASE_URL in repository variables (Settings → Actions → Variables) to run E2E."
-            exit 1
-          fi
       - uses: actions/setup-node@v4
         with:
           node-version: '20'

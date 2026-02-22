@@ -48,6 +48,14 @@ See **[docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)** for all variables (frontend a
 
 New or changed pages should follow **[docs/PAGE_LAYOUT.md](docs/PAGE_LAYOUT.md)** (inventory page is the reference).
 
+## Warehouses
+
+The app supports multiple warehouses (e.g. Main Store and a second location). Dashboard stats and the Inventory list are scoped to the **current warehouse**.
+
+- **Switching warehouse:** Use the **Warehouse** dropdown in the sidebar (desktop) or in the mobile menu. Selection is persisted in the browser and shared across Dashboard and Inventory.
+- **New products:** Products you add are assigned to the warehouse currently selected in the sidebar. Check the dropdown before adding; the Add Product modal and Inventory header show “Adding to: &lt;warehouse name&gt;”.
+- **Ensuring both warehouses exist:** Run the seed in Supabase so the API returns both. Example: `inventory-server/supabase/scripts/seed_stores_warehouses_dc_maintown.sql` (creates Main Store/DC and Main Town). Then `GET /api/warehouses` returns the list; users with access see both in the switcher.
+
 ## Security
 
 - Run `npm audit` in the repo root and in `inventory-server/`. **Critical and high** findings must be resolved or explicitly accepted (e.g. documented in a security note or ADR). Moderate may be accepted for dev-only tooling.

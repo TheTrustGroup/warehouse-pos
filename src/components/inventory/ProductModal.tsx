@@ -58,6 +58,8 @@ interface ProductModalProps {
   product?: Product | null;        // null/undefined = add mode
   sizeCodes?: SizeCode[];
   warehouseId?: string;
+  /** Shown in add mode: "Adding to: {warehouseName}" so user knows which warehouse the product will be assigned to. */
+  warehouseName?: string;
   onSubmit: (payload: Omit<Product, 'id'> & { id?: string }, isEdit: boolean) => Promise<void>;
   onClose: () => void;
 }
@@ -200,6 +202,7 @@ export default function ProductModal({
   product,
   sizeCodes = [],
   warehouseId: defaultWarehouseId,
+  warehouseName,
   onSubmit,
   onClose,
 }: ProductModalProps) {
@@ -374,6 +377,11 @@ export default function ProductModal({
             </h2>
             {isEdit && product?.sku && (
               <p className="text-[12px] font-mono text-slate-400 mt-0.5">{product.sku}</p>
+            )}
+            {!isEdit && warehouseName && (
+              <p className="text-[12px] text-slate-500 mt-0.5" aria-live="polite">
+                Adding to: <span className="font-medium text-slate-700">{warehouseName}</span>
+              </p>
             )}
           </div>
           <button

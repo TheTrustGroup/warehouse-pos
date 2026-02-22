@@ -7,6 +7,7 @@ import {
   getWarehouseProducts,
   createWarehouseProduct,
 } from '@/lib/data/warehouseProducts';
+import { getScopeForUser } from '@/lib/data/userScopes';
 import { requireAuth, requireAdmin } from '@/lib/auth/session';
 import { corsHeaders } from '@/lib/cors';
 
@@ -31,6 +32,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       { error: 'warehouse_id required' },
       { status: 400, headers: h }
+    );
+  }
+
+  const scope = await getScopeForUser(auth.email);
+  if (scope.allowedWarehouseIds.length > 0 && !scope.allowedWarehouseIds.includes(warehouseId)) {
+    return NextResponse.json(
+      { error: 'Forbidden: you do not have access to this warehouse' },
+      { status: 403, headers: h }
     );
   }
 
@@ -68,6 +77,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: 'warehouseId required' },
       { status: 400, headers: h }
+    );
+  }
+
+  const scope = await getScopeForUser(auth.email);
+  if (scope.allowedWarehouseIds.length > 0 && !scope.allowedWarehouseIds.includes(warehouseId)) {
+    return NextResponse.json(
+      { error: 'Forbidden: you do not have access to this warehouse' },
+      { status: 403, headers: h }
     );
   }
 

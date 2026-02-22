@@ -31,11 +31,13 @@
 // 6. POS stock deduction fixed in POSPage.tsx + api_sales_route.ts
 // ============================================================
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ProductCard, { ProductCardSkeleton, type Product } from '../components/inventory/ProductCard';
 import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
+import { useWarehouse } from '../contexts/WarehouseContext';
+import { useInventory } from '../contexts/InventoryContext';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -49,12 +51,7 @@ interface InventoryPageProps {
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const POLL_MS    = 30_000;
 const CATEGORIES = ['Sneakers', 'Slippers', 'Boots', 'Sandals', 'Accessories'];
-const WAREHOUSES = [
-  { id: '00000000-0000-0000-0000-000000000001', name: 'Main Store' },
-  { id: '00000000-0000-0000-0000-000000000002', name: 'Main Town'  },
-];
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 
@@ -197,55 +194,43 @@ function applyFilters(products: Product[], search: string, category: FilterKey, 
   return r;
 }
 
-// ── Unwrap API product response ────────────────────────────────────────────
-// API confirmed to return camelCase (sizeKind, quantityBySize, sellingPrice).
-// Handles: bare object, { data: {...} }, { product: {...} }
-
-function unwrapProduct(raw: unknown): Product | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const r = raw as Record<string, unknown>;
-  const inner = r.data ?? r.product ?? r;
-  if (!inner || typeof inner !== 'object' || !('id' in inner)) return null;
-  return inner as Product;
-}
-
-// Handles: bare array, { data: [...] }, { products: [...] }
-function unwrapProductList(raw: unknown): Product[] {
-  if (Array.isArray(raw)) return raw as Product[];
-  if (!raw || typeof raw !== 'object') return [];
-  const r = raw as Record<string, unknown>;
-  const list = r.data ?? r.products ?? r.items ?? [];
-  return Array.isArray(list) ? list : [];
-}
-
 // ── Main Page ──────────────────────────────────────────────────────────────
 
 export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPageProps) {
 
-  // ── State ─────────────────────────────────────────────────────────────────
-  const [products,   setProducts]   = useState<Product[]>([]);
-  const [sizeCodes,  setSizeCodes]  = useState<SizeCode[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState<string | null>(null);
-  const [warehouseId, setWarehouseId] = useState(WAREHOUSES[0].id);
-  const [whDropdown, setWhDropdown] = useState(false);
-  const [search,     setSearch]     = useState('');
-  const [category,   setCategory]   = useState<FilterKey>('all');
-  const [sort,       setSort]       = useState<SortKey>('name_asc');
-  const [sortOpen,   setSortOpen]   = useState(false);
-  const [activeEditId, setActiveEditId] = useState<string | null>(null);
-  const [modalOpen,    setModalOpen]    = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [confirmDelete,  setConfirmDelete]  = useState<Product | null>(null);
+  // ── Warehouse: single source of truth from context (synced with Sidebar + Dashboard) ──
+  const { warehouses, currentWarehouseId, setCurrentWarehouseId } = useWarehouse();
+  const displayWarehouses = useMemo(
+    () => (warehouses.length > 0 ? warehouses : [{ id: currentWarehouseId, name: '—' }]),
+    [warehouses, currentWarehouseId]
+  );
+  const currentWarehouse = displayWarehouses.find((w) => w.id === currentWarehouseId) ?? displayWarehouses[0];
 
-  const modalOpenRef      = useRef(false);
-  const pollTimerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pendingDeletesRef = useRef<Set<string>>(new Set());
-  const loadInflightRef   = useRef(false);       // single-flight guard for product loads
-  const lastSaveTimeRef   = useRef<number>(0);   // guards closeModal reload after save
-  const loadAbortRef      = useRef<AbortController | null>(null); // cancel stale requests
-  const didInitialLoad    = useRef(false);        // prevents visibilitychange storm on mount
-  const currentWarehouse  = WAREHOUSES.find(w => w.id === warehouseId) ?? WAREHOUSES[0];
+  // ── Product data: single source of truth from context (same as Dashboard) ──
+  const {
+    products,
+    isLoading: loading,
+    error,
+    refreshProducts,
+    addProduct: contextAddProduct,
+    updateProduct: contextUpdateProduct,
+    deleteProduct: contextDeleteProduct,
+  } = useInventory();
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [sizeCodes, setSizeCodes] = useState<SizeCode[]>([]);
+  const [whDropdown, setWhDropdown] = useState(false);
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState<FilterKey>('all');
+  const [sort, setSort] = useState<SortKey>('name_asc');
+  const [sortOpen, setSortOpen] = useState(false);
+  const [activeEditId, setActiveEditId] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
+
+  const modalOpenRef = useRef(false);
+  const lastSaveTimeRef = useRef<number>(0);
 
   const { toasts, show: showToast } = useToast();
 
@@ -320,122 +305,22 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
     }
   }, []);
 
-  // ── Load products ─────────────────────────────────────────────────────────
-  // Single-flight: only one load runs at a time.
-  // Silent loads (poll, visibilitychange) are dropped if one is already running.
-  // Non-silent loads (user refresh, warehouse switch) cancel the in-flight request.
-
-  const loadProducts = useCallback(async (silent = false) => {
-    if (modalOpenRef.current) return;
-
-    if (loadInflightRef.current) {
-      if (silent) return; // drop silent duplicate
-      // For explicit reload: cancel the in-flight request
-      loadAbortRef.current?.abort();
-    }
-
-    const controller = new AbortController();
-    loadAbortRef.current   = controller;
-    loadInflightRef.current = true;
-    if (!silent) setLoading(true);
-    setError(null);
-
-    try {
-      const raw = await apiFetch<unknown>(
-        `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=1000`,
-        { signal: controller.signal }
-      );
-      if (controller.signal.aborted) return; // another load superseded this one
-      const list    = unwrapProductList(raw);
-      const pending = pendingDeletesRef.current;
-      setProducts(pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list);
-    } catch (e: unknown) {
-      const err = e as Error;
-      if (err.name === 'AbortError' || controller.signal.aborted) return; // superseded
-      if (!silent) setError(err.message ?? 'Failed to load products');
-      else console.warn('[loadProducts silent]', err.message);
-    } finally {
-      if (loadAbortRef.current === controller) {
-        loadInflightRef.current = false;
-        loadAbortRef.current    = null;
-      }
-      if (!silent) setLoading(false);
-    }
-  }, [warehouseId, apiFetch]);
-
-  // ── Load size codes ───────────────────────────────────────────────────────
+  // ── Load size codes (per-warehouse; not in InventoryContext) ───────────────
 
   const loadSizeCodes = useCallback(async () => {
     try {
       const raw = await apiFetch<unknown>(
-        `/api/size-codes?warehouse_id=${encodeURIComponent(warehouseId)}`
+        `/api/size-codes?warehouse_id=${encodeURIComponent(currentWarehouseId)}`
       );
       const list = Array.isArray(raw) ? raw : (raw as { data?: SizeCode[] })?.data ?? [];
       setSizeCodes(list);
     } catch { /* non-critical */ }
-  }, [warehouseId, apiFetch]);
+  }, [currentWarehouseId, apiFetch]);
 
-  // ── Polling ───────────────────────────────────────────────────────────────
-
-  function startPoll() {
-    stopPoll();
-    pollTimerRef.current = setInterval(() => {
-      if (!modalOpenRef.current && document.visibilityState === 'visible') {
-        loadProducts(true);
-      }
-    }, POLL_MS);
-  }
-  function stopPoll() {
-    if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
-  }
-
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
-  // The triple-request storm (3x "network connection lost") was caused by:
-  //   1. loadProducts() fires on mount
-  //   2. visibilitychange fires IMMEDIATELY on mount (browser behaviour)
-  //   3. poll might fire within first 30s
-  // All three hit the API simultaneously → Safari kills all three.
-  // Fix: didInitialLoad ref prevents visibilitychange from firing until
-  //   after the initial load completes (500ms gate).
-
+  // Load size codes when warehouse changes. Product list is from InventoryContext (refetches on warehouse change).
   useEffect(() => {
-    setProducts([]);
-    setLoading(true);
-    setError(null);
-    setSearch('');
-    setCategory('all');
-    didInitialLoad.current = false;
-
-    // Cancel any in-flight load from previous warehouse
-    loadAbortRef.current?.abort();
-
-    loadProducts();        // initial load
-    loadSizeCodes();       // non-critical, runs in parallel
-
-    // Start poll AFTER a delay so it doesn't fire before initial load completes
-    const pollDelay = setTimeout(() => startPoll(), 5000);
-
-    const onVisible = () => {
-      // Only handle visibility AFTER initial load is settled
-      // This prevents the browser's immediate visibilitychange on mount
-      if (!didInitialLoad.current) return;
-      if (document.visibilityState === 'visible' && !modalOpenRef.current) {
-        loadProducts(true);
-      }
-    };
-    document.addEventListener('visibilitychange', onVisible);
-
-    // Mark initial load as done after a short delay
-    const initGate = setTimeout(() => { didInitialLoad.current = true; }, 500);
-
-    return () => {
-      clearTimeout(pollDelay);
-      clearTimeout(initGate);
-      stopPoll();
-      document.removeEventListener('visibilitychange', onVisible);
-      loadAbortRef.current?.abort(); // cancel in-flight on unmount/warehouse change
-    };
-  }, [warehouseId]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadSizeCodes();
+  }, [currentWarehouseId, loadSizeCodes]);
 
   useEffect(() => { modalOpenRef.current = modalOpen; }, [modalOpen]);
 
@@ -447,14 +332,9 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
   function closeModal() {
     setModalOpen(false);
     setEditingProduct(null);
-    // Only reload if we haven't just saved (within 5s).
-    // If the backend GET is broken (returns empty sizes), an immediate
-    // reload after save would wipe the correct state we just set.
-    // If a save DID just happen, the state is already correct from
-    // the optimistic update + server response in handleSubmit.
     const msSinceSave = Date.now() - lastSaveTimeRef.current;
     if (msSinceSave > 5000) {
-      setTimeout(() => loadProducts(true), 500);
+      refreshProducts({ silent: true }).catch(() => {});
     }
   }
 
@@ -462,114 +342,65 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
 
   async function executeDelete(product: Product) {
     setConfirmDelete(null);
-    // Add to pending BEFORE optimistic update — prevents poll from re-adding
-    pendingDeletesRef.current.add(product.id);
-    setProducts(prev => prev.filter(p => p.id !== product.id));
-
     try {
-      await apiFetch(`/api/products/${encodeURIComponent(product.id)}`, {
-        method: 'DELETE',
-        body: JSON.stringify({ warehouseId }),
-      });
-      pendingDeletesRef.current.delete(product.id);
+      await contextDeleteProduct(product.id);
       showToast(`"${product.name}" deleted`, 'success');
     } catch (e: unknown) {
-      pendingDeletesRef.current.delete(product.id);
       const err = e as Error;
-      // Revert — re-insert alphabetically
-      setProducts(prev => {
-        if (prev.find(p => p.id === product.id)) return prev;
-        return [...prev, product].sort((a, b) => a.name.localeCompare(b.name));
-      });
       showToast(err.message ?? 'Failed to delete', 'error');
     }
   }
 
-  // ── Submit (add / edit) ───────────────────────────────────────────────────
-  // The API returns the product object in camelCase (confirmed from network logs).
-  // For POST: bare product object or { data: {...} } wrapper.
-  // For PUT: same shape, returns updated product.
+  // ── Submit (add / edit) — delegate to InventoryContext (single source of truth) ──
 
   async function handleSubmit(
     payload: Omit<Product, 'id'> & { id?: string },
     isEdit: boolean
   ) {
     if (isEdit && payload.id) {
-      const original = products.find(p => p.id === payload.id);
-      // Optimistic update fires immediately — user sees changes right away
-      const optimistic = { ...original, ...payload } as Product;
-      setProducts(prev => prev.map(p => p.id === payload.id ? optimistic : p));
-
       try {
-        const raw = await apiFetch<unknown>(`/api/products/${payload.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            ...payload,
-            warehouseId,
-            sizeKind:       payload.sizeKind,
-            quantityBySize: payload.quantityBySize,
-            quantity:       payload.quantity,
-          }),
+        const p = payload as Record<string, unknown>;
+        await contextUpdateProduct(payload.id, {
+          name: payload.name,
+          sku: payload.sku,
+          barcode: payload.barcode,
+          category: payload.category,
+          description: (p.description as string) ?? '',
+          quantity: payload.quantity,
+          costPrice: payload.costPrice,
+          sellingPrice: payload.sellingPrice,
+          reorderLevel: payload.reorderLevel ?? 0,
+          sizeKind: payload.sizeKind,
+          quantityBySize: payload.quantityBySize,
+          warehouseId: currentWarehouseId,
         });
-
-        // Apply server response, but GUARD against it wiping our sizes.
-        // If the server returns fewer sizes than what we just saved,
-        // it means the backend's GET is broken (old route without size JOIN).
-        // Trust what we wrote (optimistic) rather than reverting.
-        const updated = unwrapProduct(raw);
-        if (updated) {
-          const serverHasSizes  = (updated.quantityBySize?.length ?? 0) > 0;
-          const payloadHasSizes = (payload.quantityBySize?.length  ?? 0) > 0;
-          const serverWipedSizes = payloadHasSizes && !serverHasSizes;
-
-          if (serverWipedSizes) {
-            // Server response is stale/broken — keep optimistic state
-            console.warn('[handleSubmit] Server returned empty quantityBySize after save — keeping optimistic state');
-            // Don't update products — optimistic is already correct
-          } else {
-            setProducts(prev => prev.map(p => p.id === payload.id ? updated : p));
-          }
-        }
-
         lastSaveTimeRef.current = Date.now();
         showToast(`${payload.name} updated`, 'success');
       } catch (e: unknown) {
         const err = e as Error;
-        if (original) setProducts(prev => prev.map(p => p.id === payload.id ? original : p));
         showToast(err.message ?? 'Failed to update', 'error');
-        throw e; // keep modal open
+        throw e;
       }
-
     } else {
-      // Add new product
       try {
-        const raw = await apiFetch<unknown>('/api/products', {
-          method: 'POST',
-          body: JSON.stringify({
-            ...payload,
-            warehouseId,
-            sizeKind:       payload.sizeKind,
-            quantityBySize: payload.quantityBySize,
-            quantity:       payload.quantity,
-          }),
-        });
-
-        // Unwrap response — handles bare object or { data:{...} }
-        let created = unwrapProduct(raw);
-
-        // Guard: if server response wiped sizes, patch from payload
-        if (created && (payload.quantityBySize?.length ?? 0) > 0
-            && (created.quantityBySize?.length ?? 0) === 0) {
-          console.warn('[handleSubmit POST] Server response missing sizes — patching from payload');
-          created = { ...created, quantityBySize: payload.quantityBySize, quantity: payload.quantity };
-        }
-
-        if (created?.id) {
-          setProducts(prev => [created!, ...prev]);
-        } else {
-          setTimeout(() => loadProducts(true), 300);
-        }
-
+        const p = payload as Record<string, unknown>;
+        const loc = p.location && typeof p.location === 'object' ? p.location as Record<string, string> : {};
+        const sup = p.supplier && typeof p.supplier === 'object' ? p.supplier as Record<string, string> : {};
+        const addPayload = {
+          ...payload,
+          warehouseId: currentWarehouseId,
+          sizeKind: payload.sizeKind,
+          quantityBySize: payload.quantityBySize ?? [],
+          quantity: payload.quantity,
+          description: (p.description as string) ?? '',
+          tags: Array.isArray(p.tags) ? p.tags as string[] : [],
+          createdBy: (p.createdBy as string) ?? '',
+          expiryDate: (p.expiryDate as Date | null) ?? null,
+          location: { warehouse: '', aisle: loc.aisle ?? '', rack: loc.rack ?? '', bin: loc.bin ?? '' },
+          supplier: { name: sup.name ?? '', contact: sup.contact ?? '', email: sup.email ?? '' },
+        };
+        delete (addPayload as Record<string, unknown>).id;
+        await contextAddProduct(addPayload as Parameters<typeof contextAddProduct>[0]);
         lastSaveTimeRef.current = Date.now();
         showToast(`${payload.name} added`, 'success');
       } catch (e: unknown) {
@@ -580,33 +411,23 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
     }
   }
 
-  // ── Stock quick-edit ──────────────────────────────────────────────────────
-  // Explicit sizeKind in body is critical — backend uses it to decide
-  // whether to update warehouse_inventory or warehouse_inventory_by_size
+  // ── Stock quick-edit — delegate to InventoryContext ────────────────────────
 
   async function handleSaveStock(
     id: string,
     update: { quantity: number; quantityBySize: Product['quantityBySize']; sizeKind: string }
   ) {
-    const original = products.find(p => p.id === id);
-    setProducts(prev => prev.map(p => p.id === id ? { ...p, ...update } as Product : p));
     setActiveEditId(null);
-
     try {
-      await apiFetch(`/api/products/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          ...update,
-          warehouseId,
-          sizeKind:       update.sizeKind,
-          quantityBySize: update.quantityBySize,
-          quantity:       update.quantity,
-        }),
+      await contextUpdateProduct(id, {
+        quantity: update.quantity,
+        quantityBySize: update.quantityBySize,
+        sizeKind: update.sizeKind as 'na' | 'one_size' | 'sized',
+        warehouseId: currentWarehouseId,
       });
       showToast('Stock updated', 'success');
     } catch (e: unknown) {
       const err = e as Error;
-      if (original) setProducts(prev => prev.map(p => p.id === id ? original : p));
       showToast(err.message ?? 'Failed to update stock', 'error');
       throw e;
     }
@@ -614,7 +435,7 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const displayed = applyFilters(products, search, category, sort);
+  const displayed = applyFilters(products as Product[], search, category, sort);
   const SORT_OPTIONS: { key: SortKey; label: string }[] = [
     { key: 'name_asc',   label: 'Name A–Z'        },
     { key: 'name_desc',  label: 'Name Z–A'        },
@@ -646,12 +467,12 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setWhDropdown(false)}/>
                   <div className="absolute left-0 top-6 z-20 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 w-40">
-                    {WAREHOUSES.map(w => (
+                    {displayWarehouses.map(w => (
                       <button key={w.id} type="button"
-                              onClick={() => { setWarehouseId(w.id); setActiveEditId(null); setWhDropdown(false); }}
+                              onClick={() => { setCurrentWarehouseId(w.id); setActiveEditId(null); setWhDropdown(false); }}
                               className={`w-full px-4 py-2.5 text-left text-[13px] font-medium transition-colors
-                                ${warehouseId === w.id ? 'text-red-500 bg-red-50' : 'text-slate-700 hover:bg-slate-50'}`}>
-                        {warehouseId === w.id && '✓ '}{w.name}
+                                ${currentWarehouseId === w.id ? 'text-red-500 bg-red-50' : 'text-slate-700 hover:bg-slate-50'}`}>
+                        {currentWarehouseId === w.id && '✓ '}{w.name}
                       </button>
                     ))}
                   </div>
@@ -660,8 +481,11 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => loadProducts()}
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[11px] font-medium text-slate-500 sm:block hidden" aria-hidden>
+              Adding to: <span className="text-slate-700">{currentWarehouse.name}</span>
+            </p>
+            <button type="button" onClick={() => refreshProducts({ bypassCache: true })}
                     className="w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-500 flex items-center justify-center hover:bg-slate-50 transition-colors">
               <IconRefresh/>
             </button>
@@ -748,7 +572,7 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
               <p className="text-[16px] font-bold text-slate-700">Couldn't load products</p>
               <p className="text-[13px] text-slate-400 mt-1 max-w-[280px]">{error}</p>
             </div>
-            <button type="button" onClick={() => loadProducts()}
+            <button type="button" onClick={() => refreshProducts({ bypassCache: true })}
                     className="h-10 px-5 rounded-xl bg-red-500 text-white text-[13px] font-semibold hover:bg-red-600 transition-colors">
               Retry
             </button>
@@ -812,7 +636,8 @@ export default function InventoryPage({ apiBaseUrl: _ignored }: InventoryPagePro
         isOpen={modalOpen}
         product={editingProduct}
         sizeCodes={sizeCodes}
-        warehouseId={warehouseId}
+        warehouseId={currentWarehouseId}
+        warehouseName={currentWarehouse.name}
         onSubmit={handleSubmit}
         onClose={closeModal}
       />
