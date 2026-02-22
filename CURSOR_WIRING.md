@@ -25,7 +25,7 @@
 3. **Where to use `useWarehouse()`**
    - **Sidebar** – show dropdown, call `setCurrentWarehouseId(id)` on change.
    - **MobileMenu** – same as Sidebar.
-   - **Dashboard** – use `currentWarehouse` / `currentWarehouseId` for stats and API calls.
+   - **Dashboard** – stats are loaded in `DashboardPage.tsx` using `currentWarehouseId`; data is fetched from `/api/products` and `/api/sales` (warehouse-scoped). When the sidebar changes warehouse, `useEffect` re-runs and re-fetches. Do not hardcode or cache a warehouse ID in the dashboard.
    - **InventoryPage** – use `currentWarehouseId`, `setCurrentWarehouseId`, `warehouses` (or fallback list); do not use local `useState` for warehouse.
    - **POS** – use `currentWarehouseId` (or session-bound warehouse) for cart and checkout.
    - **InventoryContext** – already uses `currentWarehouseId` for product API `warehouse_id`.
@@ -42,3 +42,7 @@
 | Current warehouse object| `currentWarehouse`                       |
 | List for dropdown       | `warehouses` (from API; fallback if empty) |
 | Change selection        | `setCurrentWarehouseId(id)`              |
+
+## Backend
+
+- **GET /api/sales** — `?warehouse_id=...&date=...&limit=...` is implemented as a stub (returns `{ data: [] }`) until a sales/transactions table exists. Dashboard “Today’s Sales” shows 0 until the backend is implemented.
