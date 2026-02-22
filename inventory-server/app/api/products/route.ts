@@ -50,7 +50,9 @@ export async function GET(req: NextRequest) {
       inStock,
       category,
     });
-    return NextResponse.json({ data }, { headers: h });
+    const res = NextResponse.json({ data }, { headers: h });
+    res.headers.set('X-Warehouse-Id', warehouseId);
+    return res;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[GET /api/products]', err);

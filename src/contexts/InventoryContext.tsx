@@ -127,11 +127,20 @@ const InventoryContext = createContext<InventoryContextType | undefined>(undefin
 export const ADD_PRODUCT_SAVED_LOCALLY =
   'Product saved locally. It will sync to the server when connection is available.';
 
+/** Sentinel: used when selection is Main Store id but UI shows "Main Town" so we never load Main Store data for that label. API returns [] for this id. */
+const SENTINEL_EMPTY_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000099';
+
 export function InventoryProvider({ children }: { children: ReactNode }) {
-  const { currentWarehouseId } = useWarehouse();
+  const { currentWarehouseId, currentWarehouse } = useWarehouse();
   const { showToast } = useToast();
   const { tryRefreshSession } = useAuth();
-  const effectiveWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : DEFAULT_WAREHOUSE_ID;
+  const rawWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : DEFAULT_WAREHOUSE_ID;
+  const mainStoreNameNorm = 'main store';
+  const isMainStoreIdWithWrongLabel =
+    rawWarehouseId === DEFAULT_WAREHOUSE_ID &&
+    currentWarehouse &&
+    (currentWarehouse.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ') !== mainStoreNameNorm;
+  const effectiveWarehouseId = isMainStoreIdWithWrongLabel ? SENTINEL_EMPTY_WAREHOUSE_ID : rawWarehouseId;
 
   // Feature flag: when off, use API-only (state); when on, use offline hook (Dexie). INTEGRATION_PLAN Phase 5/7.
   const offlineEnabled = isOfflineEnabled();
