@@ -101,7 +101,7 @@ export default function POSProductCard({ product, onSelect }: POSProductCardProp
       <div className="relative w-full pt-[100%] bg-slate-50 overflow-hidden">
         {hasImage ? (
           <img
-            src={product.images![0]}
+            src={(product.images ?? [])[0]}
             alt={product.name}
             loading="lazy"
             className="
@@ -131,7 +131,7 @@ export default function POSProductCard({ product, onSelect }: POSProductCardProp
 
         {/* Category */}
         <p className="text-[11px] text-slate-400 font-medium mb-2">
-          {product.category}
+          {product.category ?? ''}
         </p>
 
         {/* Price + stock row */}
@@ -147,7 +147,7 @@ export default function POSProductCard({ product, onSelect }: POSProductCardProp
               bg-slate-100 px-1.5 py-0.5 rounded-md
               leading-none flex-shrink-0
             ">
-              {product.quantityBySize.filter(r => r.quantity > 0).length} sizes
+              {(product.quantityBySize ?? []).filter(r => r.quantity > 0).length} sizes
             </span>
           )}
 
