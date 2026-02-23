@@ -6,10 +6,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth/session';
+import { corsHeaders } from '@/lib/cors';
 import { handleGetProductById, handlePutProductById, handleDeleteProductById } from '@/lib/api/productByIdHandlers';
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
 
 export const dynamic = 'force-dynamic';
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const auth = await requireAdmin(request);
