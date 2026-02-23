@@ -1,6 +1,7 @@
 /**
  * POS receipt printing — Ghana standard.
- * Opens a print-friendly window (80mm thermal style). Uses window.print() for system printer or Save as PDF.
+ * Uses an in-window hidden iframe (no pop-up) so it is not blocked by the browser.
+ * Triggers the system print dialog for the receipt content (80mm thermal style) or Save as PDF.
  * Date/time shown in Ghana timezone (Africa/Accra). Currency: GH₵ (en-GH).
  * Receipt is saved server-side when POST /api/sales succeeds (receipt_id in sales table).
  */
@@ -125,16 +126,49 @@ export function printReceipt(sale: PrintReceiptPayload): void {
 </body>
 </html>`;
 
-  const w = window.open('', '_blank', 'noopener,noreferrer');
-  if (!w) {
-    console.warn('[printReceipt] Pop-up blocked; allow pop-ups to print.');
+  // In-window iframe: avoids pop-up blockers; no new window required.
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('title', 'Receipt print');
+  iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;left:-9999px;top:0;';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow?.document;
+  if (!doc) {
+    document.body.removeChild(iframe);
+    console.warn('[printReceipt] Could not get iframe document.');
     return;
   }
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  w.onload = () => {
-    w.print();
-    w.onafterprint = () => w.close();
+
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  const win = iframe.contentWindow;
+  if (!win) {
+    document.body.removeChild(iframe);
+    return;
+  }
+
+  const runPrint = () => {
+    win.focus();
+    win.print();
+    const cleanup = () => {
+      try {
+        if (iframe.parentNode) document.body.removeChild(iframe);
+      } catch {
+        /* already removed */
+      }
+    };
+    if (typeof win.onafterprint !== 'undefined') {
+      win.onafterprint = cleanup;
+    } else {
+      setTimeout(cleanup, 500);
+    }
   };
+
+  if (doc.readyState === 'complete') {
+    setTimeout(runPrint, 0);
+  } else {
+    win.onload = runPrint;
+  }
 }
