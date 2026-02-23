@@ -35,12 +35,12 @@ export async function POST(request: NextRequest) {
           }
         : undefined;
     const sessionPayload = { email, role, exp: 0, ...binding };
-    const sessionToken = createSessionToken(email, role, binding);
+    const sessionToken = await createSessionToken(email, role, binding);
     const response = NextResponse.json({
       user: sessionUserToJson(sessionPayload as import('@/lib/auth/session').Session),
       token: sessionToken,
     });
-    setSessionCookie(response, email, role, binding);
+    await setSessionCookie(response, email, role, binding);
     return response;
   } catch (err) {
     const msg = err instanceof Error ? err.message : '';

@@ -1,168 +1,155 @@
 /**
- * User scope mapping (Phase 3). Defines where a user (by email) may operate.
- * Absence of rows = unrestricted (legacy). Read for resolution; admin can list/set via API.
+ * User scopes: warehouse/store access from user_scopes table.
+ * Table: user_scopes(user_email, store_id, warehouse_id, created_at).
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { getStores, getStoreById } from '@/lib/data/stores';
-import { getWarehouses, getWarehouseById } from '@/lib/data/warehouses';
+import { getSupabase } from '@/lib/supabase';
 
-const TABLE = 'user_scopes';
-
-const getSupabase = (): SupabaseClient => {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required.');
-  }
-  return createClient(url, key, { auth: { persistSession: false } });
-};
-
-export interface UserScopeRow {
-  user_email: string;
-  store_id: string | null;
-  warehouse_id: string | null;
-  pos_id: string | null;
+export interface UserScope {
+  storeId: string;
+  warehouseId: string;
+  storeName?: string;
+  warehouseName?: string;
+  warehouseCode?: string;
 }
 
-export interface ResolvedScope {
-  /** Non-empty = user restricted to these store ids. Empty = unrestricted. */
-  allowedStoreIds: string[];
-  /** Non-empty = user restricted to these warehouse ids. Empty = unrestricted. */
+export interface AssignedPos {
+  storeId: string;
+  warehouseId: string;
+  storeName: string;
+  warehouseName: string;
+  warehouseCode: string;
+}
+
+export interface UserScopeResult {
   allowedWarehouseIds: string[];
-  /** Non-empty = user restricted to these pos_id values. Empty = unrestricted. */
+  allowedStoreIds: string[];
   allowedPosIds: string[];
 }
 
-/** One scope entry with names (for admin UI). */
-export interface UserScopeWithNames {
-  storeId: string;
-  storeName: string;
-  warehouseId: string;
-  warehouseName: string;
-}
+/** Allowed warehouse/store IDs for a user (for authz). allowedPosIds from schema if present; empty here. */
+export async function getScopeForUser(email: string): Promise<UserScopeResult> {
+  const normalized = email?.trim()?.toLowerCase();
+  if (!normalized) return { allowedWarehouseIds: [], allowedStoreIds: [], allowedPosIds: [] };
 
-/**
- * Resolve scope for a user (by email). Returns distinct allowed store/warehouse/pos ids.
- * No rows or all nulls in a column → that dimension is unrestricted (legacy).
- */
-export async function getScopeForUser(userEmail: string): Promise<ResolvedScope> {
   const supabase = getSupabase();
-  const normalized = userEmail?.trim()?.toLowerCase() ?? '';
-  if (!normalized) {
-    return { allowedStoreIds: [], allowedWarehouseIds: [], allowedPosIds: [] };
-  }
   const { data, error } = await supabase
-    .from(TABLE)
-    .select('store_id, warehouse_id, pos_id')
+    .from('user_scopes')
+    .select('warehouse_id, store_id')
     .eq('user_email', normalized);
-  if (error) throw error;
-  const rows = (data ?? []) as UserScopeRow[];
-  const storeIds = new Set<string>();
-  const warehouseIds = new Set<string>();
-  const posIds = new Set<string>();
-  for (const r of rows) {
-    if (r.store_id) storeIds.add(r.store_id);
-    if (r.warehouse_id) warehouseIds.add(r.warehouse_id);
-    if (r.pos_id && String(r.pos_id).trim()) posIds.add(String(r.pos_id).trim());
+
+  if (error) {
+    console.error('[userScopes] getScopeForUser', error.message);
+    return { allowedWarehouseIds: [], allowedStoreIds: [], allowedPosIds: [] };
   }
+
+  const rows = (data ?? []) as Array<{ warehouse_id?: string; store_id?: string }>;
+  const warehouseIds = [...new Set(rows.map((r) => r.warehouse_id).filter((id): id is string => typeof id === 'string' && id.length > 0))];
+  const storeIds = [...new Set(rows.map((r) => r.store_id).filter((id): id is string => typeof id === 'string' && id.length > 0))];
   return {
-    allowedStoreIds: Array.from(storeIds),
-    allowedWarehouseIds: Array.from(warehouseIds),
-    allowedPosIds: Array.from(posIds),
+    allowedWarehouseIds: warehouseIds,
+    allowedStoreIds: storeIds,
+    allowedPosIds: [],
   };
 }
 
-/** Display name for Main town POS (single-location, no store dropdown). */
-const MAIN_TOWN_STORE_NAME = 'Main town';
+/** First scope as "assigned POS" for the user (store + warehouse details). Used by POS UI. */
+export async function getAssignedPosForUser(email: string): Promise<AssignedPos | null> {
+  const normalized = email?.trim()?.toLowerCase();
+  if (!normalized) return null;
 
-/**
- * Resolve assigned POS for /me response. When user has exactly one store+warehouse and that store is "Main town",
- * return 'main_town' (POS UI shows fixed "Main Town" only). Otherwise 'store' or null (show store/warehouse dropdowns).
- */
-export async function getAssignedPosForUser(userEmail: string): Promise<'main_town' | 'store' | null> {
-  const scope = await getScopeForUser(userEmail);
-  const singleStore =
-    scope.allowedStoreIds.length === 1 &&
-    scope.allowedWarehouseIds.length === 1;
-  if (!singleStore) return null;
-  const storeId = scope.allowedStoreIds[0];
-  const store = await getStoreById(storeId);
-  if (!store) return null;
-  if (store.name.trim().toLowerCase() === MAIN_TOWN_STORE_NAME.toLowerCase()) {
-    return 'main_town';
-  }
-  return 'store';
+  const supabase = getSupabase();
+  const { data: scopeRow, error: scopeErr } = await supabase
+    .from('user_scopes')
+    .select('store_id, warehouse_id')
+    .eq('user_email', normalized)
+    .limit(1)
+    .maybeSingle();
+
+  if (scopeErr || !scopeRow) return null;
+  const storeId = (scopeRow as { store_id?: string }).store_id;
+  const warehouseId = (scopeRow as { warehouse_id?: string }).warehouse_id;
+  if (!storeId || !warehouseId) return null;
+
+  const [storeRes, warehouseRes] = await Promise.all([
+    supabase.from('stores').select('id, name').eq('id', storeId).maybeSingle(),
+    supabase.from('warehouses').select('id, name, code').eq('id', warehouseId).maybeSingle(),
+  ]);
+  const store = storeRes.data as { name?: string } | null;
+  const warehouse = warehouseRes.data as { name?: string; code?: string } | null;
+
+  return {
+    storeId,
+    warehouseId,
+    storeName: store?.name ?? '',
+    warehouseName: warehouse?.name ?? '',
+    warehouseCode: warehouse?.code ?? '',
+  };
 }
 
-/**
- * List scope rows for an email with store/warehouse names. Admin-only (for UI).
- */
-export async function listScopesForEmail(userEmail: string): Promise<UserScopeWithNames[]> {
-  const normalized = userEmail?.trim()?.toLowerCase() ?? '';
+/** List scopes for an email (admin). */
+export async function listScopesForEmail(email: string): Promise<UserScope[]> {
+  const normalized = email?.trim()?.toLowerCase();
   if (!normalized) return [];
 
   const supabase = getSupabase();
   const { data, error } = await supabase
-    .from(TABLE)
+    .from('user_scopes')
     .select('store_id, warehouse_id')
     .eq('user_email', normalized);
-  if (error) throw error;
-  const rows = (data ?? []) as { store_id: string | null; warehouse_id: string | null }[];
 
-  const stores = await getStores();
-  const warehouses = await getWarehouses();
-  const storeMap = new Map(stores.map((s) => [s.id, s.name]));
-  const warehouseMap = new Map(warehouses.map((w) => [w.id, w.name]));
-
-  const out: UserScopeWithNames[] = [];
-  for (const r of rows) {
-    if (!r.store_id || !r.warehouse_id) continue;
-    const storeName = storeMap.get(r.store_id) ?? r.store_id;
-    const warehouseName = warehouseMap.get(r.warehouse_id) ?? r.warehouse_id;
-    out.push({
-      storeId: r.store_id,
-      storeName,
-      warehouseId: r.warehouse_id,
-      warehouseName,
-    });
+  if (error) {
+    console.error('[userScopes] listScopesForEmail', error.message);
+    return [];
   }
-  return out;
+
+  const rows = (data ?? []) as Array<{ store_id?: string; warehouse_id?: string }>;
+  if (rows.length === 0) return [];
+
+  const storeIds = [...new Set(rows.map((r) => r.store_id).filter(Boolean) as string[])];
+  const warehouseIds = [...new Set(rows.map((r) => r.warehouse_id).filter(Boolean) as string[])];
+  const [storesRes, warehousesRes] = await Promise.all([
+    storeIds.length ? supabase.from('stores').select('id, name').in('id', storeIds) : { data: [] },
+    warehouseIds.length ? supabase.from('warehouses').select('id, name, code').in('id', warehouseIds) : { data: [] },
+  ]);
+  const storesMap = new Map((storesRes.data ?? []).map((s: { id: string; name?: string }) => [s.id, s.name ?? '']));
+  const warehousesMap = new Map(
+    (warehousesRes.data ?? []).map((w: { id: string; name?: string; code?: string }) => [w.id, { name: w.name ?? '', code: w.code ?? '' }])
+  );
+
+  return rows.map((row) => {
+    const wid = row.warehouse_id ?? '';
+    const wh = warehousesMap.get(wid);
+    return {
+      storeId: String(row.store_id ?? ''),
+      warehouseId: wid,
+      storeName: storesMap.get(row.store_id ?? ''),
+      warehouseName: wh?.name,
+      warehouseCode: wh?.code,
+    };
+  });
 }
 
-/**
- * Replace all scope rows for a user. Validates store/warehouse exist and warehouse belongs to store.
- * Admin-only. Empty scopes = clear (user becomes unrestricted for that dimension).
- */
+/** Set scopes for a user (admin). Replaces existing. */
 export async function setScopesForUser(
-  userEmail: string,
+  email: string,
   scopes: Array<{ storeId: string; warehouseId: string }>
 ): Promise<void> {
-  const normalized = userEmail?.trim()?.toLowerCase() ?? '';
-  if (!normalized) throw new Error('User email is required.');
+  const normalized = email?.trim()?.toLowerCase();
+  if (!normalized) throw new Error('email required');
 
   const supabase = getSupabase();
+  await supabase.from('user_scopes').delete().eq('user_email', normalized);
 
-  for (const s of scopes) {
-    const wid = s.warehouseId?.trim();
-    const sid = s.storeId?.trim();
-    if (!wid || !sid) throw new Error('Each scope must have storeId and warehouseId.');
-    const wh = await getWarehouseById(wid);
-    if (!wh) throw new Error(`Warehouse ${wid} not found.`);
-    if (wh.storeId !== sid) {
-      throw new Error(`Warehouse ${wh.name} does not belong to the selected store.`);
-    }
-  }
+  if (scopes.length === 0) return;
 
-  await supabase.from(TABLE).delete().eq('user_email', normalized);
+  const rows = scopes.map((s) => ({
+    user_email: normalized,
+    store_id: s.storeId.trim(),
+    warehouse_id: s.warehouseId.trim(),
+    created_at: new Date().toISOString(),
+  }));
 
-  for (const s of scopes) {
-    const { error } = await supabase.from(TABLE).insert({
-      user_email: normalized,
-      store_id: s.storeId.trim(),
-      warehouse_id: s.warehouseId.trim(),
-      pos_id: null,
-    });
-    if (error) throw error;
-  }
+  const { error } = await supabase.from('user_scopes').insert(rows);
+  if (error) throw new Error(error.message);
 }

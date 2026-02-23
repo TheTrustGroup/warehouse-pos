@@ -50,8 +50,8 @@ export async function verifyAuth(req: NextRequest): Promise<VerifyAuthResult> {
     return { ok: false };
   }
 
-  // 1) Session token (login returns base64url.HMAC signed with SESSION_SECRET — same as /api/auth/login)
-  const session = getSession(req);
+  // 1) Session token (Supabase or signed JWT from login)
+  const session = await getSession(req);
   if (session) {
     return {
       ok: true,
