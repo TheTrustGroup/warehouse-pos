@@ -7,7 +7,7 @@
 //   2. POST /api/sales → calls record_sale() Supabase RPC
 //      → RPC atomically: inserts sale + sale_lines + deducts
 //        warehouse_inventory_by_size (sized) or warehouse_inventory
-//      → Returns { id, receiptId, createdAt }
+//      → Returns { id, receiptId, total, itemCount, status, createdAt }
 //   3. Frontend ALSO deducts stock locally (instant UI feedback)
 //      — this is optimistic. Even if step 2 failed, cashier sees
 //        correct stock immediately. Step 2 is the ground truth.
@@ -197,6 +197,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           sizeLabel: input.sizeLabel ?? null,
           unitPrice: input.unitPrice,
           qty: input.qty,
+          imageUrl: input.imageUrl ?? null,
         },
       ];
     });
@@ -235,6 +236,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       const result = await apiFetch<{
         id: string;
         receiptId: string;
+        total?: number;
+        itemCount?: number;
+        status?: string;
         createdAt: string;
       }>('/api/sales', {
         method: 'POST',
@@ -254,6 +258,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
             lineTotal: l.unitPrice * l.qty,
             name: l.name,
             sku: l.sku ?? '',
+            imageUrl: l.imageUrl ?? null,
           })),
         }),
       });

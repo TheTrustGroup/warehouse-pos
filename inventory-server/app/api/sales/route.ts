@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabase();
   let query = supabase
     .from('sales')
-    .select('id, warehouse_id, receipt_id, customer_name, payment_method, subtotal, discount_pct, discount_amt, total, created_at')
+    .select('id, warehouse_id, receipt_id, customer_name, payment_method, subtotal, discount_pct, discount_amt, total, status, item_count, created_at')
     .eq('warehouse_id', warehouseId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -58,6 +58,8 @@ export async function GET(request: NextRequest) {
     discountPct: row.discount_pct,
     discountAmt: row.discount_amt,
     total: row.total,
+    status: row.status ?? 'completed',
+    itemCount: row.item_count,
     createdAt: row.created_at,
   }));
   return NextResponse.json({ data: list, total: list.length });
@@ -71,6 +73,7 @@ interface SaleLinePayload {
   lineTotal: number;
   name: string;
   sku: string;
+  imageUrl?: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -117,32 +120,37 @@ export async function POST(request: NextRequest) {
   }
 
   const pLines = lines.map((l) => ({
-    product_id: l.productId,
-    size_code: l.sizeCode ?? null,
+    productId: l.productId,
+    sizeCode: l.sizeCode ?? null,
     qty: l.qty,
-    unit_price: l.unitPrice,
-    line_total: l.lineTotal,
+    unitPrice: l.unitPrice,
+    lineTotal: l.lineTotal,
     name: l.name ?? '',
     sku: l.sku ?? '',
+    imageUrl: l.imageUrl ?? null,
   }));
 
   try {
     const supabase = getSupabase();
     const { data, error } = await supabase.rpc('record_sale', {
       p_warehouse_id: warehouseId,
-      p_customer_name: body.customerName ?? null,
-      p_payment_method: paymentMethod,
+      p_lines: pLines,
       p_subtotal: subtotal,
       p_discount_pct: discountPct,
       p_discount_amt: discountAmt,
       p_total: total,
-      p_lines: pLines,
+      p_payment_method: paymentMethod,
+      p_customer_name: body.customerName ?? null,
+      p_sold_by: null,
     });
     if (error) throw error;
     const result = data as {
       id?: string;
       receiptId?: string;
       receipt_id?: string;
+      total?: number;
+      itemCount?: number;
+      status?: string;
       createdAt?: string;
       created_at?: string;
     } | null;
@@ -152,6 +160,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       id: result.id,
       receiptId: result.receiptId ?? result.receipt_id,
+      total: result.total,
+      itemCount: result.itemCount,
+      status: result.status ?? 'completed',
       createdAt: result.createdAt ?? result.created_at ?? new Date().toISOString(),
     });
   } catch (e) {

@@ -6,7 +6,7 @@ import { useWarehouse, DEFAULT_WAREHOUSE_ID } from '../../contexts/WarehouseCont
 import { useInventory } from '../../contexts/InventoryContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useNetworkStatusContext } from '../../contexts/NetworkStatusContext';
-import { API_BASE_URL } from '../../lib/api';
+import { API_BASE_URL, getApiHeaders } from '../../lib/api';
 import { apiGet } from '../../lib/apiClient';
 import { compressImage, MAX_IMAGE_BASE64_LENGTH } from '../../lib/imageUtils';
 import { setProductImages } from '../../lib/productImagesStore';
@@ -280,17 +280,36 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             showToast('error', `Could not read image: ${file.name}`);
             continue;
           }
-          if (!product) {
+          // Prefer Storage URL when upload API is available (product-images bucket)
+          let imageValue: string = dataUrl;
+          try {
+            const form = new FormData();
+            form.append('file', file, file.name);
+            const headers = getApiHeaders() as Record<string, string>;
+            const { 'Content-Type': _ct, ...rest } = headers;
+            const res = await fetch(`${API_BASE_URL}/api/upload/product-image`, {
+              method: 'POST',
+              headers: rest,
+              body: form,
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (typeof data?.url === 'string') imageValue = data.url;
+            }
+          } catch {
+            // Fall back to base64
+          }
+          if (!product && imageValue === dataUrl) {
             try {
               const compressed = await compressImage(file, MAX_IMAGE_BASE64_LENGTH);
               if (compressed && compressed.length <= MAX_IMAGE_BASE64_LENGTH) {
-                dataUrl = compressed;
+                imageValue = compressed;
               }
             } catch {
-              // Keep uncompressed dataUrl so preview and save still work
+              // Keep uncompressed
             }
           }
-          newDataUrls.push(dataUrl);
+          newDataUrls.push(imageValue);
         }
 
         if (newDataUrls.length === 0) {

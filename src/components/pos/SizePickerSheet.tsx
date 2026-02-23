@@ -20,6 +20,8 @@ export interface CartLineInput {
   sizeLabel?: string | null;
   unitPrice: number;
   qty: number;
+  /** Product image URL (e.g. first of product.images) for receipt / API. */
+  imageUrl?: string | null;
 }
 
 interface SizePickerSheetProps {
@@ -45,6 +47,7 @@ export default function SizePickerSheet({ product, onAdd, onClose }: SizePickerS
       sizeLabel: sizeLabel ?? undefined,
       unitPrice: product.sellingPrice,
       qty,
+      imageUrl: product.images?.[0] ?? null,
     });
     onClose();
   };

@@ -9,6 +9,8 @@ export interface CartLine {
   sizeLabel: string | null;
   unitPrice: number;
   qty: number;
+  /** Product image URL for receipt / API (e.g. first of warehouse_products.images). */
+  imageUrl?: string | null;
 }
 
 export interface SalePayload {
@@ -27,6 +29,7 @@ export interface SalePayload {
     name: string;
     sku: string;
     sizeLabel?: string | null;
+    imageUrl?: string | null;
   }>;
 }
 
@@ -84,6 +87,7 @@ export default function CartSheet({
           name: l.name,
           sku: l.sku,
           sizeLabel: l.sizeLabel,
+          imageUrl: l.imageUrl ?? null,
         })),
       });
     } finally {
