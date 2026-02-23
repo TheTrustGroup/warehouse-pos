@@ -17,11 +17,10 @@ import SizesSection, {
   type SizeCode,
   getValidationError,
 } from './SizesSection';
-import { isBase64, safeProductImageUrl } from '../../lib/imageUpload';
 
-// ── Image compression (canvas resize → compressed JPEG/PNG data-URL) ─────────
-// Resizes to max 900px, compresses to 0.82 quality. No external deps.
-// Keeps file small in DB when storing as base64.
+// ── Image compression helper (canvas resize → compressed JPEG data-URL) ───
+// Resizes to max 900px, compresses to 0.82 quality — keeps file tiny in DB.
+// No external dependencies. Works in all modern browsers.
 function compressImage(file: File, maxPx = 900, quality = 0.82): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -30,26 +29,18 @@ function compressImage(file: File, maxPx = 900, quality = 0.82): Promise<string>
       URL.revokeObjectURL(url);
       let { width, height } = img;
       if (width > maxPx || height > maxPx) {
-        if (width > height) {
-          height = Math.round((height * maxPx) / width);
-          width = maxPx;
-        } else {
-          width = Math.round((width * maxPx) / height);
-          height = maxPx;
-        }
+        if (width > height) { height = Math.round(height * maxPx / width); width = maxPx; }
+        else                { width  = Math.round(width  * maxPx / height); height = maxPx; }
       }
       const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0, width, height);
+      // PNG for transparent, JPEG for everything else
       const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
       resolve(canvas.toDataURL(mime, quality));
     };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Failed to load image'));
-    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
     img.src = url;
   });
 }
@@ -93,10 +84,9 @@ interface FormState {
 
 interface ProductModalProps {
   isOpen: boolean;
-  product?: Product | null;        // null/undefined = add mode
+  product?: Product | null;
   sizeCodes?: SizeCode[];
   warehouseId?: string;
-  warehouseName?: string;
   onSubmit: (payload: Omit<Product, 'id'> & { id?: string }, isEdit: boolean) => Promise<void>;
   onClose: () => void;
 }
@@ -251,7 +241,7 @@ const priceCls = `
 // ── Image Upload Section ───────────────────────────────────────────────────
 
 const MAX_IMAGES = 5;
-const MAX_FILE_SIZE_MB = 2;
+// Raw camera files can be 8–15MB; canvas compresses to ~150KB (no file-size reject).
 
 interface ImageUploadProps {
   images: string[];
@@ -278,16 +268,14 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
     setUploadProgress(0);
 
     const picked = Array.from(files).filter(f => f.type.startsWith('image/'));
-    const next = [...images];
+    const next   = [...images];
 
     for (let i = 0; i < picked.length; i++) {
       if (next.length >= MAX_IMAGES) break;
       const file = picked[i];
 
-      if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-        setUploadError(`"${file.name}" is too large. Max ${MAX_FILE_SIZE_MB}MB.`);
-        continue;
-      }
+      // No pre-check needed — compressImage() resizes + re-encodes to ~150KB regardless of input size.
+      // Only truly unprocessable files (corrupt, wrong type) will throw below.
 
       try {
         setUploadProgress(Math.round(((i + 0.5) / picked.length) * 100));
@@ -340,67 +328,57 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
 
   return (
     <div className="flex flex-col gap-3">
+
+      {/* Image grid */}
       {images.length > 0 && (
-        <>
-          <div className="grid grid-cols-3 gap-2">
-            {images.map((src, idx) => (
-              <div key={idx} className="relative group aspect-square rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-50">
-                <img
-                  src={safeProductImageUrl(src)}
-                  alt={`Product image ${idx + 1}`}
-                  className="w-full h-full object-cover"
-                  onError={e => { (e.target as HTMLImageElement).src = ''; }}
-                />
-                {idx === 0 && (
-                  <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-red-500 text-white text-[9px] font-bold uppercase tracking-wide">
-                    Primary
-                  </span>
-                )}
-                {isBase64(src) && (
-                  <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md bg-amber-500 text-white text-[8px] font-bold uppercase tracking-wide">
-                    local
-                  </span>
-                )}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
-                  {idx > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => moveImage(idx, idx - 1)}
-                      className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/40 text-white text-[11px] font-bold flex items-center justify-center transition-colors"
-                      title="Move left"
-                    >←</button>
-                  )}
+        <div className="grid grid-cols-3 gap-2">
+          {images.map((src, idx) => (
+            <div key={idx} className="relative group aspect-square rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-50">
+              <img
+                src={src}
+                alt={`Product image ${idx + 1}`}
+                className="w-full h-full object-cover"
+                onError={e => { (e.target as HTMLImageElement).src = ''; }}
+              />
+              {/* Primary badge */}
+              {idx === 0 && (
+                <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-red-500 text-white text-[9px] font-bold uppercase tracking-wide">
+                  Primary
+                </span>
+              )}
+              {/* Controls overlay */}
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                {idx > 0 && (
                   <button
                     type="button"
-                    onClick={() => removeImage(idx)}
-                    className="w-7 h-7 rounded-lg bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center transition-colors"
-                    title="Remove"
-                  >
-                    <IconX />
-                  </button>
-                  {idx < images.length - 1 && (
-                    <button
-                      type="button"
-                      onClick={() => moveImage(idx, idx + 1)}
-                      className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/40 text-white text-[11px] font-bold flex items-center justify-center transition-colors"
-                      title="Move right"
-                    >→</button>
-                  )}
-                </div>
+                    onClick={() => moveImage(idx, idx - 1)}
+                    className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/40 text-white text-[11px] font-bold flex items-center justify-center transition-colors"
+                    title="Move left"
+                  >←</button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeImage(idx)}
+                  className="w-7 h-7 rounded-lg bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center transition-colors"
+                  title="Remove"
+                >
+                  <IconX />
+                </button>
+                {idx < images.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => moveImage(idx, idx + 1)}
+                    className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/40 text-white text-[11px] font-bold flex items-center justify-center transition-colors"
+                    title="Move right"
+                  >→</button>
+                )}
               </div>
-            ))}
-          </div>
-          {images.some(isBase64) && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100">
-              <span className="text-amber-500 text-[14px] mt-0.5">⚠</span>
-              <p className="text-[11px] text-amber-700 font-medium leading-snug">
-                Some images are stored locally (marked &quot;local&quot;). For permanent hosting, use a server upload or re-upload after configuring storage.
-              </p>
             </div>
-          )}
-        </>
+          ))}
+        </div>
       )}
 
+      {/* Drop zone / Upload button */}
       {canAdd && (
         <div
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
@@ -442,7 +420,7 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
                   {images.length === 0 ? 'Add product photos' : `Add more (${images.length}/${MAX_IMAGES})`}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Drag & drop or tap · JPG, PNG, WebP · Max {MAX_FILE_SIZE_MB}MB each
+                  Drag & drop or tap · JPG, PNG, WebP · Any size
                 </p>
               </div>
             </>
@@ -459,10 +437,12 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
         </div>
       )}
 
+      {/* Upload error */}
       {uploadError && (
         <p className="text-[12px] text-red-500 font-medium">{uploadError}</p>
       )}
 
+      {/* URL input toggle */}
       {canAdd && (
         <div>
           {!showUrlInput ? (
@@ -522,14 +502,12 @@ export default function ProductModal({
   product,
   sizeCodes = [],
   warehouseId: defaultWarehouseId,
-  warehouseName,
   onSubmit,
   onClose,
 }: ProductModalProps) {
 
   const isEdit = !!product?.id;
 
-  // ── Form state — initialized ONCE on open ──────────────────────────────
   const [form, setForm] = useState<FormState>(() => buildInitialForm(product));
   const [attempted, setAttempted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -538,7 +516,6 @@ export default function ProductModal({
   const hasInitialized = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Initialize form ONCE when modal opens — never again while open (avoids polling/product updates resetting form).
   useEffect(() => {
     if (!isOpen) {
       hasInitialized.current = false;
@@ -552,9 +529,8 @@ export default function ProductModal({
     setForm(buildInitialForm(product));
     setAttempted(false);
     setErrors({});
-  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps -- product intentionally omitted: do not re-init while open
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Trap body scroll on mobile when open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -564,7 +540,6 @@ export default function ProductModal({
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen && !isSubmitting) onClose();
@@ -572,8 +547,6 @@ export default function ProductModal({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen, isSubmitting, onClose]);
-
-  // ── Field updaters ─────────────────────────────────────────────────────
 
   const set = useCallback(<K extends keyof FormState>(key: K, val: FormState[K]) => {
     setForm(prev => ({ ...prev, [key]: val }));
@@ -590,8 +563,6 @@ export default function ProductModal({
     }));
   }, []);
 
-  // ── Validation ─────────────────────────────────────────────────────────
-
   function validate(): boolean {
     const e: Partial<Record<keyof FormState, string>> = {};
     if (!form.name.trim()) e.name = 'Product name is required.';
@@ -599,18 +570,15 @@ export default function ProductModal({
     if (form.sellingPrice === '' || Number(form.sellingPrice) < 0)
       e.sellingPrice = 'Enter a valid selling price.';
     const sizeError = getValidationError(form.sizes);
-    if (sizeError) (e as Partial<Record<keyof FormState, string>>).sizes = sizeError;
+    if (sizeError) e.sizes = sizeError as any;
     setErrors(e);
     return Object.keys(e).length === 0;
   }
-
-  // ── Submit ─────────────────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setAttempted(true);
     if (!validate()) {
-      // Scroll to first error
       scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -644,8 +612,6 @@ export default function ProductModal({
     }
   }
 
-  // ── Derived ────────────────────────────────────────────────────────────
-
   const margin =
     form.sellingPrice !== '' && form.costPrice !== ''
       ? Number(form.sellingPrice) - Number(form.costPrice)
@@ -655,8 +621,6 @@ export default function ProductModal({
     margin !== null && Number(form.sellingPrice) > 0
       ? ((margin / Number(form.sellingPrice)) * 100).toFixed(1)
       : null;
-
-  // ── Render ─────────────────────────────────────────────────────────────
 
   if (!isOpen) return null;
 
@@ -693,23 +657,19 @@ export default function ProductModal({
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
           <div className="flex items-center gap-3">
+            {/* Primary image thumbnail in header if available */}
             {form.images.length > 0 && (
               <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200 flex-shrink-0">
-                <img src={safeProductImageUrl(form.images[0])} alt="" className="w-full h-full object-cover" />
+                <img src={form.images[0]} alt="" className="w-full h-full object-cover" />
               </div>
             )}
             <div>
               <h2 className="text-[17px] font-bold text-slate-900 leading-tight">
                 {isEdit ? form.name || 'Edit product' : 'New product'}
               </h2>
-            {isEdit && product?.sku && (
-              <p className="text-[12px] font-mono text-slate-400 mt-0.5">{product.sku}</p>
-            )}
-            {!isEdit && warehouseName && (
-              <p className="text-[12px] text-slate-500 mt-0.5" aria-live="polite">
-                Adding to: <span className="font-medium text-slate-700">{warehouseName}</span>
-              </p>
-            )}
+              {isEdit && product?.sku && (
+                <p className="text-[12px] font-mono text-slate-400 mt-0.5">{product.sku}</p>
+              )}
             </div>
           </div>
           <button
@@ -746,6 +706,7 @@ export default function ProductModal({
                   {form.images.length > 0 ? `${form.images.length}/${MAX_IMAGES} added` : 'Optional · shows in POS'}
                 </span>
               </div>
+
               <ImageUpload
                 images={form.images}
                 onChange={imgs => set('images', imgs)}
@@ -798,7 +759,7 @@ export default function ProductModal({
                     type="text"
                     value={form.sku}
                     onChange={e => set('sku', e.target.value)}
-                    className={`${inputCls()} font-mono text-[13px] pr-24`}
+                    className={`${inputCls()} font-mono text-[13px] pr-28`}
                   />
                   <button
                     type="button"
@@ -834,7 +795,7 @@ export default function ProductModal({
                   value={form.description}
                   onChange={e => set('description', e.target.value)}
                   placeholder="Brief product description…"
-                  rows={3}
+                  rows={2}
                   className="
                     w-full px-3.5 py-3 rounded-xl border-[1.5px] border-slate-200
                     font-sans text-[14px] text-slate-900 bg-slate-50
@@ -925,9 +886,9 @@ export default function ProductModal({
             <div className="h-px bg-slate-100" />
 
             {/* ── Section: Stock & Sizes ── */}
-            {errors.sizes && (
+            {(errors as any).sizes && (
               <div className="px-3.5 py-2.5 rounded-xl bg-red-50 border border-red-100 text-[13px] font-medium text-red-600 mb-2">
-                {errors.sizes}
+                {(errors as any).sizes}
               </div>
             )}
             <SizesSection
@@ -940,7 +901,7 @@ export default function ProductModal({
             {/* ── Divider ── */}
             <div className="h-px bg-slate-100" />
 
-            {/* ── Section: Details (collapsible) ── */}
+            {/* ── Section: Location & Supplier (collapsible) ── */}
             <div>
               <button
                 type="button"
