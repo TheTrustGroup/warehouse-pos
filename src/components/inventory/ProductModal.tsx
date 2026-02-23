@@ -17,7 +17,42 @@ import SizesSection, {
   type SizeCode,
   getValidationError,
 } from './SizesSection';
-import { uploadProductImage, isBase64, safeProductImageUrl, MAX_IMAGE_SIZE_MB } from '../../lib/imageUpload';
+import { isBase64, safeProductImageUrl } from '../../lib/imageUpload';
+
+// ── Image compression (canvas resize → compressed JPEG/PNG data-URL) ─────────
+// Resizes to max 900px, compresses to 0.82 quality. No external deps.
+// Keeps file small in DB when storing as base64.
+function compressImage(file: File, maxPx = 900, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxPx || height > maxPx) {
+        if (width > height) {
+          height = Math.round((height * maxPx) / width);
+          width = maxPx;
+        } else {
+          width = Math.round((width * maxPx) / height);
+          height = maxPx;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+      const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      resolve(canvas.toDataURL(mime, quality));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+    img.src = url;
+  });
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -216,6 +251,7 @@ const priceCls = `
 // ── Image Upload Section ───────────────────────────────────────────────────
 
 const MAX_IMAGES = 5;
+const MAX_FILE_SIZE_MB = 2;
 
 interface ImageUploadProps {
   images: string[];
@@ -240,41 +276,30 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
     setUploading(true);
     setUploadError('');
     setUploadProgress(0);
-    const newImages = [...images];
-    const filesToUpload = Array.from(files).filter(f => f.type.startsWith('image/'));
 
-    for (let i = 0; i < filesToUpload.length; i++) {
-      if (newImages.length >= MAX_IMAGES) break;
-      const file = filesToUpload[i];
+    const picked = Array.from(files).filter(f => f.type.startsWith('image/'));
+    const next = [...images];
 
-      if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
-        setUploadError(`${file.name} exceeds ${MAX_IMAGE_SIZE_MB}MB limit.`);
+    for (let i = 0; i < picked.length; i++) {
+      if (next.length >= MAX_IMAGES) break;
+      const file = picked[i];
+
+      if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        setUploadError(`"${file.name}" is too large. Max ${MAX_FILE_SIZE_MB}MB.`);
         continue;
       }
 
       try {
-        const result = await uploadProductImage(file, (pct) => {
-          setUploadProgress(Math.round(((i / filesToUpload.length) + pct / 100 / filesToUpload.length) * 100));
-        });
-        newImages.push(result.url);
-      } catch (storageErr: unknown) {
-        const msg = storageErr instanceof Error ? storageErr.message : 'Upload failed';
-        console.warn('[ImageUpload] Storage upload failed, using base64 fallback:', msg);
-        try {
-          const url = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
-          newImages.push(url);
-        } catch {
-          setUploadError(`Failed to upload ${file.name}.`);
-        }
+        setUploadProgress(Math.round(((i + 0.5) / picked.length) * 100));
+        const dataUrl = await compressImage(file);
+        next.push(dataUrl);
+        setUploadProgress(Math.round(((i + 1) / picked.length) * 100));
+      } catch {
+        setUploadError(`Could not process "${file.name}".`);
       }
     }
 
-    onChange(newImages);
+    onChange(next);
     setUploading(false);
     setUploadProgress(0);
   }
@@ -369,7 +394,7 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
             <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100">
               <span className="text-amber-500 text-[14px] mt-0.5">⚠</span>
               <p className="text-[11px] text-amber-700 font-medium leading-snug">
-                Some images are stored locally (marked &quot;local&quot;). Set up Supabase Storage (run MASTER_SQL_V2.sql) for permanent image hosting. Re-upload these images once configured.
+                Some images are stored locally (marked &quot;local&quot;). For permanent hosting, use a server upload or re-upload after configuring storage.
               </p>
             </div>
           )}
@@ -417,7 +442,7 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
                   {images.length === 0 ? 'Add product photos' : `Add more (${images.length}/${MAX_IMAGES})`}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Drag & drop or tap · JPG, PNG, WebP · Max {MAX_IMAGE_SIZE_MB}MB each
+                  Drag & drop or tap · JPG, PNG, WebP · Max {MAX_FILE_SIZE_MB}MB each
                 </p>
               </div>
             </>
@@ -513,7 +538,7 @@ export default function ProductModal({
   const hasInitialized = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Initialize ONCE when modal opens — never again while open
+  // Initialize form ONCE when modal opens — never again while open (avoids polling/product updates resetting form).
   useEffect(() => {
     if (!isOpen) {
       hasInitialized.current = false;
@@ -527,7 +552,7 @@ export default function ProductModal({
     setForm(buildInitialForm(product));
     setAttempted(false);
     setErrors({});
-  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps -- product intentionally omitted: do not re-init while open
 
   // Trap body scroll on mobile when open
   useEffect(() => {
@@ -650,12 +675,12 @@ export default function ProductModal({
           bottom-0 left-0 right-0
           sm:bottom-auto sm:left-1/2 sm:top-1/2
           sm:-translate-x-1/2 sm:-translate-y-1/2
-          sm:max-w-[580px] sm:w-full
+          sm:max-w-[600px] sm:w-full
           bg-white
           rounded-t-[24px] sm:rounded-[20px]
           shadow-2xl
           flex flex-col
-          max-h-[92vh] sm:max-h-[88vh]
+          max-h-[92vh] sm:max-h-[90vh]
           transition-transform duration-300
         "
         onClick={e => e.stopPropagation()}
@@ -729,7 +754,7 @@ export default function ProductModal({
             </div>
 
             {/* ── Divider ── */}
-            <div className="h-px bg-slate-100 my-2" />
+            <div className="h-px bg-slate-100" />
 
             {/* ── Section: Basic Info ── */}
             <div className="flex flex-col gap-4">
@@ -822,7 +847,7 @@ export default function ProductModal({
             </div>
 
             {/* ── Divider ── */}
-            <div className="h-px bg-slate-100 my-2" />
+            <div className="h-px bg-slate-100" />
 
             {/* ── Section: Pricing ── */}
             <div className="flex flex-col gap-4">
@@ -897,7 +922,7 @@ export default function ProductModal({
             </div>
 
             {/* ── Divider ── */}
-            <div className="h-px bg-slate-100 my-2" />
+            <div className="h-px bg-slate-100" />
 
             {/* ── Section: Stock & Sizes ── */}
             {errors.sizes && (
@@ -913,7 +938,7 @@ export default function ProductModal({
             />
 
             {/* ── Divider ── */}
-            <div className="h-px bg-slate-100 my-2" />
+            <div className="h-px bg-slate-100" />
 
             {/* ── Section: Details (collapsible) ── */}
             <div>

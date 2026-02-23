@@ -318,6 +318,10 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       saleId: serverSaleId,
       receiptId: serverReceiptId,
       completedAt,
+      lines: payload.lines.map((l) => ({
+        ...l,
+        key: buildCartKey(l.productId, l.sizeCode ?? null),
+      })),
     });
 
     if (!syncOk) {

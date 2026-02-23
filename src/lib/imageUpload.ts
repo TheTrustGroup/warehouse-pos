@@ -48,6 +48,66 @@ function generatePath(file: File): string {
   return `products/${ts}-${rand}.${ext}`;
 }
 
+/** Max dimension (width or height) for compressed product images. */
+const MAX_DIMENSION = 1920;
+
+/**
+ * Compress image to stay under maxBytes using Canvas. Preserves aspect ratio.
+ * Returns original file if already under limit or not a supported image.
+ * Output is always JPEG for smaller size. Uses no dependencies.
+ */
+async function compressImageIfNeeded(
+  file: File,
+  maxBytes: number
+): Promise<File> {
+  if (file.size <= maxBytes) return file;
+  if (!file.type.startsWith('image/')) return file;
+
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = document.createElement('img');
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Failed to decode image'));
+      el.src = url;
+    });
+
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (!w || !h) return file;
+
+    let maxDim = MAX_DIMENSION;
+    const qualities = [0.92, 0.85, 0.75, 0.6, 0.5];
+
+    for (const q of qualities) {
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      const cw = Math.round(w * scale);
+      const ch = Math.round(h * scale);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+      ctx.drawImage(img, 0, 0, cw, ch);
+
+      const blob = await new Promise<Blob | null>((res) =>
+        canvas.toBlob(res, 'image/jpeg', q)
+      );
+      if (!blob) continue;
+      if (blob.size <= maxBytes) {
+        const name = file.name.replace(/\.[a-z]+$/i, '.jpg');
+        return new File([blob], name, { type: 'image/jpeg' });
+      }
+      maxDim = Math.round(maxDim * 0.85);
+    }
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+
+  return file;
+}
+
 export interface UploadResult {
   url: string;
   path: string;
@@ -55,6 +115,7 @@ export interface UploadResult {
 
 /**
  * Upload a product image to Supabase Storage.
+ * Large images are compressed client-side to stay under the size limit.
  * Returns { url, path } on success.
  * Throws on failure.
  *
@@ -74,16 +135,21 @@ export async function uploadProductImage(
     );
   }
 
-  if (file.size > MAX_SIZE_BYTES) {
-    throw new Error(
-      `Image is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max ${MAX_SIZE_BYTES / 1024 / 1024}MB.`
-    );
-  }
   if (!file.type.startsWith('image/')) {
     throw new Error('File must be an image (JPG, PNG, WebP).');
   }
 
-  const path = generatePath(file);
+  onProgress?.(5);
+  const toUpload = await compressImageIfNeeded(file, MAX_SIZE_BYTES);
+  onProgress?.(15);
+
+  if (toUpload.size > MAX_SIZE_BYTES) {
+    throw new Error(
+      `Image is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max ${MAX_SIZE_BYTES / 1024 / 1024}MB. Compress or resize the image and try again.`
+    );
+  }
+
+  const path = generatePath(toUpload);
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${BUCKET}/${path}`;
 
   let authToken = '';
@@ -104,10 +170,10 @@ export async function uploadProductImage(
     headers: {
       apikey: anonKey,
       Authorization: authToken ? `Bearer ${authToken}` : `Bearer ${anonKey}`,
-      'Content-Type': file.type,
+      'Content-Type': toUpload.type,
       'Cache-Control': '3600',
     },
-    body: file,
+    body: toUpload,
   });
 
   onProgress?.(80);
