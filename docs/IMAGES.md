@@ -22,7 +22,7 @@ Without these, uploads in ProductModal fall back to base64. The UI shows a warni
 ## Backend
 
 - **Database:** `warehouse_products.images` (JSONB array of strings). Added by migration `20250222130000_master_sql_v2.sql`.
-- **Storage bucket:** `product-images` (public read, auth upload/delete). Created by the same migration. Max file size 2MB; MIME types: JPEG, PNG, WebP, GIF.
+- **Storage bucket:** `product-images` (public read, auth upload/delete). Created by the same migration. Max file size 5MB; MIME types: JPEG, PNG, WebP, GIF.
 - **API:** Create/update product accepts `images: string[]`. Server normalizes to max 5 items and max 8MB per entry.
 
 ## Security

@@ -17,7 +17,7 @@ import SizesSection, {
   type SizeCode,
   getValidationError,
 } from './SizesSection';
-import { uploadProductImage, isBase64, safeProductImageUrl } from '../../lib/imageUpload';
+import { uploadProductImage, isBase64, safeProductImageUrl, MAX_IMAGE_SIZE_MB } from '../../lib/imageUpload';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -216,7 +216,6 @@ const priceCls = `
 // ── Image Upload Section ───────────────────────────────────────────────────
 
 const MAX_IMAGES = 5;
-const MAX_FILE_SIZE_MB = 2;
 
 interface ImageUploadProps {
   images: string[];
@@ -248,8 +247,8 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
       if (newImages.length >= MAX_IMAGES) break;
       const file = filesToUpload[i];
 
-      if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-        setUploadError(`${file.name} exceeds ${MAX_FILE_SIZE_MB}MB limit.`);
+      if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+        setUploadError(`${file.name} exceeds ${MAX_IMAGE_SIZE_MB}MB limit.`);
         continue;
       }
 
@@ -418,7 +417,7 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
                   {images.length === 0 ? 'Add product photos' : `Add more (${images.length}/${MAX_IMAGES})`}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Drag & drop or tap · JPG, PNG, WebP · Max {MAX_FILE_SIZE_MB}MB each
+                  Drag & drop or tap · JPG, PNG, WebP · Max {MAX_IMAGE_SIZE_MB}MB each
                 </p>
               </div>
             </>

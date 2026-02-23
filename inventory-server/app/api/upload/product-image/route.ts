@@ -8,7 +8,7 @@ import { requireAuth } from '@/lib/auth/session';
 import { getSupabase } from '@/lib/supabase';
 
 const BUCKET = 'product-images';
-const MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB — keep in sync with Supabase bucket file_size_limit
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

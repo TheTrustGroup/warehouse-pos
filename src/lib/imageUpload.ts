@@ -18,7 +18,10 @@
 
 const BUCKET = 'product-images';
 
-const MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+/** Max upload size in bytes. Must match API and Supabase bucket file_size_limit. */
+export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+export const MAX_IMAGE_SIZE_MB = MAX_IMAGE_SIZE_BYTES / (1024 * 1024);
+const MAX_SIZE_BYTES = MAX_IMAGE_SIZE_BYTES;
 
 /** Vite env for Supabase (this app is Vite-only; no process.env). */
 function getEnv(): { VITE_SUPABASE_URL?: string; VITE_SUPABASE_ANON_KEY?: string } {
@@ -73,7 +76,7 @@ export async function uploadProductImage(
 
   if (file.size > MAX_SIZE_BYTES) {
     throw new Error(
-      `Image is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 2MB.`
+      `Image is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max ${MAX_SIZE_BYTES / 1024 / 1024}MB.`
     );
   }
   if (!file.type.startsWith('image/')) {
