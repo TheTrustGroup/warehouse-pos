@@ -8,6 +8,7 @@
 // cashier needs: image, name, price, stock status.
 // ============================================================
 
+import { safeProductImageUrl, EMPTY_IMAGE_DATA_URL } from '../../lib/imageUpload';
 import { type POSProduct } from './SizePickerSheet';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -77,7 +78,9 @@ function ImagePlaceholder() {
 export default function POSProductCard({ product, onSelect }: POSProductCardProps) {
   const status = getStockStatus(product);
   const isOut = status === 'out';
-  const hasImage = Array.isArray(product.images) && product.images.length > 0;
+  const firstImage = (product.images ?? [])[0];
+  const safeSrc = firstImage ? safeProductImageUrl(firstImage) : '';
+  const hasImage = safeSrc && safeSrc !== EMPTY_IMAGE_DATA_URL;
 
   return (
     <button
@@ -97,11 +100,11 @@ export default function POSProductCard({ product, onSelect }: POSProductCardProp
         focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400
       `}
     >
-      {/* Image */}
+      {/* Image: only show img when URL is allowed (same-origin Storage or data:); else placeholder */}
       <div className="relative w-full pt-[100%] bg-slate-50 overflow-hidden">
         {hasImage ? (
           <img
-            src={(product.images ?? [])[0]}
+            src={safeSrc}
             alt={product.name}
             loading="lazy"
             className="

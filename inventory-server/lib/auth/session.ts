@@ -188,8 +188,9 @@ export async function getEffectiveWarehouseId(
   const scope = await getScopeForUser(auth.email);
   const allowed = scope.allowedWarehouseIds;
   const trimmed = bodyWarehouseId?.trim();
+  const isAdminOrSuperAdmin = /^(admin|super_admin)$/i.test(auth.role ?? '');
   if (allowed.length === 0) {
-    if (auth.role === 'admin' && trimmed) return trimmed;
+    if (isAdminOrSuperAdmin && trimmed) return trimmed;
     return null;
   }
   if (trimmed && allowed.includes(trimmed)) return trimmed;

@@ -68,7 +68,7 @@ export default function CartSheet({
   const total = Math.max(0, subtotal - discountAmt);
 
   const handleCharge = async () => {
-    if (lines.length === 0 || charging) return;
+    if (!warehouseId || lines.length === 0 || charging) return;
     setCharging(true);
     try {
       await onCharge({
@@ -205,7 +205,7 @@ export default function CartSheet({
             <button
               type="button"
               onClick={handleCharge}
-              disabled={charging || lines.length === 0}
+              disabled={charging || lines.length === 0 || !warehouseId}
               className="rounded-xl bg-primary-600 px-6 py-3 font-semibold text-white disabled:opacity-50"
             >
               {charging ? '…' : `Charge GH₵${total.toLocaleString('en-GH', { minimumFractionDigits: 2 })}`}

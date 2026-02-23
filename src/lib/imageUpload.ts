@@ -184,5 +184,6 @@ export function safeProductImageUrl(src: string): string {
   return EMPTY_IMAGE_DATA_URL;
 }
 
-const EMPTY_IMAGE_DATA_URL =
+/** 1x1 transparent GIF used when image URL is not allowed (XSS). */
+export const EMPTY_IMAGE_DATA_URL =
   'data:image/gif;base64,R0lGOODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';

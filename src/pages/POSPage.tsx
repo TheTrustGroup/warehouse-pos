@@ -23,7 +23,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
-import { printReceipt } from '../lib/printReceipt';
+import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
 
 import SessionScreen, { type Warehouse } from '../components/pos/SessionScreen';
@@ -351,7 +351,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       `Total: ${fmt(sale.total)}`,
       `Paid via: ${sale.paymentMethod}`,
       sale.customerName ? `Customer: ${sale.customerName}` : null,
-      `Date: ${new Date(sale.completedAt ?? Date.now()).toLocaleString('en-GH')}`,
+      `Date: ${formatReceiptDate(sale.completedAt ?? undefined)}`,
     ]
       .filter(Boolean)
       .join('\n');
@@ -436,7 +436,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       <CartSheet
         isOpen={cartOpen}
         lines={cart}
-        warehouseId={warehouse.id}
+        warehouseId={warehouse?.id ?? currentWarehouseId ?? warehouses[0]?.id ?? ''}
         onUpdateQty={handleUpdateQty}
         onRemoveLine={handleRemoveLine}
         onClearCart={handleClearCart}
