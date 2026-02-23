@@ -10,6 +10,7 @@ import { API_BASE_URL, getApiHeaders } from '../../lib/api';
 import { apiGet } from '../../lib/apiClient';
 import { compressImage, MAX_IMAGE_BASE64_LENGTH } from '../../lib/imageUtils';
 import { setProductImages } from '../../lib/productImagesStore';
+import { isStorageUrl, extractPathFromUrl, deleteProductImage } from '../../lib/imageUpload';
 import { Button } from '../ui/Button';
 import SizesSection from './SizesSection';
 import { X, Upload, CloudOff } from 'lucide-react';
@@ -369,6 +370,15 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   }, [isOpen]);
 
   const removeImage = (index: number) => {
+    const url = formData.images[index];
+    if (typeof url === 'string' && isStorageUrl(url)) {
+      const path = extractPathFromUrl(url);
+      if (path) {
+        deleteProductImage(path).catch(() => {
+          // Fire-and-forget: UI and form state still remove the image; Storage cleanup is best-effort.
+        });
+      }
+    }
     const next = formData.images.filter((_, i) => i !== index);
     formDataImagesRef.current = next;
     setFormData(prev => ({ ...prev, images: next }));
