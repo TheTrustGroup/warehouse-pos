@@ -170,6 +170,17 @@ export async function getWarehouseProductById(
 
 // ── createWarehouseProduct: insert product + inventory + per-size rows ───────
 
+const MAX_PRODUCT_IMAGES = 5;
+const MAX_IMAGE_ITEM_LENGTH = 8 * 1024 * 1024; // 8MB (base64 data URLs can be large)
+
+function normalizeProductImages(arr: unknown): string[] {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .slice(0, MAX_PRODUCT_IMAGES)
+    .filter((item): item is string => typeof item === 'string' && item.length > 0 && item.length <= MAX_IMAGE_ITEM_LENGTH)
+    .map(s => String(s).trim());
+}
+
 function toSizeKind(v: unknown): 'na' | 'one_size' | 'sized' {
   const s = String(v ?? 'na').toLowerCase();
   if (s === 'one_size' || s === 'onesize') return 'one_size';
@@ -207,7 +218,7 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
     location: body.location && typeof body.location === 'object' ? body.location : {},
     supplier: body.supplier && typeof body.supplier === 'object' ? body.supplier : {},
     tags: Array.isArray(body.tags) ? body.tags : [],
-    images: Array.isArray(body.images) ? body.images : [],
+    images: normalizeProductImages(body.images),
     version: 1,
     created_at: now,
     updated_at: now,
@@ -343,7 +354,7 @@ function buildProductRow(
     location: b.location ?? null,
     supplier: b.supplier ?? null,
     tags: Array.isArray(b.tags) ? b.tags : [],
-    images: Array.isArray(b.images) ? b.images : [],
+    images: normalizeProductImages(b.images),
     version,
     updated_at: now,
   };

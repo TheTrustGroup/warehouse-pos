@@ -34,7 +34,7 @@ npm run preview
 
 ### Configuration
 
-Set `VITE_API_BASE_URL` for the backend API (required in production). See [docs/ENVIRONMENT.md](./docs/ENVIRONMENT.md) for all env vars and inventory/warehouse behaviour.
+Set `VITE_API_BASE_URL` for the backend API (required in production). See [docs/ENVIRONMENT.md](./docs/ENVIRONMENT.md) for all env vars and inventory/warehouse behaviour. For product image upload (Supabase Storage + fallback), see [docs/IMAGES.md](./docs/IMAGES.md).
 
 ## 🎨 Design System
 

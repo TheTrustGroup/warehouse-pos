@@ -167,3 +167,22 @@ export function isStorageUrl(src: string): boolean {
 export function isBase64(src: string): boolean {
   return src.startsWith('data:');
 }
+
+/** Allowed path for our bucket. Only URLs from our Supabase origin + this path are allowed. */
+const STORAGE_OBJECT_PATH = '/storage/v1/object/';
+
+/**
+ * Returns a URL safe to use as img src: only our Supabase Storage (product-images) or data: base64.
+ * Prevents XSS from arbitrary user-supplied URLs. For invalid URLs returns a 1x1 transparent GIF.
+ */
+export function safeProductImageUrl(src: string): string {
+  if (typeof src !== 'string' || !src) return EMPTY_IMAGE_DATA_URL;
+  const s = src.trim();
+  if (isBase64(s)) return s;
+  const base = getSupabaseUrl();
+  if (base && s.startsWith(base) && s.includes(STORAGE_OBJECT_PATH) && s.includes(BUCKET)) return s;
+  return EMPTY_IMAGE_DATA_URL;
+}
+
+const EMPTY_IMAGE_DATA_URL =
+  'data:image/gif;base64,R0lGOODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
