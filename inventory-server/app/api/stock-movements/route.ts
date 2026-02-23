@@ -5,9 +5,9 @@ import { listStockMovements } from '@/lib/data/stockMovements';
 export const dynamic = 'force-dynamic';
 
 /** GET /api/stock-movements — list stock movements (admin only, read-only). Filters: warehouse_id, transaction_id, from, to. Pagination: limit, offset. */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
+  if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const { searchParams } = new URL(request.url);
     const warehouse_id = searchParams.get('warehouse_id') ?? undefined;

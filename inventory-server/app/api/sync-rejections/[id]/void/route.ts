@@ -8,9 +8,9 @@ export const dynamic = 'force-dynamic';
 export async function PATCH(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+): Promise<NextResponse> {
   const auth = requireAdmin(_request);
-  if (auth instanceof NextResponse) return auth;
+  if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const { id } = await params;
     if (!id?.trim()) {

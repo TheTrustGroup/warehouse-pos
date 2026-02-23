@@ -11,17 +11,17 @@ import type { PutProductBody } from '@/lib/data/warehouseProducts';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   const { id } = await params;
   const warehouseId = request.nextUrl.searchParams.get('warehouse_id')?.trim() ?? '';
   return handleGetProductById(id, warehouseId);
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   const { id } = await params;
   let body: PutProductBody;
   try {
@@ -36,9 +36,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   return handlePutProductById(request, id, body, warehouseId, auth);
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   const { id } = await params;
   let body: Record<string, unknown> = {};
   try {

@@ -5,9 +5,9 @@ import { requirePosRole } from '@/lib/auth/session';
 export const dynamic = 'force-dynamic';
 
 /** POST /api/inventory/deduct — atomic batch deduction for POS sale. Cashier+ only. */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   const auth = requirePosRole(request);
-  if (auth instanceof NextResponse) return auth;
+  if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const body = await request.json();
     const warehouseId = body.warehouseId as string;

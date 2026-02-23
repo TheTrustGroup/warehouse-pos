@@ -5,9 +5,9 @@ import { listScopesForEmail, setScopesForUser } from '@/lib/data/userScopes';
 export const dynamic = 'force-dynamic';
 
 /** GET /api/user-scopes?email=... — list store/warehouse scope for a user. Admin only. */
-export async function GET(request: NextRequest) {
-  const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const email = request.nextUrl.searchParams.get('email')?.trim()?.toLowerCase();
     if (!email) {
@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
 }
 
 /** PUT /api/user-scopes — set store/warehouse scope for a user. Admin only. Body: { email, scopes: [{ storeId, warehouseId }] } */
-export async function PUT(request: NextRequest) {
-  const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
+export async function PUT(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const body = await request.json();
     const email = body?.email?.trim()?.toLowerCase();

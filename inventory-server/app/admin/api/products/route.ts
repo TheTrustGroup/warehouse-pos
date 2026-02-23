@@ -9,9 +9,9 @@ function getRequestId(request: NextRequest): string {
   return request.headers.get('x-request-id')?.trim() || request.headers.get('x-correlation-id')?.trim() || crypto.randomUUID();
 }
 
-export async function GET(request: NextRequest) {
-  const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const { searchParams } = new URL(request.url);
     const warehouseId = searchParams.get('warehouse_id') ?? undefined;
@@ -39,9 +39,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
-  const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   const requestId = getRequestId(request);
   let body: Record<string, unknown>;
   try {

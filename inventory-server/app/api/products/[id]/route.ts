@@ -24,8 +24,8 @@ export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
 
-export async function GET(req: NextRequest, ctx: RouteCtx) {
-  const auth = requireAuth(req);
+export async function GET(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {
+  const auth = await requireAuth(req);
   if (auth instanceof NextResponse) return withCors(auth, req);
   const { id } = await ctx.params;
   const warehouseId = req.nextUrl.searchParams.get('warehouse_id') ?? '';
@@ -33,8 +33,8 @@ export async function GET(req: NextRequest, ctx: RouteCtx) {
   return withCors(res, req);
 }
 
-export async function PUT(req: NextRequest, ctx: RouteCtx) {
-  const auth = requireAdmin(req);
+export async function PUT(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {
+  const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return withCors(auth, req);
   const { id } = await ctx.params;
   let body: PutProductBody;
@@ -44,7 +44,7 @@ export async function PUT(req: NextRequest, ctx: RouteCtx) {
     return withCors(NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }), req);
   }
   const bodyWarehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
-  const warehouseId = getEffectiveWarehouseId(auth, bodyWarehouseId || undefined, {
+  const warehouseId = await getEffectiveWarehouseId(auth, bodyWarehouseId || undefined, {
     path: req.nextUrl.pathname,
     method: 'PUT',
   });
@@ -55,8 +55,8 @@ export async function PUT(req: NextRequest, ctx: RouteCtx) {
   return withCors(res, req);
 }
 
-export async function DELETE(req: NextRequest, ctx: RouteCtx) {
-  const auth = requireAdmin(req);
+export async function DELETE(req: NextRequest, ctx: RouteCtx): Promise<NextResponse> {
+  const auth = await requireAdmin(req);
   if (auth instanceof NextResponse) return withCors(auth, req);
   const { id } = await ctx.params;
   let body: Record<string, unknown> = {};
@@ -68,7 +68,7 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
   const bodyWarehouseId = String(
     body.warehouseId ?? body.warehouse_id ?? req.nextUrl.searchParams.get('warehouse_id') ?? ''
   ).trim();
-  const warehouseId = getEffectiveWarehouseId(auth, bodyWarehouseId || undefined, {
+  const warehouseId = await getEffectiveWarehouseId(auth, bodyWarehouseId || undefined, {
     path: req.nextUrl.pathname,
     method: 'DELETE',
   });

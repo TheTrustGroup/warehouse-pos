@@ -7,9 +7,9 @@ import { getRejectionByKey, recordRejection } from '@/lib/data/syncRejections';
 export const dynamic = 'force-dynamic';
 
 /** GET /api/transactions — list transactions (auth required). Admin/unrestricted: full. Scoped: only allowed store/warehouse/pos. */
-export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (auth instanceof NextResponse) return auth;
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAuth(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const { searchParams } = new URL(request.url);
     const clientWarehouseId = searchParams.get('warehouse_id') ?? undefined;
@@ -62,15 +62,15 @@ export async function GET(request: NextRequest) {
 }
 
 /** POST /api/transactions — persist sale. Cashier+ only. Idempotent when Idempotency-Key or body.idempotencyKey provided. */
-export async function POST(request: NextRequest) {
-  const auth = requirePosRole(request);
-  if (auth instanceof NextResponse) return auth;
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const auth = await requirePosRole(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   let idempotencyKey: string | null = null;
   let warehouseId: string | null = null;
   try {
     const body = await request.json();
     const bodyWarehouseId = body.warehouseId ?? body.warehouse_id;
-    warehouseId = getEffectiveWarehouseId(auth, bodyWarehouseId, {
+    warehouseId = await getEffectiveWarehouseId(auth, bodyWarehouseId, {
       path: request.nextUrl.pathname,
       method: request.method,
     });

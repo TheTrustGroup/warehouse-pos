@@ -327,7 +327,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         setFormData((prev) => ({ ...prev, images: combined }));
         imagesLengthRef.current = combined.length;
       } finally {
-        objectUrls.forEach((url) => URL.revokeObjectURL(url));
+        // Revoke blob URLs after React has painted (new preview or unchanged); avoids showing a revoked blob
+        if (objectUrls.length > 0) queueMicrotask(() => objectUrls.forEach((url) => URL.revokeObjectURL(url)));
         imageUploadingRef.current = false;
         setImageUploading(false);
       }
@@ -897,7 +898,16 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             <div className="flex flex-wrap gap-4 mb-4">
               {imagePreview.map((img, index) => (
                 <div key={`preview-${index}`} className="relative">
-                  <img src={img} alt={`Preview ${index + 1}`} className="w-24 h-24 object-cover rounded-lg bg-slate-100" loading="eager" />
+                  <img
+                    src={img}
+                    alt={`Preview ${index + 1}`}
+                    className="w-24 h-24 object-cover rounded-lg bg-slate-100"
+                    loading="eager"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
                   <button
                     type="button"
                     onClick={() => removeImage(index)}

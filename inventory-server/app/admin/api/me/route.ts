@@ -10,9 +10,9 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 /** Current user from session. Role is from server session only — never from client. Includes assignedPos for POS UI. */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   const h = corsHeaders(request);
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (auth instanceof NextResponse) {
     Object.entries(h).forEach(([k, v]) => auth.headers.set(k, v));
     return auth;

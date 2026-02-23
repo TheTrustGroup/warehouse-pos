@@ -11,9 +11,9 @@ const BUCKET = 'product-images';
 const MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-export async function POST(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (auth instanceof NextResponse) return auth;
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAuth(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
 
   let file: File | null;
   try {

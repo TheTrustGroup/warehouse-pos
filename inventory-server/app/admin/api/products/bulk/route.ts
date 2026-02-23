@@ -4,9 +4,9 @@ import { requireAdmin } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
-export async function DELETE(request: NextRequest) {
+export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
+  if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const body = await request.json().catch(() => ({}));
     const ids = Array.isArray(body.ids) ? body.ids : [];

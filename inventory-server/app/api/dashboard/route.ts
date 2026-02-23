@@ -9,9 +9,9 @@ import { getDashboardStats } from '@/lib/data/dashboardStats';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (auth instanceof NextResponse) return auth;
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAuth(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
 
   const { searchParams } = new URL(request.url);
   const warehouseId = searchParams.get('warehouse_id') ?? undefined;

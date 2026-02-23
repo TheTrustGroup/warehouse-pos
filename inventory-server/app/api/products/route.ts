@@ -3,6 +3,9 @@
  * Official surface: GET /api/products (list with sizes), POST /api/products (create).
  */
 import { NextRequest, NextResponse } from 'next/server';
+
+/** Allow up to 30s so large product lists (e.g. limit=1000) don't hit Vercel default 10s and cause "connection was lost". */
+export const maxDuration = 30;
 import { getWarehouseProducts, createWarehouseProduct } from '@/lib/data/warehouseProducts';
 import { getScopeForUser } from '@/lib/data/userScopes';
 import { requireAuth, requireAdmin } from '@/lib/auth/session';
@@ -14,9 +17,9 @@ function getRequestId(request: NextRequest): string {
   return request.headers.get('x-request-id')?.trim() || request.headers.get('x-correlation-id')?.trim() || crypto.randomUUID();
 }
 
-export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (auth instanceof NextResponse) return auth;
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAuth(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const { searchParams } = new URL(request.url);
     const warehouseId = searchParams.get('warehouse_id') ?? undefined;
@@ -44,9 +47,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
-  const auth = requireAdmin(request);
-  if (auth instanceof NextResponse) return auth;
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   const requestId = getRequestId(request);
   let body: Record<string, unknown>;
   try {

@@ -5,13 +5,13 @@ import { requireWarehouseOrPosRole, getEffectiveWarehouseId } from '@/lib/auth/s
 export const dynamic = 'force-dynamic';
 
 /** POST /api/orders/deduct — atomic batch deduction for order out-for-delivery. Warehouse or POS role. When session has warehouse_id, it overrides body. */
-export async function POST(request: NextRequest) {
-  const auth = requireWarehouseOrPosRole(request);
-  if (auth instanceof NextResponse) return auth;
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireWarehouseOrPosRole(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const body = await request.json();
     const bodyWarehouseId = body.warehouseId as string;
-    const warehouseId = getEffectiveWarehouseId(auth, bodyWarehouseId, {
+    const warehouseId = await getEffectiveWarehouseId(auth, bodyWarehouseId, {
       path: request.nextUrl.pathname,
       method: request.method,
     });

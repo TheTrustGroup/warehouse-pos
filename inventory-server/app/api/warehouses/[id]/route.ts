@@ -8,9 +8,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
-  const auth = requireAuth(request);
-  if (auth instanceof NextResponse) return auth;
+): Promise<NextResponse> {
+  const auth = await requireAuth(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
   const { id } = await params;
   try {
     const warehouse = await getWarehouseById(id);
