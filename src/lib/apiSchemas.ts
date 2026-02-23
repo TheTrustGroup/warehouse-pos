@@ -25,7 +25,9 @@ export const authUserPayloadSchema = z
     storeId: z.string().optional(),
     device_id: z.string().optional(),
     deviceId: z.string().optional(),
-    assignedPos: z.enum(['main_town', 'store']).optional(),
+    assignedPos: z
+      .union([z.enum(['main_town', 'store']), z.record(z.string(), z.unknown())])
+      .optional(),
   })
   .passthrough();
 
