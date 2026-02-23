@@ -94,21 +94,45 @@ export function clearSessionCookie(response: NextResponse): void {
 export const requireWarehouseOrPosRole = requirePosRole;
 
 /**
- * Validate Bearer JWT via Supabase auth.getUser(jwt) and return session or 401 response.
+ * Validate Bearer or session cookie: try Supabase JWT first, then app session JWT.
+ * Login returns app session JWT (createSessionToken); requireAuth must accept it.
  */
 async function requireAuthAsync(req: NextRequest): Promise<Session | NextResponse> {
-  const token = getBearerToken(req);
+  const token =
+    getBearerToken(req) ?? req.cookies.get(SESSION_COOKIE_NAME)?.value ?? null;
   if (!token) {
     return NextResponse.json({ error: 'Unauthorized', message: 'Missing or invalid Authorization' }, { status: 401 });
   }
   try {
     const supabase = getSupabase();
     const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user?.email) {
-      return NextResponse.json({ error: 'Unauthorized', message: error?.message ?? 'Invalid token' }, { status: 401 });
+    if (!error && user?.email) {
+      const role = resolveRole(user.email, user.user_metadata as Record<string, unknown> | undefined);
+      return { email: user.email, role };
     }
-    const role = resolveRole(user.email, user.user_metadata as Record<string, unknown> | undefined);
-    return { email: user.email, role };
+  } catch {
+    /* fall through to app session JWT */
+  }
+  const secret = process.env.SESSION_SECRET ?? process.env.JWT_SECRET;
+  if (!secret || secret.length < 16) {
+    return NextResponse.json({ error: 'Unauthorized', message: 'Invalid token' }, { status: 401 });
+  }
+  try {
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), {
+      algorithms: ['HS256'],
+      clockTolerance: 60,
+    });
+    const email = (payload.email ?? payload.sub) as string;
+    const role = (payload.role as string) ?? 'cashier';
+    if (typeof email !== 'string' || !email) {
+      return NextResponse.json({ error: 'Unauthorized', message: 'Invalid token' }, { status: 401 });
+    }
+    return {
+      email,
+      role,
+      store_id: typeof payload.store_id === 'string' ? payload.store_id : undefined,
+      device_id: typeof payload.device_id === 'string' ? payload.device_id : undefined,
+    };
   } catch {
     return NextResponse.json({ error: 'Unauthorized', message: 'Invalid token' }, { status: 401 });
   }
