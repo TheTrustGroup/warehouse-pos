@@ -146,13 +146,19 @@ export async function requireAuth(request: NextRequest): Promise<Session | NextR
   return requireAuthAsync(request);
 }
 
+/** Roles that can perform admin-only actions (create/update/delete products, etc.). Case-insensitive. */
+const ADMIN_ROLES = new Set(['admin', 'super admin', 'superadmin', 'super_admin']);
+
 /**
  * Require admin role. Returns Session or NextResponse (401/403).
+ * Treats admin, super admin, superadmin, super_admin as admin (case-insensitive).
  */
 export async function requireAdmin(request: NextRequest): Promise<Session | NextResponse> {
   const auth = await requireAuthAsync(request);
   if (auth instanceof NextResponse) return auth;
-  if (auth.role !== 'admin') {
+  const roleNorm = (auth.role ?? '').trim().toLowerCase().replace(/\s+/g, '_');
+  const isAdmin = roleNorm === 'admin' || roleNorm === 'superadmin' || roleNorm === 'super_admin';
+  if (!isAdmin) {
     return NextResponse.json({ error: 'Forbidden', message: 'Admin required' }, { status: 403 });
   }
   return auth;
