@@ -100,12 +100,19 @@ function applyFilters(products: Product[], search: string, category: FilterKey, 
   return r;
 }
 
+/** Ensure quantityBySize is always an array (API/view may return scalar). */
+function normalizeQuantityBySize(p: Record<string, unknown>): Product {
+  const qbs = p['quantityBySize'] ?? p['quantity_by_size'];
+  const arr = Array.isArray(qbs) ? qbs : [];
+  return { ...p, quantityBySize: arr } as Product;
+}
+
 function unwrapProduct(raw: unknown): Product | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const inner = r.data ?? r.product ?? r;
   if (!inner || typeof inner !== 'object' || !('id' in inner)) return null;
-  return inner as Product;
+  return normalizeQuantityBySize(inner as Record<string, unknown>);
 }
 
 function unwrapProductList(raw: unknown): Product[] {
@@ -511,7 +518,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
             id: payload.id,
             warehouseId,
             sizeKind:       payload.sizeKind,
-            quantityBySize: payload.quantityBySize,
+            quantityBySize: Array.isArray(payload.quantityBySize) ? payload.quantityBySize : [],
             quantity:       payload.quantity,
           }),
         });
@@ -544,7 +551,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
             ...payload,
             warehouseId,
             sizeKind:       payload.sizeKind,
-            quantityBySize: payload.quantityBySize,
+            quantityBySize: Array.isArray(payload.quantityBySize) ? payload.quantityBySize : [],
             quantity:       payload.quantity,
           }),
         });

@@ -113,10 +113,12 @@ export function buildInitialForm(product?: Product | null): FormState {
       sizes: {
         sizeKind: product.sizeKind ?? 'na',
         quantity: product.quantity ?? 0,
-        quantityBySize: (product.quantityBySize ?? []).map(r => ({
-          sizeCode: r.sizeCode,
-          quantity: r.quantity,
-        })),
+        quantityBySize: Array.isArray(product.quantityBySize)
+          ? product.quantityBySize.map(r => ({
+              sizeCode: r?.sizeCode ?? '',
+              quantity: Number(r?.quantity ?? 0),
+            }))
+          : [],
       },
       location: {
         aisle: product.location?.aisle ?? '',

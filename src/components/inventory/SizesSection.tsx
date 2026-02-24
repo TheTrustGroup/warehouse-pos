@@ -44,10 +44,11 @@ function totalQty(rows: SizeRow[]): number {
 
 function getValidationError(value: SizesSectionValue): string | null {
   if (value.sizeKind !== 'sized') return null;
-  const named = value.quantityBySize.filter(r => r.sizeCode.trim() !== '');
+  const rows = Array.isArray(value.quantityBySize) ? value.quantityBySize : [];
+  const named = rows.filter(r => String(r?.sizeCode ?? '').trim() !== '');
   if (named.length === 0) return 'Add at least one size to save.';
-  const missingCode = value.quantityBySize.filter(
-    r => r.sizeCode.trim() === '' && r.quantity > 0
+  const missingCode = rows.filter(
+    r => String(r?.sizeCode ?? '').trim() === '' && Number(r?.quantity ?? 0) > 0
   );
   if (missingCode.length > 0) return 'Enter a size code for every row with a quantity.';
   return null;
