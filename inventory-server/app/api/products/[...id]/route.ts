@@ -1,29 +1,11 @@
 // ============================================================
-// route.ts → inventory-server/app/api/products/[id]/route.ts
-//
-// GET, PUT, PATCH, DELETE /api/products/[id]
-//
-// CRITICAL: This file must live at EXACTLY:
-//   app/api/products/[id]/route.ts
-// The folder must be named [id] with square brackets.
-// The file must be named route.ts (not index.ts, not handler.ts).
-//
-// HOW TO VERIFY IT'S DEPLOYED:
-//   curl https://your-api.vercel.app/api/products/test-id
-//   Should return 401 Unauthorized (not 405 Method Not Allowed)
-//   If you get 404, the folder structure is wrong.
-//   If you get 405, the file exists but PUT isn't exported.
-//
-// NEXT.JS 14 vs 15:
-//   Next.js 14: ctx.params = { id: string }        ← synchronous
-//   Next.js 15: ctx.params = Promise<{ id: string }> ← must await
-//   This file handles BOTH automatically.
+// Required catch-all: /api/products/[:id] — same behavior as [id].
+// Uses [...id] so Vercel reliably routes /api/products/:id (avoids 404).
+// GET, PUT, PATCH, DELETE /api/products/:id
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-
-// ── CORS ──────────────────────────────────────────────────────────────────
 
 function corsHeaders(req: NextRequest): Record<string, string> {
   const origin  = req.headers.get('origin') ?? '';
@@ -47,8 +29,6 @@ export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
 
-// ── DB ────────────────────────────────────────────────────────────────────
-
 function getDb() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
@@ -58,33 +38,27 @@ function getDb() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────
-
 function isAuthorized(req: NextRequest): boolean {
   const auth = req.headers.get('authorization') ?? '';
   return auth.startsWith('Bearer ') && auth.length > 10;
 }
 
-// ── Params: handles both Next.js 14 (sync) and 15 (async Promise) ────────
-
-type RouteCtx = { params: { id: string } | Promise<{ id: string }> };
+type RouteCtx = { params: { id: string[] } | Promise<{ id: string[] }> };
 
 async function getId(ctx: RouteCtx): Promise<string> {
-  const p = await Promise.resolve(ctx.params); // works for both sync and Promise
-  return p.id ?? '';
+  const p = await Promise.resolve(ctx.params);
+  const arr = p.id;
+  if (!Array.isArray(arr) || arr.length !== 1) return '';
+  return arr[0]?.trim() ?? '';
 }
 
 export const dynamic = 'force-dynamic';
-
-// ── Shared types ──────────────────────────────────────────────────────────
 
 interface SizeEntry {
   sizeCode:  string;
   sizeLabel: string;
   quantity:  number;
 }
-
-// ── GET /api/products/[id] ────────────────────────────────────────────────
 
 export async function GET(req: NextRequest, ctx: RouteCtx) {
   const h   = corsHeaders(req);
@@ -109,9 +83,6 @@ export async function GET(req: NextRequest, ctx: RouteCtx) {
     return NextResponse.json({ error: msg }, { status: 500, headers: h });
   }
 }
-
-// ── PUT /api/products/[id] ────────────────────────────────────────────────
-// PATCH is aliased to PUT — both do a full product update.
 
 export async function PUT(req: NextRequest, ctx: RouteCtx) {
   return handleUpdate(req, ctx);
@@ -145,7 +116,6 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     const db  = getDb();
     const now = new Date().toISOString();
 
-    // ── 1. Load existing product ─────────────────────────────────────────
     const { data: existing, error: fetchErr } = await db
       .from('warehouse_products')
       .select('id, version, size_kind')
@@ -160,13 +130,11 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
       );
     }
 
-    // ── 2. Resolve size kind and sizes ───────────────────────────────────
     const existingRow = existing as { version?: number; size_kind?: string };
     const currentVersion = Number(existingRow.version ?? 0);
     const sizeKind       = normSK(body, existingRow.size_kind ?? '');
     const rawSizes       = parseRawSizes(body);
 
-    // Legacy: ONE_SIZE sentinel in the sizes array means it's really one_size
     const singleOneSize =
       sizeKind === 'sized' &&
       rawSizes.length === 1 &&
@@ -175,7 +143,6 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     const effectiveSK = singleOneSize ? 'one_size' : sizeKind;
     const validSizes  = effectiveSK === 'sized' ? filterSizes(rawSizes) : [];
 
-    // sizesToWrite: null = don't touch sizes; [] = clear; [...] = full replace
     let sizesToWrite: Array<{ sizeCode: string; quantity: number }> | null;
     let totalQty: number;
 
@@ -187,7 +154,6 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
         sizesToWrite = validSizes;
         totalQty     = validSizes.reduce((s, r) => s + r.quantity, 0);
       } else {
-        // No valid sizes sent — preserve existing sizes (safe no-op)
         sizesToWrite = null;
         const { data: cur } = await db
           .from('warehouse_inventory_by_size')
@@ -201,10 +167,8 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
       totalQty     = Number(body.quantity ?? 0);
     }
 
-    // ── 3. Build the product row to write ────────────────────────────────
     const productRow = buildRow(body, id, wid, effectiveSK, now, currentVersion + 1);
 
-    // ── 4. Try atomic RPC — fall back to 3-query manual if RPC missing ───
     const { error: rpcErr } = await db.rpc('update_warehouse_product_atomic', {
       p_id:               id,
       p_warehouse_id:     wid,
@@ -216,10 +180,8 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
 
     if (rpcErr) {
       if (rpcErr.code === '42883' || rpcErr.message?.includes('does not exist')) {
-        // RPC not deployed yet — manual fallback (equally correct)
         await manualUpdate(db, id, wid, productRow, totalQty, sizesToWrite, now);
       } else if (rpcErr.message?.includes('someone else') || rpcErr.code === 'P0001') {
-        // Optimistic concurrency conflict
         return NextResponse.json(
           { error: 'This product was modified by someone else. Please refresh and try again.' },
           { status: 409, headers: h }
@@ -230,12 +192,10 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
       }
     }
 
-    // ── 5. Return the updated product with fresh data ────────────────────
     const updated = await fetchOne(db, id, wid);
     if (!updated)
       return NextResponse.json({ error: 'Product not found after update' }, { status: 404, headers: h });
 
-    // Safety: if DB replication lag causes empty sizes, patch from what we wrote
     if (sizesToWrite && sizesToWrite.length > 0 && updated.quantityBySize.length === 0) {
       updated.quantityBySize = sizesToWrite.map(r => ({
         sizeCode: r.sizeCode, sizeLabel: r.sizeCode, quantity: r.quantity,
@@ -252,8 +212,6 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
   }
 }
 
-// ── DELETE /api/products/[id] ─────────────────────────────────────────────
-
 export async function DELETE(req: NextRequest, ctx: RouteCtx) {
   const h  = corsHeaders(req);
   const id = await getId(ctx);
@@ -263,7 +221,6 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
   if (!id)
     return NextResponse.json({ error: 'Missing product id' }, { status: 400, headers: h });
 
-  // warehouseId can be in body OR query string
   let wid = req.nextUrl.searchParams.get('warehouse_id') ?? '';
   if (!wid) {
     try {
@@ -277,7 +234,6 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
 
   try {
     const db = getDb();
-    // Delete child rows first (FK constraint)
     await db.from('warehouse_inventory_by_size').delete()
       .eq('warehouse_id', wid).eq('product_id', id);
     await db.from('warehouse_inventory').delete()
@@ -297,8 +253,6 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
     return NextResponse.json({ error: msg }, { status: 500, headers: h });
   }
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────
 
 type DB = ReturnType<typeof getDb>;
 

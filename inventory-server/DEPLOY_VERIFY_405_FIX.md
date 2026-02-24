@@ -1,4 +1,6 @@
-# Verify /api/products/[id] after 405 fix — do in this order
+# Verify /api/products/:id after 405 fix — do in this order
+
+**Route change:** Product-by-id is now served by **catch-all** `app/api/products/[...id]/route.ts` (same URL `/api/products/:id`) so Vercel reliably invokes it. The previous `[id]` segment was returning Next.js 404 on Vercel.
 
 ## Step 1 — Trigger a new deployment
 
@@ -20,7 +22,7 @@ git push
 3. Check **Source**: commit should be `5389124` or later (e.g. `376152e` or `5389124`).
 4. Open the **Build** step (click the deployment, then the build log).
 5. In the build output, find the **Route (app)** table. You must see:
-   - `ƒ /api/products/[id]`
+   - `ƒ /api/products/[...id]`
    If it is missing, the route was not built.
 6. **If the route is missing or deployment is old:**  
    **Redeploy with cache clear:**  
