@@ -116,14 +116,28 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     const db  = getDb();
     const now = new Date().toISOString();
 
-    const { data: existing, error: fetchErr } = await db
+    // Look up product: try (id, warehouse_id) first for multi-warehouse schema; then by id only (single row per product).
+    let existing: { id?: string; version?: number; size_kind?: string } | null = null;
+    const { data: byWarehouse, error: fetchErr } = await db
       .from('warehouse_products')
       .select('id, version, size_kind')
       .eq('id', id)
       .eq('warehouse_id', wid)
-      .single();
+      .maybeSingle();
 
-    if (fetchErr || !existing) {
+    if (byWarehouse) {
+      existing = byWarehouse as { id?: string; version?: number; size_kind?: string };
+    }
+    if (!existing && (fetchErr?.code === 'PGRST116' || !byWarehouse)) {
+      const { data: byId } = await db
+        .from('warehouse_products')
+        .select('id, version, size_kind')
+        .eq('id', id)
+        .maybeSingle();
+      if (byId) existing = byId as { id?: string; version?: number; size_kind?: string };
+    }
+
+    if (!existing) {
       return NextResponse.json(
         { error: `Product ${id} not found in warehouse ${wid}` },
         { status: 404, headers: h }
@@ -303,11 +317,12 @@ async function manualUpdate(
   sizeRows: Array<{ sizeCode: string; quantity: number }> | null,
   now: string
 ) {
+  // Update by id only so it works when warehouse_products has no warehouse_id (one row per product).
+  const { warehouse_id: _wid, ...rowWithoutWarehouse } = row as Record<string, unknown> & { warehouse_id?: string };
   const { error: upErr } = await db
     .from('warehouse_products')
-    .update(row)
-    .eq('id', id)
-    .eq('warehouse_id', wid);
+    .update(rowWithoutWarehouse)
+    .eq('id', id);
 
   if (upErr) throw new Error(`Failed to update product: ${upErr.message}`);
 
