@@ -1,6 +1,10 @@
 /**
- * Products API — list (with sizes) and create.
- * Official surface: GET /api/products (list with sizes), POST /api/products (create).
+ * Products API — list, create, get-by-id, update, delete.
+ * List: GET /api/products (no id).
+ * Create: POST /api/products.
+ * Get one: GET /api/products?id=xxx&warehouse_id=yyy (Vercel-safe; path /api/products/:id not routed).
+ * Update: PUT or PATCH /api/products with body { id, warehouseId, ... }.
+ * Delete: DELETE /api/products with body or query { id, warehouseId } (or warehouse_id).
  */
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -8,8 +12,14 @@ import { NextRequest, NextResponse } from 'next/server';
 export const maxDuration = 30;
 import { getWarehouseProducts, createWarehouseProduct } from '@/lib/data/warehouseProducts';
 import { getScopeForUser } from '@/lib/data/userScopes';
-import { requireAuth, requireAdmin } from '@/lib/auth/session';
+import { requireAuth, requireAdmin, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { logDurability } from '@/lib/data/durabilityLogger';
+import {
+  handleGetProductById,
+  handlePutProductById,
+  handleDeleteProductById,
+} from '@/lib/api/productByIdHandlers';
+import type { PutProductBody } from '@/lib/data/warehouseProducts';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,8 +30,13 @@ function getRequestId(request: NextRequest): string {
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof NextResponse) return auth as NextResponse;
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id')?.trim();
+  if (id) {
+    const warehouseId = searchParams.get('warehouse_id') ?? '';
+    return handleGetProductById(id, warehouseId);
+  }
   try {
-    const { searchParams } = new URL(request.url);
     const warehouseId = searchParams.get('warehouse_id') ?? undefined;
     const limit = searchParams.get('limit');
     const offset = searchParams.get('offset');
@@ -95,4 +110,48 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 400 }
     );
   }
+}
+
+export async function PUT(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
+  let body: PutProductBody & { id?: string };
+  try {
+    body = (await request.json()) as PutProductBody & { id?: string };
+  } catch {
+    return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
+  }
+  const id = typeof body.id === 'string' ? body.id.trim() : '';
+  if (!id) return NextResponse.json({ error: 'id required in body' }, { status: 400 });
+  const bodyWarehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
+  const warehouseId = await getEffectiveWarehouseId(auth, bodyWarehouseId || undefined, {
+    path: request.nextUrl.pathname,
+    method: 'PUT',
+  });
+  if (!warehouseId) return NextResponse.json({ error: 'warehouseId required' }, { status: 400 });
+  return handlePutProductById(request, id, body, warehouseId, auth);
+}
+
+export async function PATCH(request: NextRequest): Promise<NextResponse> {
+  return PUT(request);
+}
+
+export async function DELETE(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth as NextResponse;
+  const { searchParams } = new URL(request.url);
+  let id = searchParams.get('id')?.trim() ?? '';
+  let warehouseId: string | null = searchParams.get('warehouse_id')?.trim() ?? null;
+  if (!id || !warehouseId) {
+    try {
+      const body = (await request.json()) as { id?: string; warehouseId?: string; warehouse_id?: string };
+      id = id || String(body?.id ?? '').trim();
+      warehouseId = warehouseId ?? (String(body?.warehouseId ?? body?.warehouse_id ?? '').trim() || null);
+    } catch {
+      /* body optional */
+    }
+  }
+  if (!id) return NextResponse.json({ error: 'id required (query or body)' }, { status: 400 });
+  if (!warehouseId) return NextResponse.json({ error: 'warehouseId required (query or body)' }, { status: 400 });
+  return handleDeleteProductById(request, id, warehouseId, auth);
 }

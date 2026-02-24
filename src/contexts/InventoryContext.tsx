@@ -630,12 +630,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   }, [products, isLoading, effectiveWarehouseId]);
 
-  /** Single-product path for fast verify (no full list fetch). */
+  /** Single-product path for GET/DELETE: query params (Vercel-safe; path /api/products/:id not routed). */
   const productByIdPath = (base: string, productId: string) => {
     const params = new URLSearchParams();
+    params.set('id', productId);
     params.set('warehouse_id', effectiveWarehouseId);
-    return `${base}/${productId}?${params.toString()}`;
+    return `${base}?${params.toString()}`;
   };
+
+  /** Path for PUT/PATCH product (no id in path; send id in body). */
+  const productUpdatePath = (base: string) => base;
 
   /** Minimal payload for API POST/PUT: only fields backend persists. Reduces payload size and avoids sending UI-only data. */
   /** When omitImagesForSync is true, images are sent as [] to avoid 413 (payload too large) from base64 images exceeding Vercel's body limit. */
@@ -914,9 +918,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       const putProduct = async (): Promise<Record<string, unknown> | null> => {
         try {
-          return (await apiPut<Record<string, unknown>>(API_BASE_URL, productByIdPath('/admin/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+          return (await apiPut<Record<string, unknown>>(API_BASE_URL, productUpdatePath('/admin/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
         } catch {
-          return (await apiPut<Record<string, unknown>>(API_BASE_URL, productByIdPath('/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+          return (await apiPut<Record<string, unknown>>(API_BASE_URL, productUpdatePath('/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
         }
       };
       let fromApi: Record<string, unknown> | null = null;

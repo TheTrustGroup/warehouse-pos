@@ -476,9 +476,8 @@ export default function InventoryPage(_props: InventoryPageProps) {
     setProducts(prev => prev.filter(p => p.id !== product.id));
 
     try {
-      await apiFetch(`/api/products/${encodeURIComponent(product.id)}`, {
+      await apiFetch(`/api/products?id=${encodeURIComponent(product.id)}&warehouse_id=${encodeURIComponent(warehouseId)}`, {
         method: 'DELETE',
-        body:   JSON.stringify({ warehouseId }),
       });
       pendingDeletesRef.current.delete(product.id);
       showToast(`"${product.name}" deleted`, 'success');
@@ -505,10 +504,11 @@ export default function InventoryPage(_props: InventoryPageProps) {
       setProducts(prev => prev.map(p => p.id === payload.id ? optimistic : p));
 
       try {
-        const raw = await apiFetch<unknown>(`/api/products/${payload.id}`, {
+        const raw = await apiFetch<unknown>(`/api/products`, {
           method: 'PUT',
           body:   JSON.stringify({
             ...payload,
+            id: payload.id,
             warehouseId,
             sizeKind:       payload.sizeKind,
             quantityBySize: payload.quantityBySize,
