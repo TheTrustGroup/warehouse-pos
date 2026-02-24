@@ -328,8 +328,15 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         setFormData((prev) => ({ ...prev, images: combined }));
         imagesLengthRef.current = combined.length;
       } finally {
-        // Revoke blob URLs after React has painted (new preview or unchanged); avoids showing a revoked blob
-        if (objectUrls.length > 0) queueMicrotask(() => objectUrls.forEach((url) => URL.revokeObjectURL(url)));
+        // Revoke blob URLs only after the next paint. queueMicrotask runs before commit/paint;
+        // on mobile the DOM can still show blob URLs when we revoke, so the image breaks. Double rAF = after paint.
+        if (objectUrls.length > 0) {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              objectUrls.forEach((url) => URL.revokeObjectURL(url));
+            });
+          });
+        }
         imageUploadingRef.current = false;
         setImageUploading(false);
       }
