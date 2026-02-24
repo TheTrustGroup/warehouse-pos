@@ -23,6 +23,30 @@ import type { PutProductBody } from '@/lib/data/warehouseProducts';
 
 export const dynamic = 'force-dynamic';
 
+const CORS_ORIGINS = [
+  'https://warehouse.extremedeptkidz.com',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:4173',
+];
+
+function corsHeaders(request: NextRequest): Record<string, string> {
+  const origin = request.headers.get('origin') ?? '';
+  const allowedOrigin = CORS_ORIGINS.includes(origin) ? origin : CORS_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-request-id, Idempotency-Key',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+/** CORS preflight for cross-origin PUT/PATCH/DELETE from the warehouse frontend. */
+export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
+}
+
 function getRequestId(request: NextRequest): string {
   return request.headers.get('x-request-id')?.trim() || request.headers.get('x-correlation-id')?.trim() || crypto.randomUUID();
 }
@@ -129,7 +153,10 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     method: 'PUT',
   });
   if (!warehouseId) return NextResponse.json({ error: 'warehouseId required' }, { status: 400 });
-  return handlePutProductById(request, id, body, warehouseId, auth);
+  const res = await handlePutProductById(request, id, body, warehouseId, auth);
+  res.headers.set('Access-Control-Allow-Origin', corsHeaders(request)['Access-Control-Allow-Origin']);
+  res.headers.set('Access-Control-Allow-Credentials', 'true');
+  return res;
 }
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
