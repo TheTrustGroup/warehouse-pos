@@ -19,12 +19,18 @@ export interface Session {
 }
 
 const ADMIN_EMAILS_KEY = 'ADMIN_EMAILS';
+const SUPER_ADMIN_EMAILS_KEY = 'SUPER_ADMIN_EMAILS';
+
+/** Emails that always get admin role at login (JWT). Set ADMIN_EMAILS or SUPER_ADMIN_EMAILS in env to override. */
+const FALLBACK_ADMIN_EMAILS = new Set(['info@extremedeptkidz.com']);
 
 function getAdminEmails(): Set<string> {
-  const raw = process.env[ADMIN_EMAILS_KEY]?.trim();
-  if (!raw) return new Set<string>();
+  const fromAdmin = process.env[ADMIN_EMAILS_KEY]?.trim();
+  const fromSuper = process.env[SUPER_ADMIN_EMAILS_KEY]?.trim();
+  const combined = [fromAdmin, fromSuper].filter(Boolean).join(',');
+  if (!combined) return new Set(FALLBACK_ADMIN_EMAILS);
   return new Set(
-    raw
+    combined
       .split(',')
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean)
@@ -40,7 +46,11 @@ function resolveRole(email: string, userMetadata?: Record<string, unknown>): str
   const adminEmails = getAdminEmails();
   if (adminEmails.has(email.toLowerCase())) return 'admin';
   const metaRole = userMetadata?.role as string | undefined;
-  if (typeof metaRole === 'string' && metaRole.trim()) return metaRole.trim().toLowerCase();
+  if (typeof metaRole === 'string' && metaRole.trim()) {
+    const r = metaRole.trim().toLowerCase();
+    if (r === 'admin' || r === 'super_admin' || r === 'super admin' || r === 'superadmin') return 'admin';
+    return r;
+  }
   return 'cashier';
 }
 
@@ -146,19 +156,28 @@ export async function requireAuth(request: NextRequest): Promise<Session | NextR
   return requireAuthAsync(request);
 }
 
-/** Roles that can perform admin-only actions (create/update/delete products, etc.). Case-insensitive. */
-const ADMIN_ROLES = new Set(['admin', 'super admin', 'superadmin', 'super_admin']);
+/** Normalize role for comparison: lowercase, spaces and hyphens → underscore. */
+function normalizeRole(role: string): string {
+  return (role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+/** Roles that can perform admin-only actions. Any variant of admin/super_admin (case-insensitive, spaces/hyphens normalized). */
+function isAdminRole(roleNorm: string): boolean {
+  if (roleNorm === 'admin' || roleNorm === 'administrator') return true;
+  if (roleNorm === 'superadmin' || roleNorm === 'super_admin') return true;
+  if (roleNorm.startsWith('super') && roleNorm.includes('admin')) return true;
+  return false;
+}
 
 /**
  * Require admin role. Returns Session or NextResponse (401/403).
- * Treats admin, super admin, superadmin, super_admin as admin (case-insensitive).
+ * Treats admin, super admin, superadmin, super_admin, administrator (and variants) as admin.
  */
 export async function requireAdmin(request: NextRequest): Promise<Session | NextResponse> {
   const auth = await requireAuthAsync(request);
   if (auth instanceof NextResponse) return auth;
-  const roleNorm = (auth.role ?? '').trim().toLowerCase().replace(/\s+/g, '_');
-  const isAdmin = roleNorm === 'admin' || roleNorm === 'superadmin' || roleNorm === 'super_admin';
-  if (!isAdmin) {
+  const roleNorm = normalizeRole(auth.role ?? '');
+  if (!isAdminRole(roleNorm)) {
     return NextResponse.json({ error: 'Forbidden', message: 'Admin required' }, { status: 403 });
   }
   return auth;
