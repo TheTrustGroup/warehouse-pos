@@ -287,7 +287,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             const form = new FormData();
             form.append('file', file, file.name);
             const headers = getApiHeaders() as Record<string, string>;
-            const { 'Content-Type': _ct, ...rest } = headers;
+            const { 'Content-Type': _omitCt, ...rest } = headers;
+            void _omitCt;
             const res = await fetch(`${API_BASE_URL}/api/upload/product-image`, {
               method: 'POST',
               headers: rest,

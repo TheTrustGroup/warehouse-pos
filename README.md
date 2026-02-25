@@ -1,126 +1,60 @@
-# 🎨 Extreme Dept Kidz - Premium Warehouse & POS System
+# Warehouse POS — Inventory & Smart POS
 
-A world-class, premium Figma-inspired warehouse inventory and point-of-sale system with glass morphism design.
+Frontend (Vite + React) and inventory API (Next.js on Vercel) for warehouse inventory and POS.
 
-## ✨ Features
+## Run locally
 
-- **Premium Glass Morphism UI** - Beautiful frosted glass effects throughout
-- **Figma-Inspired Design** - Professional, modern interface
-- **Perfect Alignment** - Pixel-perfect spacing and typography
-- **Smooth Animations** - Butter-smooth transitions on all interactions
-- **Responsive Design** - Works beautifully on all screen sizes
-- **Inventory Management** - Complete product management system
-- **Point of Sale** - Full-featured POS with multiple payment methods
-- **Reports & Analytics** - Comprehensive business insights
-- **User Management** - Complete user and settings management
+### Frontend (warehouse app + POS)
 
-## 🚀 Quick Start
-
-### Development
 ```bash
+# From warehouse-pos root
 npm install
 npm run dev
 ```
 
-### Build
+- App: **http://localhost:5173** (or the port Vite prints).
+- Env: copy `.env.example` to `.env` and set `VITE_API_BASE_URL` (e.g. `http://localhost:3001`). Optional: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` for product image storage.
+
+### Inventory API (Next.js)
+
 ```bash
-npm run build
+cd inventory-server
+npm install
+npm run dev
 ```
 
-### Preview Production Build
-```bash
-npm run preview
-```
+- API: **http://localhost:3001**.
+- Env: copy `inventory-server/.env.example` to `.env.local`; set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_ANON_KEY`).
 
-### Configuration
+### Full stack
 
-Set `VITE_API_BASE_URL` for the backend API (required in production). See [docs/ENVIRONMENT.md](./docs/ENVIRONMENT.md) for all env vars and inventory/warehouse behaviour. For product image upload (Supabase Storage + fallback), see [docs/IMAGES.md](./docs/IMAGES.md).
+1. Start **inventory-server** (`cd inventory-server && npm run dev`).
+2. Set frontend `.env`: `VITE_API_BASE_URL=http://localhost:3001`.
+3. Start frontend: `npm run dev` from `warehouse-pos`.
+4. Open **http://localhost:5173**.
 
-## 🎨 Design System
+## POS and data flow
 
-### Glass Morphism
-All cards use the `glass-card` class for premium glass morphism effects:
-```tsx
-<div className="glass-card">
-  {/* Your content */}
-</div>
-```
+- **POS route:** `/pos` → `POSPage` → **ProductGrid** (with **POSProductCard** per product). Product search flow can use **ProductSearch** (same data).
+- **Data:** Both consume `useInventory().products`, which is **POSProduct**-compatible (see `POSProduct` in `src/components/pos/SizePickerSheet.tsx`). Images come from the list API (`images[]`) or client merge (`productImagesStore`); offline path uses `productsWithLocalImages` so POS still shows images from cache.
 
-### Premium Buttons
-```tsx
-<button className="btn-primary">Primary Action</button>
-<button className="btn-secondary">Secondary Action</button>
-```
+## Scripts (frontend)
 
-### Input Fields
-```tsx
-<input className="input-field" placeholder="Enter value..." />
-```
+| Command           | Description                    |
+|-------------------|--------------------------------|
+| `npm run dev`     | Start Vite dev server          |
+| `npm run build`   | Type-check + production build  |
+| `npm run test`    | Run Vitest unit tests          |
+| `npm run test:e2e`| Run Playwright E2E (smoke)     |
+| `npm run lint`    | Run ESLint                     |
 
-### Status Badges
-```tsx
-<span className="badge badge-success">In Stock</span>
-<span className="badge badge-warning">Low Stock</span>
-<span className="badge badge-error">Out of Stock</span>
-```
+## Deploy checklist (inventory-server)
 
-## 📦 Deployment
+1. **Env:** Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (and optional `SESSION_SECRET` / `JWT_SECRET` for auth) in Vercel (or host).
+2. **DB:** Run migrations (e.g. `supabase/migrations/20250222130000_master_sql_v2.sql`) so `warehouse_products.images` and product-images bucket exist.
+3. **Health:** After deploy, `GET /api/health` should return `200` and `"status":"ok"` (and `"db":"ok"` when Supabase is reachable).
+4. **Smoke:** Open frontend → log in → open Inventory or POS → confirm product list loads and at least one card shows an image or placeholder.
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions.
+## Deploy / 405 fix runbooks
 
-### Quick Deploy Options:
-
-**Vercel:**
-```bash
-npm i -g vercel
-vercel
-```
-
-**Netlify:**
-```bash
-npm i -g netlify-cli
-netlify deploy --prod --dir=dist
-```
-
-## 🛠️ Tech Stack
-
-- **React 18** - UI Framework
-- **TypeScript** - Type Safety
-- **Vite** - Build Tool
-- **Tailwind CSS** - Styling
-- **React Router** - Navigation
-- **Recharts** - Data Visualization
-- **Lucide React** - Icons
-
-## 📝 Commit Changes
-
-Run the commit script:
-```bash
-./commit.sh
-```
-
-Or manually:
-```bash
-git add .
-git commit -m "Your commit message"
-```
-
-## 🎯 Project Structure
-
-```
-src/
-├── components/     # Reusable UI components
-├── pages/          # Page components
-├── contexts/       # React contexts
-├── services/       # Business logic
-├── types/          # TypeScript types
-└── lib/            # Utility functions
-```
-
-## 📄 License
-
-Private - All rights reserved
-
----
-
-**Status**: ✅ Production Ready | 🎨 Premium UI | 🚀 Ready to Deploy
+Archived runbooks for CORS and `/api/products` deployment are in **inventory-server/docs/archive/** (e.g. `DEPLOY_AND_VERIFY_405.md`, `DEPLOY_VERIFY_405_FIX.md`).

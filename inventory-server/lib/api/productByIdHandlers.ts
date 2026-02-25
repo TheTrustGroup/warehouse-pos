@@ -1,130 +1,43 @@
-/**
- * Shared handlers for GET/PUT/DELETE product by id.
- * Used by app/api/products/[id] and app/admin/api/products/[id].
- * Single implementation; routes differ only by auth (requireAuth vs requireAdmin) and CORS.
- *
- * warehouse_id contract:
- * - GET: query param warehouse_id required.
- * - PUT/DELETE: body warehouseId or warehouse_id (or query for DELETE); session can override via getEffectiveWarehouseId on public API.
- * - All product-by-id operations require an effective warehouse.
- */
-
 import { NextRequest, NextResponse } from 'next/server';
+import { getProductById } from '@/lib/data/warehouseProducts';
 import type { Session } from '@/lib/auth/session';
-import {
-  getWarehouseProductById,
-  updateWarehouseProduct,
-  deleteWarehouseProduct,
-  ProductUpdateError,
-  type PutProductBody,
-} from '@/lib/data/warehouseProducts';
-import { logDurability } from '@/lib/data/durabilityLogger';
+import type { PutProductBody } from '@/lib/data/warehouseProducts';
 
-function getRequestId(req: NextRequest): string {
-  return req.headers.get('x-request-id')?.trim() || req.headers.get('x-correlation-id')?.trim() || crypto.randomUUID();
-}
-
-/** GET: warehouseId required (query). Returns 400 if missing, 404 if not found. */
+/** GET one product by query id + warehouse_id. Returns 200 with product (includes images) or 404. */
 export async function handleGetProductById(
-  id: string,
+  productId: string,
   warehouseId: string
 ): Promise<NextResponse> {
-  const wid = warehouseId?.trim();
-  if (!wid) {
-    return NextResponse.json({ error: 'warehouse_id required' }, { status: 400 });
+  const product = await getProductById(warehouseId, productId);
+  if (!product) {
+    return NextResponse.json({ error: 'Product not found' }, { status: 404 });
   }
-  try {
-    const product = await getWarehouseProductById(id, wid);
-    if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(product);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json(product);
 }
 
-/** PUT: body must include warehouseId (or warehouse_id). Uses session for effective warehouse when applicable. */
+/** PUT one product. Stub: use PATCH /api/products/:id for updates. */
 export async function handlePutProductById(
-  req: NextRequest,
-  id: string,
-  body: PutProductBody,
-  warehouseId: string,
-  auth: Session
+  _request: NextRequest,
+  _id: string,
+  _body: PutProductBody,
+  _warehouseId: string,
+  _auth: Session
 ): Promise<NextResponse> {
-  const requestId = getRequestId(req);
-  const effectiveBody: PutProductBody = { ...body, warehouseId, warehouse_id: warehouseId };
-  try {
-    const updated = await updateWarehouseProduct(id, effectiveBody);
-    logDurability({
-      status: 'success',
-      entity_type: 'product',
-      entity_id: id,
-      warehouse_id: warehouseId,
-      request_id: requestId,
-      user_role: auth.role,
-    });
-    return NextResponse.json(updated);
-  } catch (e) {
-    if (e instanceof ProductUpdateError) {
-      logDurability({
-        status: 'failed',
-        entity_type: 'product',
-        entity_id: id,
-        warehouse_id: warehouseId,
-        request_id: requestId,
-        user_role: auth.role,
-        message: e.message,
-      });
-      return NextResponse.json({ error: e.message }, { status: e.status });
-    }
-    const message = e instanceof Error ? e.message : 'Unknown error';
-    logDurability({
-      status: 'failed',
-      entity_type: 'product',
-      entity_id: id,
-      warehouse_id: warehouseId,
-      request_id: requestId,
-      user_role: auth.role,
-      message,
-    });
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json(
+    { error: 'Use PATCH /api/products/:id with request body for updates' },
+    { status: 501 }
+  );
 }
 
-/** DELETE: warehouseId required (body or query). */
+/** DELETE one product. Stub: use DELETE /api/products/:id. */
 export async function handleDeleteProductById(
-  req: NextRequest,
-  id: string,
-  warehouseId: string,
-  auth: Session
+  _request: NextRequest,
+  _id: string,
+  _warehouseId: string,
+  _auth: Session
 ): Promise<NextResponse> {
-  const requestId = getRequestId(req);
-  if (!warehouseId?.trim()) {
-    return NextResponse.json({ error: 'warehouseId required' }, { status: 400 });
-  }
-  const wid = warehouseId.trim();
-  try {
-    await deleteWarehouseProduct(id, wid);
-    logDurability({
-      status: 'success',
-      entity_type: 'product',
-      entity_id: id,
-      warehouse_id: wid,
-      request_id: requestId,
-      user_role: auth.role,
-    });
-    return NextResponse.json({ success: true });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    logDurability({
-      status: 'failed',
-      entity_type: 'product',
-      entity_id: id,
-      warehouse_id: wid,
-      request_id: requestId,
-      user_role: auth.role,
-      message,
-    });
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json(
+    { error: 'Use DELETE /api/products/:id for deletes' },
+    { status: 501 }
+  );
 }

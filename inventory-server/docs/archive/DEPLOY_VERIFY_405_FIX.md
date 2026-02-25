@@ -26,7 +26,7 @@ git push
    If it is missing, the route was not built.
 6. **If the route is missing or deployment is old:**  
    **Redeploy with cache clear:**  
-   **Deployments** → **⋯** (three dots) on latest → **Redeploy** → enable **“Clear build cache and redeploy”** → **Redeploy**.  
+   **Deployments** → **⋯** (three dots) on latest → **Redeploy** → enable **"Clear build cache and redeploy"** → **Redeploy**.  
    Wait until the new deployment finishes.
 
 ---
@@ -40,7 +40,7 @@ curl -s -o /dev/null -w "%{http_code}" https://warehouse-pos-api-v2.vercel.app/a
 ```
 
 - **401** → Route is live; 405 fix verified.
-- **404** → Route not in this deployment: repeat Step 2 with “Clear build cache and redeploy”, then Step 3 again.
+- **404** → Route not in this deployment: repeat Step 2 with "Clear build cache and redeploy", then Step 3 again.
 - **405** → Route is hit but PUT not exported; check `app/api/products/[...id]/route.ts` and redeploy.
 
 ---
@@ -71,17 +71,17 @@ Expected: **200** and JSON body of the updated product.
    - **Vercel** → **warehouse-pos-api-v2** → **Settings** → **General**.
    - **Root Directory** must be exactly **`inventory-server`** (no leading slash, no `warehouse-pos/`).
    - **Include files outside the root** = **Off**.
-   - Save if changed, then **Redeploy** (with “Clear build cache and redeploy”).
+   - Save if changed, then **Redeploy** (with "Clear build cache and redeploy").
 
 2. **Confirm which deployment is live**
-   - **Deployments** → note the **production** deployment (green check, “Production”).
+   - **Deployments** → note the **production** deployment (green check, "Production").
    - Open it and check **Source** = commit **85bc2fa** (or later).
    - If production points to an older deployment, **Promote to Production** the latest one, or trigger a new deploy from **main**.
 
-3. **Check the “1” warning**
+3. **Check the "1" warning**
    - In the deployment, open **Logs** or **Find in logs** and read the warning.
    - It may explain why the function is not invoked (e.g. timeout, memory, or routing).
-   - **Diagnostic:** In Logs, filter or search by **Request Path**. You will see `/api/products`, `/api/health`, `/api/orders`, etc., but **no** `/api/products/test-id` or `/api/products/<any-id>`. That confirms requests to `/api/products/:id` never reach the serverless function (they get the app’s HTML 404 before the function runs).
+   - **Diagnostic:** In Logs, filter or search by **Request Path**. You will see `/api/products`, `/api/health`, `/api/orders`, etc., but **no** `/api/products/test-id` or `/api/products/<any-id>`. That confirms requests to `/api/products/:id` never reach the serverless function (they get the app's HTML 404 before the function runs).
 
 4. **If 404 persists**
    - **Fallback implemented:** Get/put/delete by id are now also served on the **same** route `/api/products` (no path segment), so they work on Vercel.

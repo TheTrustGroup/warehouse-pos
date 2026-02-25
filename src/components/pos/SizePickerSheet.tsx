@@ -1,5 +1,10 @@
 import { useState } from 'react';
 
+/**
+ * POS product shape. Inventory Product (from useInventory) passed into POS views
+ * (ProductGrid, ProductSearch) must be compatible: id, name, sku, quantity,
+ * sellingPrice, category?, sizeKind?, quantityBySize?, images?. Keep in sync when changing either type.
+ */
 export interface POSProduct {
   id: string;
   name: string;

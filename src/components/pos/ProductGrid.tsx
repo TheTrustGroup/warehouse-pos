@@ -1,16 +1,8 @@
 import { useMemo } from 'react';
+import POSProductCard from './POSProductCard';
+import type { POSProduct } from './SizePickerSheet';
 
-export interface POSProduct {
-  id: string;
-  name: string;
-  sku: string;
-  sizeKind?: 'na' | 'one_size' | 'sized';
-  quantity: number;
-  quantityBySize?: Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>;
-  sellingPrice: number;
-  category?: string;
-  images?: string[];
-}
+export type { POSProduct };
 
 interface ProductGridProps {
   products: POSProduct[];
@@ -92,21 +84,7 @@ export default function ProductGrid({
       )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
         {filtered.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => onSelect(p)}
-            className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-primary-300 hover:shadow-md"
-          >
-            <span className="font-medium text-slate-900 line-clamp-2">{p.name}</span>
-            <span className="mt-1 text-sm text-slate-500">{p.sku}</span>
-            <span className="mt-2 text-sm font-semibold text-primary-600">
-              GH₵{Number(p.sellingPrice).toLocaleString('en-GH', { minimumFractionDigits: 2 })}
-            </span>
-            <span className="mt-1 text-xs text-slate-400">
-              Stock: {p.sizeKind === 'sized' ? (p.quantityBySize ?? []).reduce((s, r) => s + r.quantity, 0) : p.quantity}
-            </span>
-          </button>
+          <POSProductCard key={p.id} product={p} onSelect={onSelect} />
         ))}
       </div>
     </div>

@@ -318,7 +318,8 @@ async function manualUpdate(
   now: string
 ) {
   // Update by id only so it works when warehouse_products has no warehouse_id (one row per product).
-  const { warehouse_id: _wid, ...rowWithoutWarehouse } = row as Record<string, unknown> & { warehouse_id?: string };
+  const { warehouse_id: _omit, ...rowWithoutWarehouse } = row as Record<string, unknown> & { warehouse_id?: string };
+  void _omit;
   const { error: upErr } = await db
     .from('warehouse_products')
     .update(rowWithoutWarehouse)

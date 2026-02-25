@@ -3,8 +3,10 @@ import { Search, Scan, Package } from 'lucide-react';
 import { useInventory } from '../../contexts/InventoryContext';
 import { usePOS } from '../../contexts/POSContext';
 import { formatCurrency, getCategoryDisplay } from '../../lib/utils';
+import { safeProductImageUrl, EMPTY_IMAGE_DATA_URL } from '../../lib/imageUpload';
 import { Button } from '../ui/Button';
 
+/** Products from useInventory() are used as POSProduct-compatible (see SizePickerSheet POSProduct). */
 export function ProductSearch() {
   const { products } = useInventory();
   const { addToCart } = usePOS();
@@ -103,18 +105,23 @@ export function ProductSearch() {
             onClick={() => handleProductClick(product.id)}
             className="solid-card p-4 text-left transition-shadow hover:shadow-lg"
           >
-            {product.images[0] ? (
-              <img
-                src={product.images[0]}
-                alt=""
-                loading="lazy"
-                className="w-full h-24 object-cover rounded-lg mb-2"
-              />
-            ) : (
-              <div className="w-full h-24 bg-slate-100 rounded-lg mb-2 flex items-center justify-center">
-                <Package className="w-8 h-8 text-slate-400" strokeWidth={2} aria-hidden />
-              </div>
-            )}
+            {(() => {
+              const firstImage = (product.images ?? [])[0];
+              const safeSrc = firstImage ? safeProductImageUrl(firstImage) : '';
+              const hasImage = safeSrc && safeSrc !== EMPTY_IMAGE_DATA_URL;
+              return hasImage ? (
+                <img
+                  src={safeSrc}
+                  alt=""
+                  loading="lazy"
+                  className="w-full h-24 object-cover rounded-lg mb-2"
+                />
+              ) : (
+                <div className="w-full h-24 bg-slate-100 rounded-lg mb-2 flex items-center justify-center">
+                  <Package className="w-8 h-8 text-slate-400" strokeWidth={2} aria-hidden />
+                </div>
+              );
+            })()}
             <h3 className="font-medium text-sm text-slate-900 line-clamp-2 mb-1">{product.name}</h3>
             <div className="flex items-center justify-between">
               <span className="font-semibold text-primary-600">{formatCurrency(product.sellingPrice)}</span>
