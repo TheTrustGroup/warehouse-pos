@@ -270,20 +270,28 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
 
 type DB = ReturnType<typeof getDb>;
 
+/** Select list when warehouse_products has no warehouse_id (one row per product). */
+const PRODUCT_SELECT = `
+  id, sku, barcode, name, description, category,
+  size_kind, selling_price, cost_price, reorder_level,
+  location, supplier, tags, images, version, created_at, updated_at
+`;
+
 async function fetchOne(db: DB, id: string, wid: string) {
   const { data: p } = await db
     .from('warehouse_products')
-    .select(`
-      id, warehouse_id, sku, barcode, name, description, category,
-      size_kind, selling_price, cost_price, reorder_level,
-      location, supplier, tags, images, version, created_at, updated_at,
-      warehouse_inventory!left(quantity)
-    `)
+    .select(PRODUCT_SELECT)
     .eq('id', id)
-    .eq('warehouse_id', wid)
     .single();
 
   if (!p) return null;
+
+  const { data: invRow } = await db
+    .from('warehouse_inventory')
+    .select('quantity')
+    .eq('warehouse_id', wid)
+    .eq('product_id', id)
+    .maybeSingle();
 
   const { data: sd } = await db
     .from('warehouse_inventory_by_size')
@@ -300,15 +308,12 @@ async function fetchOne(db: DB, id: string, wid: string) {
     .sort((a, b) => a.sizeCode.localeCompare(b.sizeCode));
 
   const pAny = p as Record<string, unknown>;
-  const inv = Array.isArray(pAny.warehouse_inventory)
-    ? (pAny.warehouse_inventory as Array<{ quantity?: number }>)[0]
-    : (pAny.warehouse_inventory as { quantity?: number } | undefined);
-
-  const qty = (pAny.size_kind as string) === 'sized' && sizes.length > 0
+  const isSized = (pAny.size_kind as string) === 'sized' && sizes.length > 0;
+  const qty = isSized
     ? sizes.reduce((s, r) => s + r.quantity, 0)
-    : Number(inv?.quantity ?? 0);
+    : Number((invRow as { quantity?: number } | null)?.quantity ?? 0);
 
-  return toShape(pAny, qty, sizes);
+  return toShape({ ...pAny, warehouse_id: wid }, qty, sizes);
 }
 
 async function manualUpdate(

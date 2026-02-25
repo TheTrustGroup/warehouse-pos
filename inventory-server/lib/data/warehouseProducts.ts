@@ -68,7 +68,14 @@ function getDb(): SupabaseClient {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-/** List products for a warehouse. Select includes images so POS/Inventory show product photos. */
+/**
+ * Columns for warehouse_products when table has no warehouse_id (one row per product).
+ * Quantity is resolved from warehouse_inventory / warehouse_inventory_by_size per warehouse.
+ */
+const WAREHOUSE_PRODUCTS_SELECT =
+  'id, sku, barcode, name, description, category, size_kind, selling_price, cost_price, reorder_level, location, supplier, tags, images, version, created_at, updated_at';
+
+/** List products for a warehouse. Works when warehouse_products has no warehouse_id (one row per product). */
 export async function getWarehouseProducts(
   warehouseId: string | undefined,
   options: ListOptions = {}
@@ -76,19 +83,14 @@ export async function getWarehouseProducts(
   const db = getDb();
   const limit = Math.min(Math.max(options.limit ?? 500, 1), 2000);
   const offset = Math.max(options.offset ?? 0, 0);
+  const effectiveWarehouseId = warehouseId ?? '';
 
   let query = db
     .from('warehouse_products')
-    .select(
-      'id, warehouse_id, sku, barcode, name, description, category, size_kind, selling_price, cost_price, reorder_level, location, supplier, tags, images, version, created_at, updated_at, warehouse_inventory!left(quantity)',
-      { count: 'exact' }
-    )
+    .select(WAREHOUSE_PRODUCTS_SELECT, { count: 'exact' })
     .order('name')
     .range(offset, offset + limit - 1);
 
-  if (warehouseId) {
-    query = query.eq('warehouse_id', warehouseId);
-  }
   if (options.q?.trim()) {
     const q = options.q.trim();
     query = query.or(`name.ilike.%${q}%,sku.ilike.%${q}%`);
@@ -103,15 +105,26 @@ export async function getWarehouseProducts(
     throw new Error(`Failed to list products: ${error.message}`);
   }
 
-  const list = (rows ?? []) as Array<Record<string, unknown> & { warehouse_inventory?: Array<{ quantity?: number }> | { quantity?: number } }>;
+  const list = (rows ?? []) as Record<string, unknown>[];
   const productIds = list.map((r) => r.id as string);
+
+  const invMap: Record<string, number> = {};
   const sizeMap: Record<string, Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>> = {};
 
-  if (warehouseId && productIds.length > 0) {
+  if (effectiveWarehouseId && productIds.length > 0) {
+    const { data: invRows } = await db
+      .from('warehouse_inventory')
+      .select('product_id, quantity')
+      .eq('warehouse_id', effectiveWarehouseId)
+      .in('product_id', productIds);
+    for (const inv of invRows ?? []) {
+      const r = inv as { product_id: string; quantity?: number };
+      invMap[r.product_id] = Number(r.quantity ?? 0);
+    }
     const { data: sizeRows } = await db
       .from('warehouse_inventory_by_size')
       .select('product_id, size_code, quantity, size_codes!left(size_label)')
-      .eq('warehouse_id', warehouseId)
+      .eq('warehouse_id', effectiveWarehouseId)
       .in('product_id', productIds);
     const sizeList = (sizeRows ?? []) as Array<{
       product_id: string;
@@ -130,23 +143,20 @@ export async function getWarehouseProducts(
   }
 
   const data = list.map((row) => {
-    const inv = Array.isArray(row.warehouse_inventory)
-      ? (row.warehouse_inventory as Array<{ quantity?: number }>)[0]
-      : (row.warehouse_inventory as { quantity?: number } | undefined);
     const sizes = (sizeMap[row.id as string] ?? []).sort((a, b) =>
       a.sizeCode.localeCompare(b.sizeCode)
     );
     const isSized = (row.size_kind as string) === 'sized' && sizes.length > 0;
     const quantity = isSized
       ? sizes.reduce((s, r) => s + r.quantity, 0)
-      : Number(inv?.quantity ?? 0);
+      : invMap[row.id as string] ?? 0;
 
     if (options.lowStock && quantity > (Number(row.reorder_level ?? 0) || 3)) return null;
     if (options.outOfStock && quantity > 0) return null;
 
     return {
       id: String(row.id ?? ''),
-      warehouseId: String(row.warehouse_id ?? ''),
+      warehouseId: effectiveWarehouseId,
       sku: String(row.sku ?? ''),
       barcode: row.barcode ?? null,
       name: String(row.name ?? ''),
@@ -171,7 +181,7 @@ export async function getWarehouseProducts(
   return { data, total: count ?? data.length };
 }
 
-/** Get one product by id and warehouse (for GET ?id=). Includes images. */
+/** Get one product by id and warehouse (for GET ?id=). Works when warehouse_products has no warehouse_id. */
 export async function getProductById(
   warehouseId: string,
   productId: string
@@ -179,16 +189,21 @@ export async function getProductById(
   const db = getDb();
   const { data: row } = await db
     .from('warehouse_products')
-    .select(
-      'id, warehouse_id, sku, barcode, name, description, category, size_kind, selling_price, cost_price, reorder_level, location, supplier, tags, images, version, created_at, updated_at, warehouse_inventory!left(quantity)'
-    )
+    .select(WAREHOUSE_PRODUCTS_SELECT)
     .eq('id', productId)
-    .eq('warehouse_id', warehouseId)
     .single();
 
   if (!row) return null;
 
-  const r = row as Record<string, unknown> & { warehouse_inventory?: Array<{ quantity?: number }> | { quantity?: number } };
+  const r = row as Record<string, unknown>;
+
+  let quantity = 0;
+  const { data: invRow } = await db
+    .from('warehouse_inventory')
+    .select('quantity')
+    .eq('warehouse_id', warehouseId)
+    .eq('product_id', productId)
+    .maybeSingle();
   const { data: sizeRows } = await db
     .from('warehouse_inventory_by_size')
     .select('size_code, quantity, size_codes!left(size_label)')
@@ -201,15 +216,12 @@ export async function getProductById(
       quantity: Number(s.quantity ?? 0),
     }))
     .sort((a, b) => a.sizeCode.localeCompare(b.sizeCode));
-  const inv = Array.isArray(r.warehouse_inventory)
-    ? (r.warehouse_inventory as Array<{ quantity?: number }>)[0]
-    : (r.warehouse_inventory as { quantity?: number } | undefined);
   const isSized = (r.size_kind as string) === 'sized' && sizes.length > 0;
-  const quantity = isSized ? sizes.reduce((s, x) => s + x.quantity, 0) : Number(inv?.quantity ?? 0);
+  quantity = isSized ? sizes.reduce((s, x) => s + x.quantity, 0) : Number((invRow as { quantity?: number } | null)?.quantity ?? 0);
 
   return {
     id: String(r.id ?? ''),
-    warehouseId: String(r.warehouse_id ?? ''),
+    warehouseId,
     sku: String(r.sku ?? ''),
     barcode: r.barcode != null ? String(r.barcode) : null,
     name: String(r.name ?? ''),
