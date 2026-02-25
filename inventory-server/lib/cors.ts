@@ -12,6 +12,7 @@ const DEFAULT_ORIGINS = [
   'https://warehouse.extremedeptkidz.com',
   'http://localhost:5173',
   'http://localhost:3000',
+  'http://localhost:4173',
 ];
 
 function getAllowedOrigins(): string[] {

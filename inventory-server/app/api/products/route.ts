@@ -20,27 +20,9 @@ import {
   handleDeleteProductById,
 } from '@/lib/api/productByIdHandlers';
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
+import { corsHeaders } from '@/lib/cors';
 
 export const dynamic = 'force-dynamic';
-
-const CORS_ORIGINS = [
-  'https://warehouse.extremedeptkidz.com',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://localhost:4173',
-];
-
-function corsHeaders(request: NextRequest): Record<string, string> {
-  const origin = request.headers.get('origin') ?? '';
-  const allowedOrigin = CORS_ORIGINS.includes(origin) ? origin : CORS_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-request-id, Idempotency-Key',
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Max-Age': '86400',
-  };
-}
 
 /** CORS preflight for cross-origin PUT/PATCH/DELETE from the warehouse frontend. */
 export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
@@ -51,14 +33,21 @@ function getRequestId(request: NextRequest): string {
   return request.headers.get('x-request-id')?.trim() || request.headers.get('x-correlation-id')?.trim() || crypto.randomUUID();
 }
 
+/** Attach CORS to a response so cross-origin fetch with credentials succeeds. */
+function withCors(res: NextResponse, request: NextRequest): NextResponse {
+  const h = corsHeaders(request);
+  Object.entries(h).forEach(([k, v]) => res.headers.set(k, v));
+  return res;
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const auth = await requireAuth(request);
-  if (auth instanceof NextResponse) return auth as NextResponse;
+  if (auth instanceof NextResponse) return withCors(auth, request);
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id')?.trim();
   if (id) {
     const warehouseId = searchParams.get('warehouse_id') ?? '';
-    return handleGetProductById(id, warehouseId);
+    return withCors(await handleGetProductById(id, warehouseId), request);
   }
   try {
     const warehouseId = searchParams.get('warehouse_id') ?? undefined;
@@ -76,12 +65,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       lowStock,
       outOfStock,
     });
-    return NextResponse.json({ data: result.data, total: result.total });
+    return withCors(NextResponse.json({ data: result.data, total: result.total }), request);
   } catch (e) {
     console.error('[api/products GET]', e);
-    return NextResponse.json(
-      { message: e instanceof Error ? e.message : 'Failed to load products' },
-      { status: 500 }
+    return withCors(
+      NextResponse.json(
+        { message: e instanceof Error ? e.message : 'Failed to load products' },
+        { status: 500 }
+      ),
+      request
     );
   }
 }
@@ -94,14 +86,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
+    return withCors(NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 }), request);
   }
   const warehouseId = (body?.warehouseId as string) ?? undefined;
   const scope = await getScopeForUser(auth.email);
   if (scope.allowedWarehouseIds.length > 0 && warehouseId && !scope.allowedWarehouseIds.includes(warehouseId)) {
-    return NextResponse.json(
-      { error: 'Forbidden: you do not have access to this warehouse' },
-      { status: 403 }
+    return withCors(
+      NextResponse.json(
+        { error: 'Forbidden: you do not have access to this warehouse' },
+        { status: 403 }
+      ),
+      request
     );
   }
   try {
@@ -115,8 +110,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       request_id: requestId,
       user_role: auth.role,
     });
-    // Return complete saved product so client can update UI without a follow-up GET
-    return NextResponse.json(created, { status: 201 });
+    return withCors(NextResponse.json(created, { status: 201 }), request);
   } catch (e) {
     const entityId = (body?.id && typeof body.id === 'string' ? body.id : '') || 'unknown';
     logDurability({
@@ -129,34 +123,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       message: e instanceof Error ? e.message : 'Failed to create product',
     });
     console.error('[api/products POST]', e);
-    return NextResponse.json(
-      { message: e instanceof Error ? e.message : 'Failed to create product' },
-      { status: 400 }
+    return withCors(
+      NextResponse.json(
+        { message: e instanceof Error ? e.message : 'Failed to create product' },
+        { status: 400 }
+      ),
+      request
     );
   }
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse> {
   const auth = await requireAdmin(request);
-  if (auth instanceof NextResponse) return auth as NextResponse;
+  if (auth instanceof NextResponse) return withCors(auth, request);
   let body: PutProductBody & { id?: string };
   try {
     body = (await request.json()) as PutProductBody & { id?: string };
   } catch {
-    return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
+    return withCors(NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 }), request);
   }
   const id = typeof body.id === 'string' ? body.id.trim() : '';
-  if (!id) return NextResponse.json({ error: 'id required in body' }, { status: 400 });
+  if (!id) return withCors(NextResponse.json({ error: 'id required in body' }, { status: 400 }), request);
   const bodyWarehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
   const warehouseId = await getEffectiveWarehouseId(auth, bodyWarehouseId || undefined, {
     path: request.nextUrl.pathname,
     method: 'PUT',
   });
-  if (!warehouseId) return NextResponse.json({ error: 'warehouseId required' }, { status: 400 });
-  const res = await handlePutProductById(request, id, body, warehouseId, auth);
-  res.headers.set('Access-Control-Allow-Origin', corsHeaders(request)['Access-Control-Allow-Origin']);
-  res.headers.set('Access-Control-Allow-Credentials', 'true');
-  return res;
+  if (!warehouseId) return withCors(NextResponse.json({ error: 'warehouseId required' }, { status: 400 }), request);
+  return withCors(await handlePutProductById(request, id, body, warehouseId, auth), request);
 }
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
@@ -165,7 +159,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const auth = await requireAdmin(request);
-  if (auth instanceof NextResponse) return auth as NextResponse;
+  if (auth instanceof NextResponse) return withCors(auth, request);
   const { searchParams } = new URL(request.url);
   let id = searchParams.get('id')?.trim() ?? '';
   let warehouseId: string | null = searchParams.get('warehouse_id')?.trim() ?? null;
@@ -178,10 +172,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
       /* body optional */
     }
   }
-  if (!id) return NextResponse.json({ error: 'id required (query or body)' }, { status: 400 });
-  if (!warehouseId) return NextResponse.json({ error: 'warehouseId required (query or body)' }, { status: 400 });
-  const res = await handleDeleteProductById(request, id, warehouseId, auth);
-  res.headers.set('Access-Control-Allow-Origin', corsHeaders(request)['Access-Control-Allow-Origin']);
-  res.headers.set('Access-Control-Allow-Credentials', 'true');
-  return res;
+  if (!id) return withCors(NextResponse.json({ error: 'id required (query or body)' }, { status: 400 }), request);
+  if (!warehouseId) return withCors(NextResponse.json({ error: 'warehouseId required (query or body)' }, { status: 400 }), request);
+  return withCors(await handleDeleteProductById(request, id, warehouseId, auth), request);
 }

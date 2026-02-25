@@ -73,7 +73,8 @@ function normalizeDbConstraintError(dbMessage: string, action: 'create' | 'updat
   const notNullMatch = dbMessage.match(/null value in column "([^"]+)" of relation "[^"]+" violates not-null constraint/i);
   if (notNullMatch) {
     const col = notNullMatch[1];
-    const field = col === 'barcode' ? 'Barcode' : col === 'name' ? 'Product name' : col.replace(/_/g, ' ');
+    const field =
+      col === 'barcode' ? 'Barcode' : col === 'description' ? 'Description' : col === 'name' ? 'Product name' : col.replace(/_/g, ' ');
     return `Product ${action}: ${field} is required.`;
   }
   return `Failed to ${action} product: ${dbMessage}`;
@@ -276,7 +277,8 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
   const sku = String(body.sku ?? '').trim() || `SKU-${id.slice(0, 8)}`;
   /** DB has NOT NULL on barcode; coerce null/undefined to empty string to avoid constraint violation. */
   const barcode = (body.barcode != null ? String(body.barcode).trim() : '') || '';
-  const description = body.description != null ? String(body.description).trim() || null : null;
+  /** DB may have NOT NULL on description; coerce to empty string. */
+  const description = (body.description != null ? String(body.description).trim() : '') || '';
   const category = String(body.category ?? 'Uncategorized').trim();
   const sizeKind = String(body.sizeKind ?? body.size_kind ?? 'na').trim().toLowerCase();
   const sellingPrice = Number(body.sellingPrice ?? body.selling_price ?? 0);
@@ -394,7 +396,8 @@ export async function updateWarehouseProduct(
   if (body.sku !== undefined) updates.sku = String(body.sku).trim();
   /** DB has NOT NULL on barcode; coerce null to empty string. */
   if (body.barcode !== undefined) updates.barcode = (body.barcode != null ? String(body.barcode).trim() : '') || '';
-  if (body.description !== undefined) updates.description = body.description != null ? String(body.description).trim() || null : null;
+  /** DB may have NOT NULL on description; coerce to empty string. */
+  if (body.description !== undefined) updates.description = (body.description != null ? String(body.description).trim() : '') || '';
   if (body.category !== undefined) updates.category = String(body.category).trim();
   if (body.sizeKind !== undefined) updates.size_kind = String(body.sizeKind).trim().toLowerCase();
   if (body.sellingPrice !== undefined) updates.selling_price = Number(body.sellingPrice);
