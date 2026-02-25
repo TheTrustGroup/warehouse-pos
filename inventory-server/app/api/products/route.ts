@@ -180,5 +180,8 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   }
   if (!id) return NextResponse.json({ error: 'id required (query or body)' }, { status: 400 });
   if (!warehouseId) return NextResponse.json({ error: 'warehouseId required (query or body)' }, { status: 400 });
-  return handleDeleteProductById(request, id, warehouseId, auth);
+  const res = await handleDeleteProductById(request, id, warehouseId, auth);
+  res.headers.set('Access-Control-Allow-Origin', corsHeaders(request)['Access-Control-Allow-Origin']);
+  res.headers.set('Access-Control-Allow-Credentials', 'true');
+  return res;
 }

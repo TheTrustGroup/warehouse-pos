@@ -243,9 +243,237 @@ export async function getProductById(
   };
 }
 
-/** Create product. Stub: delegate to DB or throw until full implementation. */
-export async function createWarehouseProduct(_body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  throw new Error('createWarehouseProduct not implemented in this module; use POST /api/products with full backend');
+/**
+ * Create product: insert into warehouse_products, then warehouse_inventory (and warehouse_inventory_by_size when sized).
+ * Body may use camelCase (from frontend); we normalize to DB snake_case.
+ * Returns the created product in ListProduct shape for client UI.
+ */
+export async function createWarehouseProduct(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const db = getDb();
+
+  const warehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
+  if (!warehouseId) {
+    throw new Error('warehouseId is required');
+  }
+
+  const name = String(body.name ?? '').trim();
+  if (!name) {
+    throw new Error('Product name is required');
+  }
+
+  const id = (typeof body.id === 'string' && body.id.trim() ? body.id.trim() : crypto.randomUUID()) as string;
+  const sku = String(body.sku ?? '').trim() || `SKU-${id.slice(0, 8)}`;
+  const barcode = body.barcode != null ? String(body.barcode).trim() || null : null;
+  const description = body.description != null ? String(body.description).trim() || null : null;
+  const category = String(body.category ?? 'Uncategorized').trim();
+  const sizeKind = String(body.sizeKind ?? body.size_kind ?? 'na').trim().toLowerCase();
+  const sellingPrice = Number(body.sellingPrice ?? body.selling_price ?? 0);
+  const costPrice = Number(body.costPrice ?? body.cost_price ?? 0);
+  const reorderLevel = Number(body.reorderLevel ?? body.reorder_level ?? 0);
+  const quantityBySize = Array.isArray(body.quantityBySize) ? body.quantityBySize as Array<{ sizeCode: string; quantity: number }> : [];
+  const quantity = Number(body.quantity ?? 0);
+  const now = new Date().toISOString();
+
+  const productRow = {
+    id,
+    sku,
+    barcode,
+    name,
+    description,
+    category,
+    size_kind: sizeKind === 'one_size' ? 'one_size' : sizeKind === 'sized' ? 'sized' : 'na',
+    selling_price: sellingPrice,
+    cost_price: costPrice,
+    reorder_level: reorderLevel,
+    location: body.location ?? null,
+    supplier: body.supplier ?? null,
+    tags: Array.isArray(body.tags) ? body.tags : [],
+    images: Array.isArray(body.images) ? body.images : [],
+    version: 1,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const { error: insertProductError } = await db.from('warehouse_products').insert(productRow);
+  if (insertProductError) {
+    throw new Error(`Failed to create product: ${insertProductError.message}`);
+  }
+
+  const isSized = sizeKind === 'sized' && quantityBySize.length > 0;
+  const totalQty = isSized
+    ? quantityBySize.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
+    : Number(quantity) || 0;
+
+  const { error: insertInvError } = await db.from('warehouse_inventory').insert({
+    product_id: id,
+    warehouse_id: warehouseId,
+    quantity: totalQty,
+  });
+  if (insertInvError) {
+    await db.from('warehouse_products').delete().eq('id', id);
+    throw new Error(`Failed to create warehouse inventory: ${insertInvError.message}`);
+  }
+
+  if (isSized && quantityBySize.length > 0) {
+    const sizeRows = quantityBySize
+      .filter((r) => String(r.sizeCode ?? '').trim())
+      .map((r) => ({
+        product_id: id,
+        warehouse_id: warehouseId,
+        size_code: String(r.sizeCode).trim(),
+        quantity: Number(r.quantity) || 0,
+      }));
+    if (sizeRows.length > 0) {
+      const { error: insertSizeError } = await db.from('warehouse_inventory_by_size').insert(sizeRows);
+      if (insertSizeError) {
+        await db.from('warehouse_inventory').delete().eq('product_id', id).eq('warehouse_id', warehouseId);
+        await db.from('warehouse_products').delete().eq('id', id);
+        throw new Error(`Failed to create inventory by size: ${insertSizeError.message}`);
+      }
+    }
+  }
+
+  const quantityBySizeOut = isSized
+    ? quantityBySize.map((r) => ({ sizeCode: String(r.sizeCode), sizeLabel: String(r.sizeCode), quantity: Number(r.quantity) || 0 }))
+    : [];
+
+  return {
+    id,
+    warehouseId,
+    sku,
+    barcode,
+    name,
+    description,
+    category,
+    sizeKind: productRow.size_kind,
+    sellingPrice,
+    costPrice,
+    reorderLevel,
+    quantity: totalQty,
+    quantityBySize: quantityBySizeOut,
+    location: productRow.location,
+    supplier: productRow.supplier,
+    tags: productRow.tags,
+    images: productRow.images,
+    version: productRow.version,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Update product: patch warehouse_products, then replace warehouse_inventory and warehouse_inventory_by_size for the given warehouse.
+ * Body may use camelCase; only provided fields are updated. Returns updated product in ListProduct shape.
+ */
+export async function updateWarehouseProduct(
+  productId: string,
+  warehouseId: string,
+  body: PutProductBody
+): Promise<ListProduct | null> {
+  const db = getDb();
+
+  const existing = await getProductById(warehouseId, productId);
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  const updates: Record<string, unknown> = { updated_at: now };
+
+  if (body.name !== undefined) updates.name = String(body.name).trim();
+  if (body.sku !== undefined) updates.sku = String(body.sku).trim();
+  if (body.barcode !== undefined) updates.barcode = body.barcode != null ? String(body.barcode).trim() || null : null;
+  if (body.description !== undefined) updates.description = body.description != null ? String(body.description).trim() || null : null;
+  if (body.category !== undefined) updates.category = String(body.category).trim();
+  if (body.sizeKind !== undefined) updates.size_kind = String(body.sizeKind).trim().toLowerCase();
+  if (body.sellingPrice !== undefined) updates.selling_price = Number(body.sellingPrice);
+  if (body.costPrice !== undefined) updates.cost_price = Number(body.costPrice);
+  if (body.reorderLevel !== undefined) updates.reorder_level = Number(body.reorderLevel);
+  if (body.location !== undefined) updates.location = body.location;
+  if (body.supplier !== undefined) updates.supplier = body.supplier;
+  if (body.tags !== undefined) updates.tags = Array.isArray(body.tags) ? body.tags : [];
+  if (body.images !== undefined) updates.images = Array.isArray(body.images) ? body.images : [];
+
+  updates.version = (existing.version ?? 0) + 1;
+
+  const { error: updateError } = await db
+    .from('warehouse_products')
+    .update(updates)
+    .eq('id', productId);
+  if (updateError) {
+    throw new Error(`Failed to update product: ${updateError.message}`);
+  }
+
+  const sizeKind = String(body.sizeKind ?? existing.sizeKind ?? 'na').toLowerCase();
+  const quantityBySize = Array.isArray(body.quantityBySize) ? body.quantityBySize as Array<{ sizeCode: string; quantity: number }> : [];
+  const isSized = sizeKind === 'sized' && quantityBySize.length > 0;
+  const totalQty = isSized
+    ? quantityBySize.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
+    : Number(body.quantity ?? existing.quantity ?? 0);
+
+  await db.from('warehouse_inventory_by_size').delete().eq('product_id', productId).eq('warehouse_id', warehouseId);
+  const { error: delInvErr } = await db
+    .from('warehouse_inventory')
+    .delete()
+    .eq('product_id', productId)
+    .eq('warehouse_id', warehouseId);
+  if (delInvErr) {
+    throw new Error(`Failed to clear warehouse inventory for update: ${delInvErr.message}`);
+  }
+  const { error: insertInvErr } = await db.from('warehouse_inventory').insert({
+    product_id: productId,
+    warehouse_id: warehouseId,
+    quantity: totalQty,
+  });
+  if (insertInvErr) {
+    throw new Error(`Failed to update warehouse inventory: ${insertInvErr.message}`);
+  }
+
+  if (isSized && quantityBySize.length > 0) {
+    const sizeRows = quantityBySize
+      .filter((r) => String(r.sizeCode ?? '').trim())
+      .map((r) => ({
+        product_id: productId,
+        warehouse_id: warehouseId,
+        size_code: String(r.sizeCode).trim(),
+        quantity: Number(r.quantity) || 0,
+      }));
+    if (sizeRows.length > 0) {
+      const { error: insertSizeError } = await db.from('warehouse_inventory_by_size').insert(sizeRows);
+      if (insertSizeError) {
+        throw new Error(`Failed to update inventory by size: ${insertSizeError.message}`);
+      }
+    }
+  }
+
+  return getProductById(warehouseId, productId);
+}
+
+/**
+ * Delete product: remove all inventory and by-size rows for this product, then delete the product row.
+ * Product is removed from every warehouse so it does not reappear on list poll.
+ */
+export async function deleteWarehouseProduct(productId: string, _warehouseId: string): Promise<void> {
+  const db = getDb();
+
+  const { error: delSizeErr } = await db
+    .from('warehouse_inventory_by_size')
+    .delete()
+    .eq('product_id', productId);
+  if (delSizeErr) {
+    throw new Error(`Failed to delete inventory by size: ${delSizeErr.message}`);
+  }
+
+  const { error: delInvErr } = await db
+    .from('warehouse_inventory')
+    .delete()
+    .eq('product_id', productId);
+  if (delInvErr) {
+    throw new Error(`Failed to delete warehouse inventory: ${delInvErr.message}`);
+  }
+
+  const { error: delProdErr } = await db.from('warehouse_products').delete().eq('id', productId);
+  if (delProdErr) {
+    throw new Error(`Failed to delete product: ${delProdErr.message}`);
+  }
 }
 
 /** Stub: bulk delete. Implement when needed. */

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProductById } from '@/lib/data/warehouseProducts';
+import {
+  getProductById,
+  updateWarehouseProduct,
+  deleteWarehouseProduct,
+} from '@/lib/data/warehouseProducts';
 import type { Session } from '@/lib/auth/session';
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
 
@@ -15,29 +19,40 @@ export async function handleGetProductById(
   return NextResponse.json(product);
 }
 
-/** PUT one product. Stub: use PATCH /api/products/:id for updates. */
+/** PUT one product. Updates warehouse_products and warehouse inventory for the given warehouse. */
 export async function handlePutProductById(
   _request: NextRequest,
-  _id: string,
-  _body: PutProductBody,
-  _warehouseId: string,
+  id: string,
+  body: PutProductBody,
+  warehouseId: string,
   _auth: Session
 ): Promise<NextResponse> {
-  return NextResponse.json(
-    { error: 'Use PATCH /api/products/:id with request body for updates' },
-    { status: 501 }
-  );
+  try {
+    const updated = await updateWarehouseProduct(id, warehouseId, body);
+    if (!updated) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+    return NextResponse.json(updated);
+  } catch (e) {
+    console.error('[api/products PUT]', e);
+    const message = e instanceof Error ? e.message : 'Failed to update product';
+    return NextResponse.json({ message }, { status: 400 });
+  }
 }
 
-/** DELETE one product. Stub: use DELETE /api/products/:id. */
+/** DELETE one product from the given warehouse; removes product row if no other warehouse has it. */
 export async function handleDeleteProductById(
   _request: NextRequest,
-  _id: string,
-  _warehouseId: string,
+  id: string,
+  warehouseId: string,
   _auth: Session
 ): Promise<NextResponse> {
-  return NextResponse.json(
-    { error: 'Use DELETE /api/products/:id for deletes' },
-    { status: 501 }
-  );
+  try {
+    await deleteWarehouseProduct(id, warehouseId);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error('[api/products DELETE]', e);
+    const message = e instanceof Error ? e.message : 'Failed to delete product';
+    return NextResponse.json({ message }, { status: 400 });
+  }
 }

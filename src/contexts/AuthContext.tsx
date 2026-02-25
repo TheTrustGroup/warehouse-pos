@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useRef, ReactNode, useEffect, useCallback } from 'react';
 import { User } from '../types';
 import { ROLES, PERMISSIONS, Permission } from '../types/permissions';
-import { API_BASE_URL, handleApiResponse } from '../lib/api';
+import { API_BASE_URL, getAuthToken, handleApiResponse } from '../lib/api';
 import { parseLoginResponse, parseAuthUserPayload } from '../lib/apiSchemas';
 
 const DEMO_ROLE_KEY = 'warehouse_demo_role';
@@ -283,8 +283,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       const headers: HeadersInit = { 'Accept': 'application/json' };
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
-      if (token) headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const token = getAuthToken();
+      if (token) headers['Authorization'] = token;
       const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
 
       // Always call auth/me on load: /admin/api/me first, then /api/auth/user on 404, 403, or 401 (cross-browser).
@@ -543,8 +543,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const tryRefreshSession = useCallback(async (): Promise<boolean> => {
     try {
       const headers: HeadersInit = { Accept: 'application/json' };
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
-      if (token) headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const token = getAuthToken();
+      if (token) headers['Authorization'] = token;
       const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
       let response = await fetch(`${API_BASE_URL}/admin/api/me`, opts);
       if (response.status === 404 || response.status === 403 || response.status === 401) {
