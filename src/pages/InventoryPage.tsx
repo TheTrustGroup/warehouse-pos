@@ -517,6 +517,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
             ...payload,
             id: payload.id,
             warehouseId,
+            barcode: payload.barcode ?? '',
             sizeKind:       payload.sizeKind,
             quantityBySize: Array.isArray(payload.quantityBySize) ? payload.quantityBySize : [],
             quantity:       payload.quantity,
@@ -550,6 +551,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
           body:   JSON.stringify({
             ...payload,
             warehouseId,
+            barcode: payload.barcode ?? '',
             sizeKind:       payload.sizeKind,
             quantityBySize: Array.isArray(payload.quantityBySize) ? payload.quantityBySize : [],
             quantity:       payload.quantity,

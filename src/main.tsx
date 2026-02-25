@@ -3,7 +3,24 @@ import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { API_BASE_URL } from './lib/api';
 import { initObservability, startHealthPings } from './lib/observability';
+
+/** Preconnect to API origin so first /me and product requests avoid DNS+TLS delay. */
+if (typeof document !== 'undefined' && API_BASE_URL) {
+  try {
+    const origin = new URL(API_BASE_URL).origin;
+    if (!document.querySelector(`link[rel="preconnect"][href="${origin}"]`)) {
+      const link = document.createElement('link');
+      link.rel = 'preconnect';
+      link.href = origin;
+      link.crossOrigin = 'anonymous';
+      document.head.appendChild(link);
+    }
+  } catch {
+    // ignore invalid URL
+  }
+}
 import { initErrorHandlers } from './lib/initErrorHandlers';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import { isOfflineEnabled } from './lib/offlineFeatureFlag';

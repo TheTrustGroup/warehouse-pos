@@ -68,6 +68,17 @@ function getDb(): SupabaseClient {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+/** Turn DB constraint errors into clear 400-style messages for the client. */
+function normalizeDbConstraintError(dbMessage: string, action: 'create' | 'update'): string {
+  const notNullMatch = dbMessage.match(/null value in column "([^"]+)" of relation "[^"]+" violates not-null constraint/i);
+  if (notNullMatch) {
+    const col = notNullMatch[1];
+    const field = col === 'barcode' ? 'Barcode' : col === 'name' ? 'Product name' : col.replace(/_/g, ' ');
+    return `Product ${action}: ${field} is required.`;
+  }
+  return `Failed to ${action} product: ${dbMessage}`;
+}
+
 /**
  * Columns for warehouse_products when table has no warehouse_id (one row per product).
  * Quantity is resolved from warehouse_inventory / warehouse_inventory_by_size per warehouse.
@@ -263,7 +274,8 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
 
   const id = (typeof body.id === 'string' && body.id.trim() ? body.id.trim() : crypto.randomUUID()) as string;
   const sku = String(body.sku ?? '').trim() || `SKU-${id.slice(0, 8)}`;
-  const barcode = body.barcode != null ? String(body.barcode).trim() || null : null;
+  /** DB has NOT NULL on barcode; coerce null/undefined to empty string to avoid constraint violation. */
+  const barcode = (body.barcode != null ? String(body.barcode).trim() : '') || '';
   const description = body.description != null ? String(body.description).trim() || null : null;
   const category = String(body.category ?? 'Uncategorized').trim();
   const sizeKind = String(body.sizeKind ?? body.size_kind ?? 'na').trim().toLowerCase();
@@ -296,7 +308,7 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
 
   const { error: insertProductError } = await db.from('warehouse_products').insert(productRow);
   if (insertProductError) {
-    throw new Error(`Failed to create product: ${insertProductError.message}`);
+    throw new Error(normalizeDbConstraintError(insertProductError.message, 'create'));
   }
 
   const isSized = sizeKind === 'sized' && quantityBySize.length > 0;
@@ -380,7 +392,8 @@ export async function updateWarehouseProduct(
 
   if (body.name !== undefined) updates.name = String(body.name).trim();
   if (body.sku !== undefined) updates.sku = String(body.sku).trim();
-  if (body.barcode !== undefined) updates.barcode = body.barcode != null ? String(body.barcode).trim() || null : null;
+  /** DB has NOT NULL on barcode; coerce null to empty string. */
+  if (body.barcode !== undefined) updates.barcode = (body.barcode != null ? String(body.barcode).trim() : '') || '';
   if (body.description !== undefined) updates.description = body.description != null ? String(body.description).trim() || null : null;
   if (body.category !== undefined) updates.category = String(body.category).trim();
   if (body.sizeKind !== undefined) updates.size_kind = String(body.sizeKind).trim().toLowerCase();
@@ -399,7 +412,7 @@ export async function updateWarehouseProduct(
     .update(updates)
     .eq('id', productId);
   if (updateError) {
-    throw new Error(`Failed to update product: ${updateError.message}`);
+    throw new Error(normalizeDbConstraintError(updateError.message, 'update'));
   }
 
   const sizeKind = String(body.sizeKind ?? existing.sizeKind ?? 'na').toLowerCase();
