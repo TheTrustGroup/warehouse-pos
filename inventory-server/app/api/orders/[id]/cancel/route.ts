@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth/session';
+import { corsHeaders } from '@/lib/cors';
 
 export const dynamic = 'force-dynamic';
+
+function withCors(res: NextResponse, req: NextRequest): NextResponse {
+  Object.entries(corsHeaders(req)).forEach(([k, v]) => res.headers.set(k, v));
+  return res;
+}
+
+export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
+}
 
 /**
  * PATCH /api/orders/[id]/cancel — acknowledge order cancellation (auth required).
@@ -14,22 +24,28 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   const auth = await requireAuth(request);
-  if (auth instanceof NextResponse) return auth as NextResponse;
+  if (auth instanceof NextResponse) return withCors(auth, request);
   try {
     const { id } = await params;
     if (!id?.trim()) {
-      return NextResponse.json({ message: 'Order id required' }, { status: 400 });
+      return withCors(NextResponse.json({ message: 'Order id required' }, { status: 400 }), request);
     }
-    return NextResponse.json({
-      ok: true,
-      id: id.trim(),
-      status: 'cancelled',
-    });
+    return withCors(
+      NextResponse.json({
+        ok: true,
+        id: id.trim(),
+        status: 'cancelled',
+      }),
+      request
+    );
   } catch (e) {
     console.error('[api/orders cancel PATCH]', e);
-    return NextResponse.json(
-      { message: e instanceof Error ? e.message : 'Cancel failed' },
-      { status: 500 }
+    return withCors(
+      NextResponse.json(
+        { message: e instanceof Error ? e.message : 'Cancel failed' },
+        { status: 500 }
+      ),
+      request
     );
   }
 }
