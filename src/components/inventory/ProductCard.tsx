@@ -31,6 +31,7 @@ export interface Product {
   location?: { aisle?: string; rack?: string; bin?: string; warehouse?: string };
   images?: string[];
   reorderLevel?: number;
+  variants?: { size?: string; color?: string; unit?: string };
 }
 
 interface ProductCardProps {

@@ -61,6 +61,32 @@ async function getTodaySalesTotal(warehouseId: string, date: string): Promise<nu
 }
 
 /**
+ * Fetch today's sales total per warehouse for a given date.
+ * Returns { [warehouseId]: number } for Admin Control Panel "Today's sales by location".
+ */
+export async function getTodaySalesByWarehouse(date: string): Promise<Record<string, number>> {
+  const supabase = getSupabase();
+  const start = `${date}T00:00:00.000Z`;
+  const end = `${date}T23:59:59.999Z`;
+  const { data, error } = await supabase
+    .from('sales')
+    .select('warehouse_id, total')
+    .gte('created_at', start)
+    .lt('created_at', end);
+  if (error) {
+    console.error('[dashboardStats] getTodaySalesByWarehouse', error);
+    return {};
+  }
+  const out: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const wid = (row as { warehouse_id?: string }).warehouse_id ?? '';
+    const t = Number((row as { total?: number }).total ?? 0);
+    if (wid) out[wid] = (out[wid] ?? 0) + t;
+  }
+  return out;
+}
+
+/**
  * Compute dashboard stats, low-stock list, and category summary for a warehouse.
  * Single products fetch on the server; response is small (no full product list to client).
  */

@@ -29,6 +29,7 @@ interface InventoryPageProps {}
 // ── Constants ─────────────────────────────────────────────────────────────
 
 const POLL_MS    = 30_000;
+const PAGE_SIZE  = 50;
 const CATEGORIES = ['Sneakers', 'Slippers', 'Boots', 'Sandals', 'Accessories'];
 
 /** Fallback list when WarehouseContext has not yet loaded. IDs must match backend. */
@@ -72,7 +73,14 @@ function formatGHC(n: number): string {
 
 // ── Filter/sort ───────────────────────────────────────────────────────────
 
-function applyFilters(products: Product[], search: string, category: FilterKey, sort: SortKey) {
+function applyFilters(
+  products: Product[],
+  search: string,
+  category: FilterKey,
+  sort: SortKey,
+  sizeFilter: string,
+  colorFilter: string
+) {
   let r = [...products];
   if (search.trim()) {
     const q = search.toLowerCase();
@@ -84,6 +92,19 @@ function applyFilters(products: Product[], search: string, category: FilterKey, 
   }
   if (category !== 'all') {
     r = r.filter(p => p.category.toLowerCase() === category.toLowerCase());
+  }
+  if (sizeFilter) {
+    const sizeNorm = sizeFilter.trim().toLowerCase();
+    r = r.filter(p => {
+      if (sizeNorm === 'na') return (p.sizeKind ?? 'na') === 'na';
+      if (sizeNorm === 'one size') return (p.sizeKind ?? 'na') === 'one_size';
+      const qbs = p.quantityBySize ?? [];
+      return qbs.some(s => (s.sizeCode ?? '').toLowerCase() === sizeNorm);
+    });
+  }
+  if (colorFilter) {
+    const colorNorm = colorFilter.trim().toLowerCase();
+    r = r.filter(p => (p.variants?.color ?? '').trim().toLowerCase() === colorNorm);
   }
   r.sort((a, b) => {
     const qa = getProductQty(a), qb = getProductQty(b);
@@ -294,6 +315,9 @@ export default function InventoryPage(_props: InventoryPageProps) {
   const [whDropdown,     setWhDropdown]     = useState(false);
   const [search,         setSearch]         = useState('');
   const [category,       setCategory]       = useState<FilterKey>('all');
+  const [sizeFilter,     setSizeFilter]     = useState('');
+  const [colorFilter,    setColorFilter]   = useState('');
+  const [currentPage,    setCurrentPage]    = useState(1);
   const [sort,           setSort]           = useState<SortKey>('name_asc');
   const [sortOpen,       setSortOpen]       = useState(false);
   const [modalOpen,      setModalOpen]      = useState(false);
@@ -312,6 +336,25 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
   // Derived stats (memoised — recompute only when products change)
   const stats = useMemo(() => computeStats(products), [products]);
+
+  // Unique size codes and colors from products (for filter dropdowns)
+  const uniqueSizes = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      if (p.sizeKind === 'na') set.add('NA');
+      else if (p.sizeKind === 'one_size') set.add('One size');
+      else for (const s of p.quantityBySize ?? []) if (s.sizeCode) set.add(s.sizeCode);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [products]);
+  const uniqueColors = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      const c = (p.variants?.color ?? '').trim();
+      if (c) set.add(c);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [products]);
 
   // ── apiFetch (retry + abort) ──────────────────────────────────────────────
 
@@ -579,9 +622,24 @@ export default function InventoryPage(_props: InventoryPageProps) {
     }
   }
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, category, sizeFilter, colorFilter, sort]);
+
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const displayed = applyFilters(products, search, category, sort);
+  const filtered = useMemo(
+    () => applyFilters(products, search, category, sort, sizeFilter, colorFilter),
+    [products, search, category, sort, sizeFilter, colorFilter]
+  );
+  const totalFiltered = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE));
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const displayed = useMemo(
+    () => filtered.slice(pageStart, pageStart + PAGE_SIZE),
+    [filtered, pageStart]
+  );
   const SORT_OPTIONS: { key: SortKey; label: string }[] = [
     { key: 'name_asc',   label: 'Name A–Z'       },
     { key: 'name_desc',  label: 'Name Z–A'       },
@@ -681,7 +739,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
           <StatCard
             label="SKUs"
             value={products.length}
-            sub={`${displayed.length} shown`}
+            sub={totalPages > 1 ? `Showing ${pageStart + 1}–${Math.min(pageStart + PAGE_SIZE, totalFiltered)} of ${totalFiltered}` : `${totalFiltered} shown`}
           />
           <StatCard
             label="Stock value"
@@ -701,9 +759,9 @@ export default function InventoryPage(_props: InventoryPageProps) {
       )}
 
       {/* ══ Filter strip ══ */}
-      <div className="flex items-center gap-0 px-4 pt-3 pb-2">
+      <div className="flex flex-wrap items-center gap-2 px-4 pt-3 pb-2">
         {/* Category chips — horizontal scroll */}
-        <div className="flex gap-2 flex-1 overflow-x-auto scrollbar-none pr-3">
+        <div className="flex gap-2 flex-1 min-w-0 overflow-x-auto scrollbar-none">
           {(['all', ...CATEGORIES] as string[]).map(cat => (
             <button key={cat} type="button" onClick={() => setCategory(cat)}
                     className={`flex-shrink-0 h-8 px-3.5 rounded-full text-[12px] font-bold
@@ -714,6 +772,36 @@ export default function InventoryPage(_props: InventoryPageProps) {
               {cat === 'all' ? 'All' : cat}
             </button>
           ))}
+        </div>
+
+        {/* Size filter */}
+        <div className="flex-shrink-0">
+          <select
+            value={sizeFilter}
+            onChange={(e) => setSizeFilter(e.target.value)}
+            className="h-8 pl-2.5 pr-7 rounded-full border border-slate-200 bg-white text-[12px] font-bold text-slate-700 min-w-[100px] cursor-pointer"
+            aria-label="Filter by size"
+          >
+            <option value="">All sizes</option>
+            {uniqueSizes.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Color filter */}
+        <div className="flex-shrink-0">
+          <select
+            value={colorFilter}
+            onChange={(e) => setColorFilter(e.target.value)}
+            className="h-8 pl-2.5 pr-7 rounded-full border border-slate-200 bg-white text-[12px] font-bold text-slate-700 min-w-[100px] cursor-pointer"
+            aria-label="Filter by color"
+          >
+            <option value="">All colors</option>
+            {uniqueColors.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </div>
 
         {/* Sort — compact */}
@@ -749,9 +837,10 @@ export default function InventoryPage(_props: InventoryPageProps) {
       {!loading && !error && (
         <div className="px-4 pb-3">
           <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            {search || category !== 'all'
-              ? `${displayed.length} result${displayed.length !== 1 ? 's' : ''}`
+            {search || category !== 'all' || sizeFilter || colorFilter
+              ? `${totalFiltered} result${totalFiltered !== 1 ? 's' : ''}`
               : `${products.length} product${products.length !== 1 ? 's' : ''}`}
+            {totalPages > 1 && ` · Page ${currentPage} of ${totalPages}`}
           </p>
         </div>
       )}
@@ -807,27 +896,53 @@ export default function InventoryPage(_props: InventoryPageProps) {
         {!loading && !error && products.length > 0 && displayed.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-20 text-center">
             <p className="text-[15px] font-bold text-slate-700">
-              No results for &quot;{search || category}&quot;
+              No results for current filters
             </p>
-            <button type="button" onClick={() => { setSearch(''); setCategory('all'); }}
+            <button type="button" onClick={() => { setSearch(''); setCategory('all'); setSizeFilter(''); setColorFilter(''); setCurrentPage(1); }}
                     className="text-[13px] font-bold text-red-500 hover:text-red-700">
               Clear filters
             </button>
           </div>
         )}
 
-        {/* Product grid — view-only cards (no inline stock edit) */}
+        {/* Product grid — view-only cards (no inline stock edit), 50 per page */}
         {!loading && !error && displayed.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {displayed.map(product => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onEditFull={openEditModal}
-                onDelete={p => setConfirmDelete(p)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {displayed.map(product => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onEditFull={openEditModal}
+                  onDelete={p => setConfirmDelete(p)}
+                />
+              ))}
+            </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 py-6">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage <= 1}
+                  className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                  Previous
+                </button>
+                <span className="text-[13px] font-semibold text-slate-600">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         )}
       </main>
 

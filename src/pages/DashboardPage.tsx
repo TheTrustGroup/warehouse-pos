@@ -206,11 +206,12 @@ export default function DashboardPage() {
   // THIS IS THE KEY FIX:
   // Uses WarehouseContext — same warehouse state as Sidebar, Inventory, POS.
   // When sidebar changes warehouse → warehouseId updates → useEffect re-fetches.
-  const { currentWarehouseId, currentWarehouse } = useWarehouse();
+  const { currentWarehouseId, currentWarehouse, warehouses } = useWarehouse();
   const warehouseId   = currentWarehouseId;
   const warehouseName = currentWarehouse?.name ?? 'Warehouse';
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [todayByWarehouse, setTodayByWarehouse] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -221,10 +222,16 @@ export default function DashboardPage() {
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const data = await apiFetch<DashboardData>(
-        `/api/dashboard?warehouse_id=${encodeURIComponent(wid)}&date=${today}`
-      );
+      const [data, byLocation] = await Promise.all([
+        apiFetch<DashboardData>(
+          `/api/dashboard?warehouse_id=${encodeURIComponent(wid)}&date=${today}`
+        ),
+        apiFetch<Record<string, number>>(
+          `/api/dashboard/today-by-warehouse?date=${today}`
+        ).catch(() => ({})),
+      ]);
       setDashboard(data);
+      setTodayByWarehouse((typeof byLocation === 'object' && byLocation !== null ? byLocation : {}) as Record<string, number>);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load dashboard data');
     } finally {
@@ -290,6 +297,26 @@ export default function DashboardPage() {
             <span className="text-[12px] text-slate-400 animate-pulse">Loading…</span>
           )}
         </div>
+
+        {/* ── Today's Sales by Location ── */}
+        {warehouses.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h2 className="text-[15px] font-black text-slate-900">Today&apos;s Sales by Location</h2>
+              <p className="text-[12px] text-slate-400 mt-0.5">Sales total per warehouse for today</p>
+            </div>
+            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {warehouses.map((w) => (
+                <div key={w.id} className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-[13px] font-bold text-slate-800">{w.name}</span>
+                  <span className="text-[15px] font-black text-slate-900 tabular-nums">
+                    {loading ? '—' : formatGHCCompact(todayByWarehouse[w.id] ?? 0)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Error ── */}
         {error && !loading && (
