@@ -283,19 +283,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   /**
-   * Check if user is authenticated by calling the API
+   * Check if user is authenticated by calling the API.
+   * Skips network when no token and no stored user to avoid 401s on login page (robustness).
    */
   const checkAuthStatus = async () => {
     try {
       setIsLoading(true);
-      const headers: HeadersInit = { 'Accept': 'application/json' };
       const token = getAuthToken();
+      const hasStoredUser = typeof localStorage !== 'undefined' && localStorage.getItem('current_user');
+      if (!token && !hasStoredUser) {
+        setAuthError(null);
+        setUser(null);
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('current_user');
+          localStorage.removeItem('auth_token');
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      const headers: HeadersInit = { 'Accept': 'application/json' };
       if (token) headers['Authorization'] = token;
       const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
 
-      // Always call auth/me on load: /admin/api/me first, then /api/auth/user on 404, 403, or 401 (cross-browser).
+      // Validate session: /admin/api/me first; only try /api/auth/user on 404/403 (not on 401 to avoid second 401 in console).
       let response = await fetch(`${API_BASE_URL}/admin/api/me`, opts);
-      if (response.status === 404 || response.status === 403 || response.status === 401) {
+      if (response.status === 404 || response.status === 403) {
         response = await fetch(`${API_BASE_URL}/api/auth/user`, opts);
       }
 
@@ -568,7 +581,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) headers['Authorization'] = token;
       const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
       let response = await fetch(`${API_BASE_URL}/admin/api/me`, opts);
-      if (response.status === 404 || response.status === 403 || response.status === 401) {
+      if (response.status === 404 || response.status === 403) {
         response = await fetch(`${API_BASE_URL}/api/auth/user`, opts);
       }
       if (!response.ok) return false;
