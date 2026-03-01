@@ -8,6 +8,7 @@ Short checklist to keep the Inventory & POS app fast as data grows.
 - **Image resize before save** — Uploads are resized (max 800px), compressed (quality 0.78), and capped at ~200KB so payloads stay small.
 - **Lazy images** — Product grid and modal use `loading="lazy"` so images load as they enter the viewport.
 - **Polling** — 30s interval, only when tab is visible; no requests when modal is open.
+- **Bundle:** Recharts is in a separate chunk and loads only when the Reports page is opened. Pages are lazy-loaded with retry. Production build uses Terser and no sourcemaps for smaller payloads. API origin is preconnected in `main.tsx` to cut first-request latency.
 
 ## Recommended next steps
 

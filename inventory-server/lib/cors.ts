@@ -45,15 +45,16 @@ function isOriginAllowed(origin: string, allowed: string[], suffixes: string[]):
 export function corsHeaders(req: NextRequest): Record<string, string> {
   const allowed = getAllowedOrigins();
   const suffixes = getAllowedSuffixes();
-  const origin = req.headers.get('origin') ?? '';
-  const allowOrigin =
-    isOriginAllowed(origin, allowed, suffixes) ? origin : allowed[0];
+  const origin = (req.headers.get('origin') ?? '').trim();
+  // With credentials, browser requires exact origin in Allow-Origin (no *). Use request origin only when allowed.
+  const allowOrigin = isOriginAllowed(origin, allowed, suffixes) ? origin : allowed[0];
   return {
     'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers':
-      'Content-Type, Authorization, x-request-id, Idempotency-Key',
+      'Content-Type, Authorization, x-request-id, Idempotency-Key, X-Requested-With, Accept',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
   };
 }

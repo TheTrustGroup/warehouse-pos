@@ -3,13 +3,23 @@ import { processSale, listTransactions, getTransactionByIdempotencyKey } from '@
 import { requirePosRole, getEffectiveWarehouseId, requireAuth } from '@/lib/auth/session';
 import { resolveUserScope, isStoreAllowed, isWarehouseAllowed, isPosAllowed, logScopeDeny } from '@/lib/auth/scope';
 import { getRejectionByKey, recordRejection } from '@/lib/data/syncRejections';
+import { corsHeaders } from '@/lib/cors';
 
 export const dynamic = 'force-dynamic';
+
+function withCors(res: NextResponse, req: NextRequest): NextResponse {
+  Object.entries(corsHeaders(req)).forEach(([k, v]) => res.headers.set(k, v));
+  return res;
+}
+
+export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
+}
 
 /** GET /api/transactions — list transactions (auth required). Admin/unrestricted: full. Scoped: only allowed store/warehouse/pos. */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const auth = await requireAuth(request);
-  if (auth instanceof NextResponse) return auth as NextResponse;
+  if (auth instanceof NextResponse) return withCors(auth, request);
   try {
     const { searchParams } = new URL(request.url);
     const clientWarehouseId = searchParams.get('warehouse_id') ?? undefined;
@@ -51,12 +61,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
     const response = NextResponse.json({ data: result.data, total: result.total });
     response.headers.set('Cache-Control', 'private, max-age=60');
-    return response;
+    return withCors(response, request);
   } catch (e) {
     console.error('[api/transactions GET]', e);
-    return NextResponse.json(
-      { message: e instanceof Error ? e.message : 'Failed to list transactions' },
-      { status: 500 }
+    return withCors(
+      NextResponse.json(
+        { message: e instanceof Error ? e.message : 'Failed to list transactions' },
+        { status: 500 }
+      ),
+      request
     );
   }
 }
@@ -64,7 +77,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 /** POST /api/transactions — persist sale. Cashier+ only. Idempotent when Idempotency-Key or body.idempotencyKey provided. */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const auth = await requirePosRole(request);
-  if (auth instanceof NextResponse) return auth as NextResponse;
+  if (auth instanceof NextResponse) return withCors(auth, request);
   let idempotencyKey: string | null = null;
   let warehouseId: string | null = null;
   try {
@@ -75,15 +88,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       method: request.method,
     });
     if (!warehouseId) {
-      return NextResponse.json(
-        { message: 'warehouseId required' },
-        { status: 400 }
+      return withCors(
+        NextResponse.json({ message: 'warehouseId required' }, { status: 400 }),
+        request
       );
     }
     const scope = await resolveUserScope(auth);
     if (!scope.isUnrestricted && scope.allowedWarehouseIds.length > 0 && !scope.allowedWarehouseIds.includes(warehouseId)) {
       logScopeDeny({ path: request.nextUrl.pathname, method: request.method, email: auth.email, warehouseId });
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+      return withCors(NextResponse.json({ message: 'Forbidden' }, { status: 403 }), request);
     }
 
     idempotencyKey =
@@ -95,14 +108,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (idempotencyKey) {
       const existing = await getTransactionByIdempotencyKey(idempotencyKey);
       if (existing) {
-        return NextResponse.json({ id: existing.id, ...body });
+        return withCors(NextResponse.json({ id: existing.id, ...body }), request);
       }
       const rejection = await getRejectionByKey(idempotencyKey);
       if (rejection) {
         const code = rejection.voidedAt ? 'VOIDED' : rejection.reason;
-        return NextResponse.json(
-          { code, message: rejection.voidedAt ? 'This sale was voided by admin.' : rejection.reason },
-          { status: 409 }
+        return withCors(
+          NextResponse.json(
+            { code, message: rejection.voidedAt ? 'This sale was voided by admin.' : rejection.reason },
+            { status: 409 }
+          ),
+          request
         );
       }
     }
@@ -132,7 +148,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       operatorId: undefined as string | null | undefined,
     };
     const result = await processSale(payload, sessionContext, idempotencyKey);
-    return NextResponse.json({ id: result.id, ...body });
+    return withCors(NextResponse.json({ id: result.id, ...body }), request);
   } catch (e: unknown) {
     const err = e as Error & { status?: number };
     if (err.status === 409 && idempotencyKey && err.message?.includes?.('INSUFFICIENT_STOCK')) {
@@ -147,15 +163,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       } catch (recordErr) {
         console.error('[api/transactions] recordRejection failed', recordErr);
       }
-      return NextResponse.json(
-        { code: 'INSUFFICIENT_STOCK', message: err.message ?? 'Insufficient stock at sync time.' },
-        { status: 409 }
+      return withCors(
+        NextResponse.json(
+          { code: 'INSUFFICIENT_STOCK', message: err.message ?? 'Insufficient stock at sync time.' },
+          { status: 409 }
+        ),
+        request
       );
     }
     const status = err.status === 409 ? 409 : 400;
-    return NextResponse.json(
-      { message: err.message ?? 'Transaction failed' },
-      { status }
+    return withCors(
+      NextResponse.json({ message: err.message ?? 'Transaction failed' }, { status }),
+      request
     );
   }
 }
