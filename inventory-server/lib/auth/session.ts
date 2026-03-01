@@ -16,6 +16,8 @@ export interface Session {
   /** Set from login binding / session JWT when present. */
   store_id?: string;
   device_id?: string;
+  /** Single warehouse for POS cashier (from user_scopes); skip location selector. */
+  warehouse_id?: string;
 }
 
 const ADMIN_EMAILS_KEY = 'ADMIN_EMAILS';
@@ -236,8 +238,10 @@ export function getEffectiveWarehouseIdSync(
 }
 
 /** JSON payload for frontend (e.g. GET /api/auth/user). */
-export function sessionUserToJson(auth: Session): { email: string; role: string } {
-  return { email: auth.email, role: auth.role };
+export function sessionUserToJson(auth: Session): { email: string; role: string; warehouse_id?: string } {
+  const out: { email: string; role: string; warehouse_id?: string } = { email: auth.email, role: auth.role };
+  if (auth.warehouse_id) out.warehouse_id = auth.warehouse_id;
+  return out;
 }
 
 /**
@@ -271,6 +275,7 @@ export async function getSession(req: NextRequest): Promise<Session | null> {
       role,
       store_id: typeof payload.store_id === 'string' ? payload.store_id : undefined,
       device_id: typeof payload.device_id === 'string' ? payload.device_id : undefined,
+      warehouse_id: typeof payload.warehouse_id === 'string' ? payload.warehouse_id : undefined,
     };
   } catch {
     return null;

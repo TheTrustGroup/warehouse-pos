@@ -1,3 +1,5 @@
+import { getSupabase } from '@/lib/supabase';
+
 export interface UserScope {
   allowedWarehouseIds: string[];
   allowedStoreIds: string[];
@@ -5,14 +7,43 @@ export interface UserScope {
 }
 
 /**
- * Resolve allowed warehouse IDs for a user. Admin with no env: all warehouses (empty array = no filter).
- * Set ALLOWED_WAREHOUSE_IDS in env (comma-separated) to restrict; or implement DB lookup.
+ * Resolve allowed warehouse IDs for a user. Reads user_scopes table when present; else env ALLOWED_WAREHOUSE_IDS.
+ * When user has exactly one warehouse in user_scopes, that single ID is returned (used to bind cashier to POS location).
  */
-export async function getScopeForUser(_email: string): Promise<UserScope> {
+export async function getScopeForUser(email: string): Promise<UserScope> {
+  const trimmed = email?.trim().toLowerCase();
+  if (!trimmed) return EMPTY_SCOPE;
+
+  try {
+    const db = getSupabase();
+    const { data: rows, error } = await db
+      .from('user_scopes')
+      .select('warehouse_id, store_id')
+      .eq('user_email', trimmed)
+      .not('warehouse_id', 'is', null);
+
+    if (!error && Array.isArray(rows) && rows.length > 0) {
+      const warehouseIds = [...new Set((rows as { warehouse_id: string }[]).map((r) => String(r.warehouse_id)).filter(Boolean))];
+      const storeIds = [...new Set((rows as { store_id?: string }[]).map((r) => r.store_id).filter(Boolean))] as string[];
+      return { allowedWarehouseIds: warehouseIds, allowedStoreIds: storeIds, allowedPosIds: [] };
+    }
+  } catch {
+    /* table missing or query failed; fallback to env */
+  }
+
   const raw = process.env.ALLOWED_WAREHOUSE_IDS?.trim();
   if (!raw) return EMPTY_SCOPE;
   const allowedWarehouseIds = raw.split(',').map((id) => id.trim()).filter(Boolean);
   return { ...EMPTY_SCOPE, allowedWarehouseIds };
+}
+
+/**
+ * When the user has exactly one warehouse in user_scopes, return it (for binding cashier to POS; skip "Select location").
+ */
+export async function getSingleWarehouseIdForUser(email: string): Promise<string | undefined> {
+  const scope = await getScopeForUser(email);
+  if (scope.allowedWarehouseIds.length !== 1) return undefined;
+  return scope.allowedWarehouseIds[0];
 }
 
 const EMPTY_SCOPE: UserScope = { allowedWarehouseIds: [], allowedStoreIds: [], allowedPosIds: [] };

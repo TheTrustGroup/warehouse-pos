@@ -76,6 +76,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     warehouses,
     setCurrentWarehouseId,
     currentWarehouseId,
+    isWarehouseBoundToSession,
   } = useWarehouse();
 
   const warehouse: Warehouse = currentWarehouse ?? {
@@ -84,7 +85,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     code: '',
   };
 
+  /** When cashier/session is bound to one warehouse, skip "Select location" and go straight to POS. */
   const [sessionOpen, setSessionOpen] = useState(true);
+  const showLocationSelector = sessionOpen && !isWarehouseBoundToSession;
   const [products, setProducts] = useState<POSProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -165,13 +168,13 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   );
 
   useEffect(() => {
-    if (!sessionOpen && warehouse.id) {
+    if ((!sessionOpen || isWarehouseBoundToSession) && warehouse.id) {
       loadProducts(warehouse.id);
       setCart([]);
       setSearch('');
       setCategory('all');
     }
-  }, [warehouse.id, sessionOpen, loadProducts]);
+  }, [warehouse.id, sessionOpen, isWarehouseBoundToSession, loadProducts]);
 
   function handleWarehouseSelect(w: Warehouse) {
     setCurrentWarehouseId(w.id);
@@ -402,7 +405,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col overflow-hidden">
       <SessionScreen
-        isOpen={sessionOpen}
+        isOpen={showLocationSelector}
         warehouses={warehouses}
         activeWarehouseId={warehouse.id}
         onSelect={handleWarehouseSelect}
@@ -413,7 +416,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         search={search}
         cartCount={cartCount}
         onSearchChange={setSearch}
-        onWarehouseTap={() => setSessionOpen(true)}
+        onWarehouseTap={isWarehouseBoundToSession ? () => {} : () => setSessionOpen(true)}
         onCartTap={() => cartCount > 0 && setCartOpen(true)}
       />
 
