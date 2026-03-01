@@ -15,6 +15,9 @@ export interface POSProduct {
   sellingPrice: number;
   category?: string;
   images?: string[];
+  /** For POS filters (size, color) — API may send as top-level. */
+  color?: string | null;
+  barcode?: string | null;
 }
 
 export interface CartLineInput {

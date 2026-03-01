@@ -3,7 +3,6 @@ interface POSHeaderProps {
   search: string;
   cartCount: number;
   onSearchChange: (value: string) => void;
-  onWarehouseTap: () => void;
   onCartTap: () => void;
 }
 
@@ -12,18 +11,16 @@ export default function POSHeader({
   search,
   cartCount,
   onSearchChange,
-  onWarehouseTap,
   onCartTap,
 }: POSHeaderProps) {
   return (
     <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <button
-        type="button"
-        onClick={onWarehouseTap}
+      <span
         className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700"
+        aria-label={`Location: ${warehouseName}`}
       >
         {warehouseName}
-      </button>
+      </span>
       <div className="flex-1 relative">
         <input
           type="search"

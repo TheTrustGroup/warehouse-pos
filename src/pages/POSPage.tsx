@@ -27,7 +27,7 @@ import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { useAuth } from '../contexts/AuthContext';
 
-import SessionScreen, { type Warehouse } from '../components/pos/SessionScreen';
+import type { Warehouse } from '../components/pos/SessionScreen';
 import POSHeader from '../components/pos/POSHeader';
 import ProductGrid from '../components/pos/ProductGrid';
 import CartBar from '../components/pos/CartBar';
@@ -72,13 +72,7 @@ function useToast() {
 }
 
 export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
-  const {
-    currentWarehouse,
-    warehouses,
-    setCurrentWarehouseId,
-    currentWarehouseId,
-    isWarehouseBoundToSession,
-  } = useWarehouse();
+  const { currentWarehouse, warehouses, currentWarehouseId } = useWarehouse();
   const { user, tryRefreshSession } = useAuth();
   const triedRefreshRef = useRef(false);
 
@@ -88,9 +82,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     code: '',
   };
 
-  /** When cashier/session is bound to one warehouse, skip "Select location" and go straight to POS. */
-  const [sessionOpen, setSessionOpen] = useState(true);
-  const showLocationSelector = sessionOpen && !isWarehouseBoundToSession;
+  /** POS never shows location selection; warehouse comes from auth (cashier) or context only. */
 
   // If cashier landed on POS without warehouseId (e.g. stale session), try to refresh session once so /api/auth/user enriches it.
   useEffect(() => {
@@ -104,6 +96,8 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
+  const [sizeFilter, setSizeFilter] = useState('');
+  const [colorFilter, setColorFilter] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [activeProduct, setActiveProduct] = useState<POSProduct | null>(null);
@@ -163,11 +157,23 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         const data = await apiFetch<
           POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }
         >(`/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000`);
-        const list: POSProduct[] = Array.isArray(data)
+        const rawList: POSProduct[] = Array.isArray(data)
           ? data
           : (data as { data?: POSProduct[] }).data ??
             (data as { products?: POSProduct[] }).products ??
             [];
+        const list: POSProduct[] = rawList.map((item) => {
+          const row = item as unknown as { color?: string; variants?: { color?: string }; barcode?: string | null };
+          const color =
+            (row.color != null ? String(row.color).trim() : '') ||
+            (row.variants?.color ?? '') ||
+            '';
+          return {
+            ...item,
+            color: color || null,
+            barcode: row.barcode != null ? String(row.barcode) : null,
+          };
+        });
         if (isMounted.current) setProducts(list);
       } catch (e: unknown) {
         if (!silent && isMounted.current)
@@ -180,18 +186,15 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   );
 
   useEffect(() => {
-    if ((!sessionOpen || isWarehouseBoundToSession) && warehouse.id) {
+    if (warehouse.id) {
       loadProducts(warehouse.id);
       setCart([]);
       setSearch('');
       setCategory('all');
+      setSizeFilter('');
+      setColorFilter('');
     }
-  }, [warehouse.id, sessionOpen, isWarehouseBoundToSession, loadProducts]);
-
-  function handleWarehouseSelect(w: Warehouse) {
-    setCurrentWarehouseId(w.id);
-    setSessionOpen(false);
-  }
+  }, [warehouse.id, loadProducts]);
 
   function handleAddToCart(input: CartLineInput) {
     const key = buildCartKey(input.productId, input.sizeCode ?? null);
@@ -416,19 +419,11 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col overflow-hidden">
-      <SessionScreen
-        isOpen={showLocationSelector}
-        warehouses={warehouses}
-        activeWarehouseId={warehouse.id}
-        onSelect={handleWarehouseSelect}
-      />
-
       <POSHeader
         warehouseName={warehouse.name}
         search={search}
         cartCount={cartCount}
         onSearchChange={setSearch}
-        onWarehouseTap={isWarehouseBoundToSession ? () => {} : () => setSessionOpen(true)}
         onCartTap={() => cartCount > 0 && setCartOpen(true)}
       />
 
@@ -438,9 +433,13 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           loading={loading}
           search={search}
           category={category}
+          sizeFilter={sizeFilter}
+          colorFilter={colorFilter}
           onSelect={(product) => setActiveProduct(structuredClone(product))}
           onClearSearch={() => setSearch('')}
           onCategoryChange={setCategory}
+          onSizeFilterChange={setSizeFilter}
+          onColorFilterChange={setColorFilter}
         />
       </div>
 
