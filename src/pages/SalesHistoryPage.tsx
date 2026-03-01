@@ -13,6 +13,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiGet } from '../lib/apiClient';
 import { printReceipt } from '../lib/printReceipt';
+import { getApiHeaders } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
+import { PERMISSIONS } from '../types/permissions';
 
 interface SalesHistoryPageProps { apiBaseUrl?: string; }
 
@@ -42,6 +45,7 @@ interface Sale {
   itemCount: number;
   soldBy: string | null;
   createdAt: string;
+  voidedAt?: string | null;
   lines: SaleLine[];
 }
 
@@ -162,8 +166,21 @@ function SummaryCard({ label, value, sub, accent }: {
 
 // ── Sale row ───────────────────────────────────────────────────────────────
 
-function SaleRow({ sale, onPrint }: { sale: Sale; onPrint: (s: Sale) => void }) {
+function SaleRow({
+  sale,
+  onPrint,
+  onVoid,
+  canVoid,
+  voiding,
+}: {
+  sale: Sale;
+  onPrint: (s: Sale) => void;
+  onVoid?: (s: Sale) => void;
+  canVoid: boolean;
+  voiding: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const isVoided = Boolean(sale.voidedAt);
 
   return (
     <div className="bg-white rounded-2xl overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)] border border-slate-100">
@@ -181,6 +198,11 @@ function SaleRow({ sale, onPrint }: { sale: Sale; onPrint: (s: Sale) => void }) 
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[13px] font-bold text-slate-900">{sale.receiptId}</span>
               <PayBadge method={sale.paymentMethod} />
+              {isVoided && (
+                <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">
+                  Voided
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
               {fmtDate(sale.createdAt)}
@@ -241,8 +263,8 @@ function SaleRow({ sale, onPrint }: { sale: Sale; onPrint: (s: Sale) => void }) 
             </div>
           </div>
 
-          {/* Print button */}
-          <div className="px-4 pb-3 flex justify-end">
+          {/* Print / Void */}
+          <div className="px-4 pb-3 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => onPrint(sale)}
@@ -251,6 +273,17 @@ function SaleRow({ sale, onPrint }: { sale: Sale; onPrint: (s: Sale) => void }) 
             >
               <IconPrint /> Print receipt
             </button>
+            {canVoid && !isVoided && onVoid && (
+              <button
+                type="button"
+                onClick={() => onVoid(sale)}
+                disabled={voiding}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-red-100 hover:bg-red-200
+                           text-[12px] font-semibold text-red-700 transition-colors disabled:opacity-50"
+              >
+                {voiding ? 'Voiding…' : 'Void sale'}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -267,6 +300,9 @@ const WAREHOUSES = [
 
 export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPageProps) {
 
+  const { hasPermission } = useAuth();
+  const canVoid = hasPermission(PERMISSIONS.POS.VOID_TRANSACTION);
+
   const [sales, setSales]           = useState<Sale[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
@@ -274,6 +310,7 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
   const [dateFilter, setDateFilter] = useState<DateFilter>('today');
   const [search, setSearch]         = useState('');
   const [whDropdown, setWhDropdown] = useState(false);
+  const [voidingId, setVoidingId]    = useState<string | null>(null);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
@@ -323,6 +360,30 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
   const currentWh       = WAREHOUSES.find(w => w.id === warehouseId) ?? WAREHOUSES[0];
 
   // ── Print ─────────────────────────────────────────────────────────────────
+
+  async function handleVoid(sale: Sale) {
+    if (!apiBaseUrl || !canVoid) return;
+    setVoidingId(sale.id);
+    try {
+      const base = apiBaseUrl.replace(/\/$/, '');
+      const res = await fetch(`${base}/api/sales/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getApiHeaders() as Record<string, string> },
+        credentials: 'include',
+        body: JSON.stringify({ saleId: sale.id, warehouseId: sale.warehouseId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError((json as { error?: string }).error ?? `Void failed (${res.status})`);
+        return;
+      }
+      setSales(prev =>
+        prev.map(s => (s.id === sale.id ? { ...s, voidedAt: new Date().toISOString() } : s))
+      );
+    } finally {
+      setVoidingId(null);
+    }
+  }
 
   function handlePrint(sale: Sale) {
     printReceipt({
@@ -511,7 +572,14 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
         {!loading && displayed.length > 0 && (
           <div className="space-y-3">
             {displayed.map(sale => (
-              <SaleRow key={sale.id} sale={sale} onPrint={handlePrint}/>
+              <SaleRow
+                key={sale.id}
+                sale={sale}
+                onPrint={handlePrint}
+                onVoid={handleVoid}
+                canVoid={canVoid}
+                voiding={voidingId === sale.id}
+              />
             ))}
           </div>
         )}

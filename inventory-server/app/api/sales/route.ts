@@ -47,6 +47,72 @@ export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
 
+// ── PATCH /api/sales ──────────────────────────────────────────────────────
+/** Update delivery status. Body: { saleId, deliveryStatus, warehouseId }. deliveryStatus: pending | dispatched | delivered | cancelled */
+export async function PATCH(req: NextRequest): Promise<NextResponse> {
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return withCors(auth, req);
+
+  const h = corsHeaders(req);
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: h });
+  }
+
+  const saleId = String(body.saleId ?? body.sale_id ?? '').trim();
+  const deliveryStatus = String(body.deliveryStatus ?? body.delivery_status ?? '').trim().toLowerCase();
+  const bodyWarehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
+
+  if (!saleId || !deliveryStatus) {
+    return NextResponse.json({ error: 'saleId and deliveryStatus are required' }, { status: 400, headers: h });
+  }
+  const allowed = ['pending', 'dispatched', 'delivered', 'cancelled'];
+  if (!allowed.includes(deliveryStatus)) {
+    return NextResponse.json({ error: `deliveryStatus must be one of: ${allowed.join(', ')}` }, { status: 400, headers: h });
+  }
+
+  const scope = await getScopeForUser(auth.email);
+  const effectiveWarehouseId = bodyWarehouseId && (scope.allowedWarehouseIds.length === 0 || scope.allowedWarehouseIds.includes(bodyWarehouseId))
+    ? bodyWarehouseId
+    : scope.allowedWarehouseIds[0];
+  if (!effectiveWarehouseId) {
+    return NextResponse.json({ error: 'warehouseId required and must be in your scope' }, { status: 400, headers: h });
+  }
+
+  try {
+    const db = getSupabase();
+    const updates: Record<string, unknown> = {
+      delivery_status: deliveryStatus,
+    };
+    if (deliveryStatus === 'delivered') {
+      updates.delivered_at = new Date().toISOString();
+      updates.delivered_by = auth.email ?? null;
+    }
+
+    const { error } = await db
+      .from('sales')
+      .update(updates)
+      .eq('id', saleId)
+      .eq('warehouse_id', effectiveWarehouseId);
+
+    if (error) {
+      if (error.message?.includes('delivery_status') || error.message?.includes('column')) {
+        return NextResponse.json(
+          { error: 'Delivery columns missing. Run DELIVERY_MIGRATION.sql and ADD_DELIVERY_CANCELLED.sql in Supabase.' },
+          { status: 500, headers: h }
+        );
+      }
+      return NextResponse.json({ error: error.message }, { status: 500, headers: h });
+    }
+    return NextResponse.json({ success: true, saleId, deliveryStatus }, { headers: h });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Internal error';
+    return NextResponse.json({ error: message }, { status: 500, headers: h });
+  }
+}
+
 // ── POST /api/sales ───────────────────────────────────────────────────────
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const auth = await requirePosRole(req);
@@ -241,15 +307,51 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const to          = searchParams.get('to')   ?? (date ? `${date}T23:59:59.999Z` : undefined);
   const limit       = Math.min(Number(searchParams.get('limit') ?? 100), 500);
   const offset      = Number(searchParams.get('offset') ?? 0);
+  const pending     = searchParams.get('pending') === 'true' || searchParams.get('pending') === '1';
 
   try {
     const db = getSupabase();
+
+    // Deliveries page: pending=true → return sales with delivery_status in (pending, dispatched, cancelled) and delivery fields
+    if (pending) {
+      const deliveryQuery = db
+        .from('sales')
+        .select(`
+          id, receipt_id, warehouse_id, customer_name,
+          payment_method, subtotal, discount_pct, discount_amt,
+          total, item_count, sold_by, status, created_at,
+          delivery_status, recipient_name, recipient_phone,
+          delivery_address, delivery_notes, expected_date,
+          delivered_at, delivered_by,
+          sale_lines (
+            id, product_id, size_code, product_name, product_sku,
+            unit_price, qty, line_total, product_image_url
+          )
+        `)
+        .eq('warehouse_id', warehouseId)
+        .in('delivery_status', ['pending', 'dispatched', 'cancelled'])
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      const { data: pendingData, error: pendingErr } = await deliveryQuery;
+      if (pendingErr) {
+        if (pendingErr.message?.includes('delivery_status') || pendingErr.message?.includes('column')) {
+          return NextResponse.json(
+            { error: 'Delivery columns missing. Run DELIVERY_MIGRATION.sql and ADD_DELIVERY_CANCELLED.sql in Supabase.' },
+            { status: 500, headers: h }
+          );
+        }
+        return NextResponse.json({ error: pendingErr.message }, { status: 500, headers: h });
+      }
+      const list = (pendingData ?? []).filter((s: { status?: string }) => !s.status || s.status === 'completed');
+      return NextResponse.json({ data: shapeSalesWithDelivery(list), total: list.length }, { headers: h });
+    }
+
     let query = db
       .from('sales')
       .select(`
         id, receipt_id, warehouse_id, customer_name,
         payment_method, subtotal, discount_pct, discount_amt,
-        total, item_count, sold_by, status, created_at,
+        total, item_count, sold_by, status, created_at, voided_at,
         sale_lines (
           id, product_id, size_code, product_name, product_sku,
           unit_price, qty, line_total, product_image_url
@@ -264,15 +366,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const { data, error } = await query;
     if (error) {
-      // Fallback for old schema without product_image_url or status
       if (error.message?.includes('product_image_url') || error.message?.includes('status')) {
         return getSalesLegacy(db, warehouseId, from, to, limit, offset, h);
       }
       return NextResponse.json({ error: error.message }, { status: 500, headers: h });
     }
 
-    // Filter in JS: show completed OR those with no status (old rows)
-    // This is more robust than SQL filter when status column may be missing
     const completed = (data ?? []).filter((s: { status?: string }) =>
       !s.status || s.status === 'completed'
     );
@@ -311,6 +410,31 @@ function shapeSales(rows: Array<Record<string, unknown>>) {
     discountAmt: Number(s.discount_amt ?? 0), total: Number(s.total ?? 0),
     itemCount: s.item_count, status: (s.status as string) ?? 'completed',
     soldBy: s.sold_by, createdAt: s.created_at,
+    voidedAt: (s.voided_at as string | null) ?? null,
+    lines: ((s.sale_lines as Array<Record<string, unknown>>) ?? []).map((l: Record<string, unknown>) => ({
+      id: l.id, productId: l.product_id, sizeCode: l.size_code,
+      name: l.product_name, sku: l.product_sku,
+      unitPrice: Number(l.unit_price ?? 0), qty: l.qty,
+      lineTotal: Number(l.line_total ?? 0),
+      imageUrl: (l.product_image_url as string | null) ?? null,
+    })),
+  }));
+}
+
+function shapeSalesWithDelivery(rows: Array<Record<string, unknown>>) {
+  return rows.map((s: Record<string, unknown>) => ({
+    id: s.id, receiptId: s.receipt_id, warehouseId: s.warehouse_id,
+    customerName: s.customer_name, paymentMethod: s.payment_method,
+    subtotal:  Number(s.subtotal ?? 0), discountPct: Number(s.discount_pct ?? 0),
+    discountAmt: Number(s.discount_amt ?? 0), total: Number(s.total ?? 0),
+    itemCount: s.item_count, soldBy: s.sold_by, createdAt: s.created_at,
+    deliveryStatus: (s.delivery_status as string) ?? 'pending',
+    recipientName: (s.recipient_name as string | null) ?? null,
+    recipientPhone: (s.recipient_phone as string | null) ?? null,
+    deliveryAddress: (s.delivery_address as string | null) ?? null,
+    deliveryNotes: (s.delivery_notes as string | null) ?? null,
+    expectedDate: (s.expected_date as string | null) ?? null,
+    deliveredAt: (s.delivered_at as string | null) ?? null,
     lines: ((s.sale_lines as Array<Record<string, unknown>>) ?? []).map((l: Record<string, unknown>) => ({
       id: l.id, productId: l.product_id, sizeCode: l.size_code,
       name: l.product_name, sku: l.product_sku,

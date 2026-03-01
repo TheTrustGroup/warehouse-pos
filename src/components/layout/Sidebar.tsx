@@ -11,6 +11,7 @@ import {
   Users,
   MapPin,
   Receipt,
+  Truck,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWarehouse } from '../../contexts/WarehouseContext';
@@ -30,6 +31,7 @@ const baseNavigation: NavItem[] = [
   { name: 'Orders', to: '/orders', icon: ClipboardList, permission: PERMISSIONS.ORDERS.VIEW },
   { name: 'POS', to: '/pos', icon: ShoppingCart, permission: PERMISSIONS.POS.ACCESS },
   { name: 'Sales', to: '/sales', icon: Receipt, permission: PERMISSIONS.REPORTS.VIEW_SALES },
+  { name: 'Deliveries', to: '/deliveries', icon: Truck, permission: PERMISSIONS.DELIVERIES.VIEW },
   {
     name: 'Reports',
     to: '/reports',

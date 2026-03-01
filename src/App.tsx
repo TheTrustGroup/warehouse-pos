@@ -42,6 +42,7 @@ const Dashboard = lazyWithRetry(() => import('./pages/Dashboard').then(m => ({ d
 const InventoryPage = lazyWithRetry(() => import('./pages/InventoryPage').then(m => ({ default: m.default })));
 const POSPage = lazyWithRetry(() => import('./pages/POSPage').then(m => ({ default: m.default })));
 const SalesHistoryPage = lazyWithRetry(() => import('./pages/SalesHistoryPage').then(m => ({ default: m.default })));
+const DeliveriesPage = lazyWithRetry(() => import('./pages/DeliveriesPage').then(m => ({ default: m.default })));
 const Orders = lazyWithRetry(() => import('./pages/Orders').then(m => ({ default: m.Orders })));
 const Reports = lazyWithRetry(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
 const Settings = lazyWithRetry(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
@@ -255,6 +256,16 @@ function App() {
                             >
                               <RouteErrorBoundary routeName="Sales History">
                                 <SalesHistoryPageRoute />
+                              </RouteErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="deliveries"
+                          element={
+                            <ProtectedRoute permission={PERMISSIONS.DELIVERIES.VIEW} redirectPathIfForbidden="/pos">
+                              <RouteErrorBoundary routeName="Deliveries">
+                                <DeliveriesPage apiBaseUrl={API_BASE_URL} />
                               </RouteErrorBoundary>
                             </ProtectedRoute>
                           }

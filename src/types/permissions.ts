@@ -32,6 +32,10 @@ export const PERMISSIONS = {
     ASSIGN_DRIVER: 'orders.assign_driver',
     VIEW_ALL: 'orders.view_all',
   },
+  DELIVERIES: {
+    VIEW: 'deliveries.view',
+    UPDATE_STATUS: 'deliveries.update_status',
+  },
   REPORTS: {
     VIEW_SALES: 'reports.view_sales',
     VIEW_INVENTORY: 'reports.view_inventory',
@@ -107,6 +111,7 @@ export const ROLES: Record<string, Role> = {
       ...Object.values(PERMISSIONS.INVENTORY),
       ...Object.values(PERMISSIONS.POS),
       ...Object.values(PERMISSIONS.ORDERS),
+      ...Object.values(PERMISSIONS.DELIVERIES),
       PERMISSIONS.REPORTS.VIEW_SALES,
       PERMISSIONS.REPORTS.VIEW_INVENTORY,
       PERMISSIONS.REPORTS.VIEW_PROFIT,
@@ -168,6 +173,7 @@ export const ROLES: Record<string, Role> = {
     permissions: [
       PERMISSIONS.ORDERS.VIEW,
       PERMISSIONS.ORDERS.UPDATE_STATUS,
+      ...Object.values(PERMISSIONS.DELIVERIES),
     ],
     isSystem: true,
   },

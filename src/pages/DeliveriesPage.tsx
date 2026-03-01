@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL, getApiHeaders } from '../lib/api';
+import { useWarehouse } from '../contexts/WarehouseContext';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -257,7 +258,9 @@ function DeliveryCard({
 
 // ── Main Page ─────────────────────────────────────────────────────────────
 
-export default function DeliveriesPage({ warehouseId = '', apiBaseUrl }: DeliveriesPageProps) {
+export default function DeliveriesPage({ warehouseId: propWarehouseId = '', apiBaseUrl }: DeliveriesPageProps) {
+  const { currentWarehouseId } = useWarehouse();
+  const warehouseId = propWarehouseId || currentWarehouseId || '';
   const base = apiBaseUrl ?? API_BASE_URL;
 
   const [deliveries,     setDeliveries]     = useState<Delivery[]>([]);
