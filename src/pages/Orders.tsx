@@ -31,6 +31,7 @@ export function Orders() {
     assignDriver,
     markAsDelivered,
     markAsFailed,
+    cancelOrder,
     refreshOrders,
   } = useOrders();
   const { isDegraded } = useApiStatus();
@@ -41,6 +42,16 @@ export function Orders() {
 
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  /** Statuses that allow cancellation (not delivered, failed, or already cancelled). */
+  const CANCELLABLE_STATUSES: OrderStatus[] = [
+    'pending',
+    'confirmed',
+    'processing',
+    'ready',
+    'out_for_delivery',
+  ];
+  const isCancellable = (status: OrderStatus) => CANCELLABLE_STATUSES.includes(status);
 
   // Filter orders
   const filteredOrders = orders.filter(order => {
@@ -363,6 +374,20 @@ export function Orders() {
                       {busyOrderId === order.id ? 'Updating…' : 'Mark Failed'}
                     </button>
                   </>
+                )}
+
+                {isCancellable(order.status) && (
+                  <button
+                    onClick={() => {
+                      const reason = prompt('Reason for cancellation (optional):') ?? '';
+                      cancelOrder(order.id, reason.trim() || 'Cancelled by user');
+                    }}
+                    disabled={readOnlyMode || busyOrderId === order.id}
+                    title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : 'Cancel this order and return stock if already deducted'}
+                    className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-slate-600 text-white rounded-xl hover:bg-slate-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
+                  >
+                    {busyOrderId === order.id ? 'Updating…' : 'Cancel order'}
+                  </button>
                 )}
               </div>
             </div>

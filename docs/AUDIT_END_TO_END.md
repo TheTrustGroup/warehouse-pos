@@ -100,7 +100,7 @@
 
 ## 5. Intentional gaps / degraded behavior
 
-- **Orders:** Backend only implements GET (returns `[]`) and POST `/api/orders/deduct`, `/api/orders/return-stock`. There are no PATCH routes for `/api/orders/:id`, `assign-driver`, `deliver`, `fail`, or `cancel`. The frontend OrderContext calls these and treats 404 as “Updated locally. Server order sync not available.” This is intentional until full order CRUD exists.
+- **Orders:** Backend implements GET (returns `[]`), POST `/api/orders/return-stock` (return inventory on cancel), and PATCH `/api/orders/[id]/cancel` (ack 200; no order persistence yet). There are no POST `/api/orders`, POST `/api/orders/deduct`, or PATCH routes for `assign-driver`, `deliver`, or `fail`. The frontend OrderContext calls these and treats 404 as “Updated locally. Server order sync not available.” This is intentional until full order CRUD exists.
 - **Inventory:** Frontend tries `/admin/api/products` first for create/update/delete; on 404 or failure it falls back to `/api/products`. Both paths are implemented and scope-aware.
 
 ---
@@ -109,7 +109,7 @@
 
 1. **Auth consistency:** ✅ Enforced. Every protected route now uses `await requireAuth`/`requireAdmin`/`requirePosRole`. Run `npm run lint:auth` in `inventory-server` before deploy to catch regressions.
 2. **Admin login and warehouse_id:** ✅ Done. `/admin/api/login` now sets `warehouse_id` from `getSingleWarehouseIdForUser(email)` when not provided in the body, so the first `/admin/api/me` response includes it for cashiers.
-3. **Orders:** When adding full order management, add PATCH `/api/orders/[id]` and the sub-routes (e.g. assign-driver, deliver, fail, cancel) and align request/response shapes with OrderContext.
+3. **Orders:** Cancel is implemented: PATCH `/api/orders/[id]/cancel` and POST `/api/orders/return-stock` exist. When adding full order management, add POST `/api/orders`, POST `/api/orders/deduct`, and PATCH sub-routes (assign-driver, deliver, fail) and align request/response shapes with OrderContext.
 4. **E2E tests:** Add a minimal E2E (e.g. Playwright) that: logs in as cashier, opens POS, loads products, and records a sale; and one that logs in as admin, opens Dashboard, then Inventory, and checks warehouse filter. This guards regressions on auth and warehouse binding.
 5. **Health after deploy:** Keep using GET `/api/health` after deploy (and optionally in CI) to confirm the API is up and DB is reachable.
 6. **VITE_API_BASE_URL:** Keep production build requiring `VITE_API_BASE_URL` (already enforced in `lib/api.ts`) and document it in the deploy checklist.

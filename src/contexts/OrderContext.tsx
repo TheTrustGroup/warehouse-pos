@@ -409,7 +409,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Cancel order
+  // Cancel order: return stock if deducted, then set status to cancelled (local + API when available).
   const cancelOrder = async (orderId: string, reason: string) => {
     const order = orders.find(o => o.id === orderId);
     if (!order) {
@@ -420,7 +420,12 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     setBusyOrderId(orderId);
     try {
       if (order.inventory.deducted) {
-        await returnStock(order.items);
+        try {
+          await returnStock(order.items);
+        } catch (returnErr) {
+          if (!is404(returnErr)) throw returnErr;
+          showToast('success', 'Order cancelled. Server return-stock not available; stock returned locally.');
+        }
       }
 
       try {
