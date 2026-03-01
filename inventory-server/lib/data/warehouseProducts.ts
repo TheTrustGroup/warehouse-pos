@@ -35,6 +35,7 @@ export interface ListProduct {
   supplier: unknown;
   tags: unknown[];
   images: string[];
+  color: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -56,6 +57,7 @@ export interface PutProductBody {
   quantity?: number;
   quantityBySize?: Array<{ sizeCode: string; quantity: number }>;
   images?: string[];
+  color?: string | null;
   [key: string]: unknown;
 }
 
@@ -85,7 +87,7 @@ function normalizeDbConstraintError(dbMessage: string, action: 'create' | 'updat
  * Quantity is resolved from warehouse_inventory / warehouse_inventory_by_size per warehouse.
  */
 const WAREHOUSE_PRODUCTS_SELECT =
-  'id, sku, barcode, name, description, category, size_kind, selling_price, cost_price, reorder_level, location, supplier, tags, images, version, created_at, updated_at';
+  'id, sku, barcode, name, description, category, size_kind, selling_price, cost_price, reorder_level, location, supplier, tags, images, color, version, created_at, updated_at';
 
 /** List products for a warehouse. Works when warehouse_products has no warehouse_id (one row per product). */
 export async function getWarehouseProducts(
@@ -184,6 +186,7 @@ export async function getWarehouseProducts(
       supplier: row.supplier ?? null,
       tags: Array.isArray(row.tags) ? row.tags : [],
       images: Array.isArray(row.images) ? (row.images as string[]) : [],
+      color: row.color != null ? String(row.color).trim() || null : null,
       version: Number(row.version ?? 0),
       createdAt: String(row.created_at ?? ''),
       updatedAt: String(row.updated_at ?? ''),
@@ -249,6 +252,7 @@ export async function getProductById(
     supplier: r.supplier ?? null,
     tags: Array.isArray(r.tags) ? r.tags : [],
     images: Array.isArray(r.images) ? (r.images as string[]) : [],
+    color: r.color != null ? String(r.color).trim() || null : null,
     version: Number(r.version ?? 0),
     createdAt: String(r.created_at ?? ''),
     updatedAt: String(r.updated_at ?? ''),
@@ -288,6 +292,7 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
   const quantity = Number(body.quantity ?? 0);
   const now = new Date().toISOString();
 
+  const colorVal = body.color != null ? String(body.color).trim() || null : null;
   const productRow = {
     id,
     sku,
@@ -303,6 +308,7 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
     supplier: body.supplier ?? null,
     tags: Array.isArray(body.tags) ? body.tags : [],
     images: Array.isArray(body.images) ? body.images : [],
+    color: colorVal,
     version: 1,
     created_at: now,
     updated_at: now,
@@ -369,6 +375,7 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
     supplier: productRow.supplier,
     tags: productRow.tags,
     images: productRow.images,
+    color: colorVal,
     version: productRow.version,
     createdAt: now,
     updatedAt: now,
@@ -407,6 +414,7 @@ export async function updateWarehouseProduct(
   if (body.supplier !== undefined) updates.supplier = body.supplier;
   if (body.tags !== undefined) updates.tags = Array.isArray(body.tags) ? body.tags : [];
   if (body.images !== undefined) updates.images = Array.isArray(body.images) ? body.images : [];
+  if (body.color !== undefined) updates.color = body.color != null ? String(body.color).trim() || null : null;
 
   updates.version = (existing.version ?? 0) + 1;
 

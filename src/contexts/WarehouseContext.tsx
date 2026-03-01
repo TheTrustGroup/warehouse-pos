@@ -67,8 +67,8 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [currentWarehouseId, setCurrentWarehouseIdState] = useState<string>(() => {
     if (typeof localStorage !== 'undefined') {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) return stored;
+      const stored = localStorage.getItem(STORAGE_KEY)?.trim();
+      if (stored && stored !== '00000000-0000-0000-0000-000000000000') return stored;
     }
     return DEFAULT_WAREHOUSE_ID;
   });

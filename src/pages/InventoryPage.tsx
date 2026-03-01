@@ -41,6 +41,12 @@ const FALLBACK_WAREHOUSES: Pick<Warehouse, 'id' | 'name'>[] = [
   { id: '00000000-0000-0000-0000-000000000002', name: 'Main Town' },
 ];
 
+/** Reject empty or all-zeros warehouse id so we never call APIs with an invalid scope. */
+function isValidWarehouseId(id: string): boolean {
+  const t = (id ?? '').trim();
+  return t.length > 0 && t !== '00000000-0000-0000-0000-000000000000';
+}
+
 // ── Stat helpers ──────────────────────────────────────────────────────────
 
 function getProductQty(p: Product): number {
@@ -143,12 +149,28 @@ function unwrapProduct(raw: unknown): Product | null {
   return normalizeQuantityBySize(inner as Record<string, unknown>);
 }
 
+/** Normalize API list so each product has variants.color from API's top-level color (for color filter). */
 function unwrapProductList(raw: unknown): Product[] {
-  if (Array.isArray(raw)) return raw as Product[];
+  if (Array.isArray(raw)) {
+    return raw.map((item: Record<string, unknown>) => ({
+      ...item,
+      variants: {
+        ...(typeof item.variants === 'object' && item.variants ? item.variants : {}),
+        color: (item.color != null ? String(item.color).trim() : '') || (item.variants as { color?: string } | undefined)?.color,
+      },
+    })) as Product[];
+  }
   if (!raw || typeof raw !== 'object') return [];
   const r = raw as Record<string, unknown>;
   const list = r.data ?? r.products ?? r.items ?? [];
-  return Array.isArray(list) ? list : [];
+  if (!Array.isArray(list)) return [];
+  return list.map((item: Record<string, unknown>) => ({
+    ...item,
+    variants: {
+      ...(typeof item.variants === 'object' && item.variants ? item.variants : {}),
+      color: (item.color != null ? String(item.color).trim() : '') || (item.variants as { color?: string } | undefined)?.color,
+    },
+  })) as Product[];
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────
@@ -456,11 +478,11 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
   const loadSizeCodes = useCallback(async () => {
     try {
-      const raw  = await apiFetch<unknown>(`/api/size-codes?warehouse_id=${encodeURIComponent(warehouseId)}`);
+      const raw  = await apiFetch<unknown>('/api/size-codes');
       const list = Array.isArray(raw) ? raw : (raw as { data?: SizeCode[] })?.data ?? [];
       setSizeCodes(list);
     } catch { /* non-critical */ }
-  }, [warehouseId, apiFetch]);
+  }, [apiFetch]);
 
   // ── Polling ───────────────────────────────────────────────────────────────
 
@@ -484,19 +506,24 @@ export default function InventoryPage(_props: InventoryPageProps) {
     didInitialLoad.current = false;
     loadAbortRef.current?.abort();
 
-    loadProducts();
     loadSizeCodes();
-    const pollDelay = setTimeout(() => startPoll(), 5000);
+    if (isValidWarehouseId(warehouseId)) {
+      loadProducts();
+    } else {
+      setLoading(false);
+    }
+    const pollDelay = isValidWarehouseId(warehouseId) ? setTimeout(() => startPoll(), 5000) : null;
 
     const onVisible = () => {
       if (!didInitialLoad.current) return;
-      if (document.visibilityState === 'visible' && !modalOpenRef.current) loadProducts(true);
+      if (document.visibilityState === 'visible' && !modalOpenRef.current && isValidWarehouseId(warehouseId)) loadProducts(true);
     };
     document.addEventListener('visibilitychange', onVisible);
     const initGate = setTimeout(() => { didInitialLoad.current = true; }, 500);
 
     return () => {
-      clearTimeout(pollDelay); clearTimeout(initGate);
+      if (pollDelay != null) clearTimeout(pollDelay);
+      clearTimeout(initGate);
       stopPoll();
       document.removeEventListener('visibilitychange', onVisible);
       loadAbortRef.current?.abort();

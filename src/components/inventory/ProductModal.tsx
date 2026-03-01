@@ -47,6 +47,9 @@ function compressImage(file: File, maxPx = 900, quality = 0.82): Promise<string>
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+/** Color options for the product form (matches inventory filter pills). */
+const FORM_COLOR_OPTIONS = ['', 'Black', 'White', 'Red', 'Blue', 'Brown', 'Green', 'Grey', 'Navy', 'Beige', 'Multi'];
+
 export interface Product {
   id?: string;
   name: string;
@@ -64,6 +67,7 @@ export interface Product {
   supplier?: { name?: string; contact?: string; email?: string };
   tags?: string[];
   images?: string[];
+  color?: string | null;
   warehouseId?: string;
 }
 
@@ -72,6 +76,7 @@ interface FormState {
   sku: string;
   barcode: string;
   category: string;
+  color: string;
   description: string;
   sellingPrice: number | '';
   costPrice: number | '';
@@ -101,11 +106,13 @@ function generateSKU(): string {
 
 export function buildInitialForm(product?: Product | null): FormState {
   if (product) {
+    const color = (product as { color?: string | null }).color ?? (product as { variants?: { color?: string } }).variants?.color ?? '';
     return {
       name: product.name ?? '',
       sku: product.sku ?? '',
       barcode: product.barcode ?? '',
       category: product.category ?? '',
+      color: color ?? '',
       description: product.description ?? '',
       sellingPrice: product.sellingPrice ?? '',
       costPrice: product.costPrice ?? '',
@@ -138,6 +145,7 @@ export function buildInitialForm(product?: Product | null): FormState {
     sku: generateSKU(),
     barcode: '',
     category: '',
+    color: '',
     description: '',
     sellingPrice: '',
     costPrice: '',
@@ -593,6 +601,7 @@ export default function ProductModal({
         sku: form.sku.trim(),
         barcode: form.barcode.trim(),
         category: form.category.trim(),
+        color: form.color.trim() || undefined,
         description: form.description.trim(),
         sellingPrice: Number(form.sellingPrice) || 0,
         costPrice: Number(form.costPrice) || 0,
@@ -752,6 +761,20 @@ export default function ProductModal({
                     <option key={c} value={c} />
                   ))}
                 </datalist>
+              </Field>
+
+              {/* Color */}
+              <Field label="Color" hint="Used for filtering in inventory.">
+                <select
+                  value={form.color}
+                  onChange={e => set('color', e.target.value)}
+                  className={inputCls()}
+                >
+                  <option value="">Uncategorized</option>
+                  {FORM_COLOR_OPTIONS.filter(Boolean).map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </Field>
 
               {/* SKU */}

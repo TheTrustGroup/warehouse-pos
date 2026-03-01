@@ -20,6 +20,7 @@ There is no safe rollback for `20250222110000_consolidate_main_store_remove_dc.s
 | Script | Purpose |
 |--------|--------|
 | `seed_stores_warehouses_dc_maintown.sql` | Seed Main Store (store + MAIN warehouse) and Main Town (store + MAINTOWN). Safe to run multiple times. |
+| `verify_warehouses_ready_for_data.sql` | Confirm both MAIN and MAINTOWN exist and are ready for data (inventory/sales counts, FK integrity). Run anytime. |
 | `verify_user_scopes.sql` | Verify user_scopes: one row per cashier, correct store/warehouse. Run after seed. |
 | `backfill_sized_products_missing_size_rows.sql` | Backfill `warehouse_inventory_by_size` for sized products missing size rows. |
 | `setup.sql` | Schema/setup (tables, RPC). See project docs. |
