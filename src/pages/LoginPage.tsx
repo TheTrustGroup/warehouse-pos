@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { validateLoginForm } from '../lib/validationSchemas';
-import { DoubleELogo } from '../components/ui/DoubleELogo';
+import { BrandLockup } from '../components/ui/BrandLockup';
 
 const IconMail = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -142,24 +142,7 @@ export default function LoginPage() {
         </svg>
 
         <div className="relative z-10">
-          {/* Logo + wordmark: world-class lockup */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-4">
-              <DoubleELogo size={56} variant="dark" className="flex-shrink-0" />
-              <span
-                className="gradient-text font-extrabold leading-tight tracking-tight text-[22px] uppercase"
-                style={{
-                  fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif",
-                  letterSpacing: '0.02em',
-                }}
-              >
-                Extreme Dept Kidz
-              </span>
-            </div>
-            <p className="text-sm font-semibold tracking-wide pl-[72px]" style={{ color: 'rgba(240,237,232,0.7)' }}>
-              Inventory & POS
-            </p>
-          </div>
+          <BrandLockup variant="login" />
 
           {/* Tagline */}
           <p className="mt-8 text-[15px] leading-relaxed max-w-[280px]" style={{ color: BRAND_TEXT_MUTED }}>

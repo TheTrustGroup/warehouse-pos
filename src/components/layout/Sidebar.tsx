@@ -16,7 +16,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useWarehouse } from '../../contexts/WarehouseContext';
 import { PERMISSIONS, ROLES, type Permission } from '../../types/permissions';
-import { DoubleELogo } from '../ui/DoubleELogo';
+import { BrandLockup } from '../ui/BrandLockup';
 
 interface NavItem {
   name: string;
@@ -71,25 +71,9 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 w-[280px] min-w-[280px] h-[var(--h-viewport)] max-h-[var(--h-viewport)] solid-panel border-r border-slate-200/80 flex flex-col shadow-lg flex-shrink-0">
-      {/* Logo + wordmark: same lockup as login — logo, Extreme Dept Kidz, Inventory & POS beneath */}
-      <div className="p-5 border-b border-slate-200/30 flex-shrink-0">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <DoubleELogo size={44} variant="light" className="flex-shrink-0" />
-            <h1
-              className="gradient-text font-extrabold leading-tight tracking-tight text-lg uppercase whitespace-nowrap"
-              style={{
-                fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif",
-                letterSpacing: '0.02em',
-              }}
-            >
-              Extreme Dept Kidz
-            </h1>
-          </div>
-          <p className="text-xs font-semibold text-slate-500 pl-14 tracking-wide">
-            Inventory & POS
-          </p>
-        </div>
+      {/* Brand lockup: logo, name, tagline — refined alignment & typography */}
+      <div className="px-5 py-4 border-b border-slate-200/30 flex-shrink-0">
+        <BrandLockup variant="sidebar" />
       </div>
 
       {/* Warehouse switcher: global scope for Dashboard + Inventory. Hidden when user is bound to one warehouse (e.g. POS cashier). */}
