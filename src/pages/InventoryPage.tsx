@@ -344,21 +344,13 @@ export default function InventoryPage(_props: InventoryPageProps) {
   // Derived stats (memoised — recompute only when products change)
   const stats = useMemo(() => computeStats(products), [products]);
 
-  // Unique size codes and colors from products (for filter dropdowns)
+  // Unique size codes from products (for size filter dropdown; color uses COLOR_OPTIONS pills)
   const uniqueSizes = useMemo(() => {
     const set = new Set<string>();
     for (const p of products) {
       if (p.sizeKind === 'na') set.add('NA');
       else if (p.sizeKind === 'one_size') set.add('One size');
       else for (const s of p.quantityBySize ?? []) if (s.sizeCode) set.add(s.sizeCode);
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [products]);
-  const uniqueColors = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of products) {
-      const c = (p.variants?.color ?? '').trim();
-      if (c) set.add(c);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [products]);
