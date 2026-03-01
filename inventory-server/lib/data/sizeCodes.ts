@@ -3,18 +3,9 @@
  * Used for sneakers, clothing, kidswear; non-sized products use NA or OS.
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
 
 const TABLE = 'size_codes';
-
-const getSupabase = (): SupabaseClient => {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required.');
-  }
-  return createClient(url, key, { auth: { persistSession: false } });
-};
 
 export interface SizeCodeRow {
   size_code: string;
