@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "ci:inventory": "node scripts/ci-inventory-invariants.mjs",
-    "ci": "npm run ci:inventory && npm run test && npm run build"
+    "ci": "npm run ci:inventory && npm run test && npm run build",
+    "guard:uncommitted": "node scripts/guard-uncommitted.mjs"
   },
   "dependencies": {
     "@ericblade/quagga2": "^1.8.1",

@@ -32,6 +32,9 @@ const POLL_MS    = 30_000;
 const PAGE_SIZE  = 50;
 const CATEGORIES = ['Sneakers', 'Slippers', 'Boots', 'Sandals', 'Accessories'];
 
+/** Color filter options (pills). "All" and "Uncategorized" plus standard palette. */
+const COLOR_OPTIONS = ['All', 'Black', 'White', 'Red', 'Blue', 'Brown', 'Green', 'Grey', 'Navy', 'Beige', 'Multi', 'Uncategorized'];
+
 /** Fallback list when WarehouseContext has not yet loaded. IDs must match backend. */
 const FALLBACK_WAREHOUSES: Pick<Warehouse, 'id' | 'name'>[] = [
   { id: '00000000-0000-0000-0000-000000000001', name: 'Main Store' },
@@ -104,7 +107,11 @@ function applyFilters(
   }
   if (colorFilter) {
     const colorNorm = colorFilter.trim().toLowerCase();
-    r = r.filter(p => (p.variants?.color ?? '').trim().toLowerCase() === colorNorm);
+    if (colorNorm === 'uncategorized') {
+      r = r.filter(p => !(p.variants?.color ?? '').trim());
+    } else {
+      r = r.filter(p => (p.variants?.color ?? '').trim().toLowerCase() === colorNorm);
+    }
   }
   r.sort((a, b) => {
     const qa = getProductQty(a), qb = getProductQty(b);
@@ -774,34 +781,46 @@ export default function InventoryPage(_props: InventoryPageProps) {
           ))}
         </div>
 
-        {/* Size filter */}
-        <div className="flex-shrink-0">
+        {/* Size filter — dropdown (SIZE) */}
+        <div className="flex-shrink-0 flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Size</span>
           <select
             value={sizeFilter}
             onChange={(e) => setSizeFilter(e.target.value)}
             className="h-8 pl-2.5 pr-7 rounded-full border border-slate-200 bg-white text-[12px] font-bold text-slate-700 min-w-[100px] cursor-pointer"
             aria-label="Filter by size"
           >
-            <option value="">All sizes</option>
+            <option value="">All</option>
             {uniqueSizes.map(s => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
         </div>
 
-        {/* Color filter */}
-        <div className="flex-shrink-0">
-          <select
-            value={colorFilter}
-            onChange={(e) => setColorFilter(e.target.value)}
-            className="h-8 pl-2.5 pr-7 rounded-full border border-slate-200 bg-white text-[12px] font-bold text-slate-700 min-w-[100px] cursor-pointer"
-            aria-label="Filter by color"
-          >
-            <option value="">All colors</option>
-            {uniqueColors.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+        {/* Color filter — pills (COLOR) */}
+        <div className="flex-shrink-0 flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Color</span>
+          <div className="flex flex-wrap gap-1.5">
+            {COLOR_OPTIONS.map(c => {
+              const value = c === 'All' ? '' : c;
+              const selected = colorFilter.toLowerCase() === value.toLowerCase();
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColorFilter(value)}
+                  className={`flex-shrink-0 h-8 px-3 rounded-full text-[12px] font-bold border transition-all duration-150
+                    ${selected
+                      ? 'bg-slate-900 border-slate-900 text-white'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}
+                  aria-pressed={selected}
+                  aria-label={`Filter by color: ${c}`}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Sort — compact */}
