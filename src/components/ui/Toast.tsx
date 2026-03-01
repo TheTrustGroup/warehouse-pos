@@ -1,19 +1,27 @@
 import { useEffect } from 'react';
 import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
 import { Button } from './Button';
+interface ToastActionProp {
+  label: string;
+  onAction: () => void;
+}
 
 interface ToastProps {
   type: 'success' | 'error' | 'warning';
   message: string;
   onClose: () => void;
   duration?: number;
+  action?: ToastActionProp;
 }
 
-export function Toast({ type, message, onClose, duration = 3000 }: ToastProps) {
+export function Toast({ type, message, onClose, duration = 3000, action }: ToastProps) {
+  const autoDismissMs = action ? 0 : duration;
+
   useEffect(() => {
-    const timer = setTimeout(onClose, duration);
+    if (autoDismissMs <= 0) return;
+    const timer = setTimeout(onClose, autoDismissMs);
     return () => clearTimeout(timer);
-  }, [duration, onClose]);
+  }, [autoDismissMs, onClose]);
 
   const icons = {
     success: CheckCircle,
@@ -29,6 +37,11 @@ export function Toast({ type, message, onClose, duration = 3000 }: ToastProps) {
 
   const Icon = icons[type];
 
+  const handleAction = () => {
+    action?.onAction();
+    onClose();
+  };
+
   return (
     <div
       role="alert"
@@ -36,6 +49,17 @@ export function Toast({ type, message, onClose, duration = 3000 }: ToastProps) {
     >
       <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} aria-hidden />
       <p className="font-medium flex-1 text-sm">{message}</p>
+      {action && (
+        <Button
+          type="button"
+          variant="primary"
+          onClick={handleAction}
+          className="flex-shrink-0 min-h-touch"
+          aria-label={action.label}
+        >
+          {action.label}
+        </Button>
+      )}
       <Button type="button" variant="action" onClick={onClose} className="flex-shrink-0" aria-label="Dismiss">
         <X className="w-4 h-4" strokeWidth={2} />
       </Button>

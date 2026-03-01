@@ -1,41 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, MapPin } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  Package,
-  ShoppingCart,
-  BarChart3,
-  Settings,
-  Users,
-  ClipboardList,
-  MapPin,
-  Receipt,
-} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWarehouse } from '../../contexts/WarehouseContext';
-import { PERMISSIONS, ROLES } from '../../types/permissions';
+import { ROLES } from '../../types/permissions';
+import { baseNavigation } from '../../config/navigation';
 import { Button } from '../ui/Button';
-
-const baseNavigation = [
-  { name: 'Dashboard', to: '/', icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD.VIEW },
-  { name: 'Inventory', to: '/inventory', icon: Package, permission: PERMISSIONS.INVENTORY.VIEW },
-  { name: 'Orders', to: '/orders', icon: ClipboardList, permission: PERMISSIONS.ORDERS.VIEW },
-  { name: 'POS', to: '/pos', icon: ShoppingCart, permission: PERMISSIONS.POS.ACCESS },
-  { name: 'Sales', to: '/sales', icon: Receipt, permission: PERMISSIONS.REPORTS.VIEW_SALES },
-  {
-    name: 'Reports',
-    to: '/reports',
-    icon: BarChart3,
-    anyPermissions: [
-      PERMISSIONS.REPORTS.VIEW_SALES,
-      PERMISSIONS.REPORTS.VIEW_INVENTORY,
-      PERMISSIONS.REPORTS.VIEW_PROFIT,
-    ],
-  },
-  { name: 'Users', to: '/users', icon: Users, permission: PERMISSIONS.USERS.VIEW },
-  { name: 'Settings', to: '/settings', icon: Settings, permission: PERMISSIONS.SETTINGS.VIEW },
-];
 
 function getRoleDisplayName(roleId: string | undefined): string {
   if (roleId == null || roleId === '') return '—';

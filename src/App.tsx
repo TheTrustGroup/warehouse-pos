@@ -97,18 +97,34 @@ function SalesHistoryPageRoute() {
   return <SalesHistoryPage apiBaseUrl={API_BASE_URL} />;
 }
 
-/** Listens for service worker update event and shows toast. Must be inside ToastProvider. */
+/** Listens for service worker update event and shows toast with Refresh action. Must be inside ToastProvider. */
 function ServiceWorkerUpdateListener() {
   const { showToast } = useToast();
   const handlerRef = useRef(() => {
-    showToast('warning', 'App updated - Refresh to see changes');
+    showToast('warning', 'App updated. Tap Refresh to load the latest.', {
+      action: {
+        label: 'Refresh',
+        onAction: () => {
+          window.location.reload();
+        },
+      },
+    });
   });
-  handlerRef.current = () => showToast('warning', 'App updated - Refresh to see changes');
+  handlerRef.current = () => {
+    showToast('warning', 'App updated. Tap Refresh to load the latest.', {
+      action: {
+        label: 'Refresh',
+        onAction: () => {
+          window.location.reload();
+        },
+      },
+    });
+  };
   useEffect(() => {
     const handler = () => handlerRef.current();
     window.addEventListener('sw-update', handler);
     return () => window.removeEventListener('sw-update', handler);
-  }, []);
+  }, [showToast]);
   return null;
 }
 
