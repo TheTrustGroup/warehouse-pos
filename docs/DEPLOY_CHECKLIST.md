@@ -8,7 +8,7 @@
 - **Cache:** `vercel.json` sets `Cache-Control: no-store` for `/` and `/index.html` so the next request after deploy gets fresh HTML. If you use another host, set the same for the document URL.
 - **Service worker:** After deploy, users may need a hard refresh (Ctrl+Shift+R / Cmd+Shift+R) or to close and reopen the tab so the new bundle (and new SW if updated) is used.
 
-## 2. Backend API (inventory-server-iota.vercel.app)
+## 2. Backend API (EDK: warehouse-pos-api-v2.vercel.app)
 
 - **CORS:** All API routes (including `GET /api/health`) attach CORS via `corsHeaders(request)`. Defaults allow **both** client frontends: `https://warehouse.extremedeptkidz.com` and `https://warehouse.hunnidofficial.com` (and suffixes `extremedeptkidz.com`, `hunnidofficial.com`). `ALLOWED_ORIGINS` / `ALLOWED_ORIGIN_SUFFIXES` are **additive only**. If you add a new route, use `corsHeaders(request)` and `withCors(response, request)`.
 - **Env:** Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_ANON_KEY`) in the Vercel project for the API. `/api/size-codes` now returns **200 with data: []** when DB/env is missing (no 500), so the inventory page loads even if size codes fail; the size filter may be empty until env is fixed.
@@ -27,10 +27,11 @@
    - Or: `curl -s -o /dev/null -w "%{http_code}" {API_URL}/api/health` → expect `200`.
    - If health fails, do not consider the deploy complete; fix API/env and redeploy.
 
-## 4. Multi-client (shared backend)
+## 4. Multi-client (separate stacks)
 
-This app is deployed for **separate clients** (e.g. Extreme Dept Kidz, Hunnid Official) from the same codebase. **Right path:**
+This codebase is used for **separate clients** (e.g. Extreme Dept Kidz, Hunnid Official). Each client has its **own** Supabase and its **own** Vercel deployment(s). **Right path:**
 
-- **One backend** (this repo’s `inventory-server`) is the canonical API. Deploy it to a single URL (e.g. `inventory-server-iota.vercel.app`). CORS in this repo allows both `warehouse.extremedeptkidz.com` and `warehouse.hunnidofficial.com` by default.
-- **Each client** gets its own frontend deployment (its own domain). Set each frontend’s `VITE_API_BASE_URL` at build time to that **same** API URL so both use the same backend.
-- **Clones:** If you forked this repo for another client (e.g. Hunnid), do **not** connect the clone’s `inventory-server` to the same Vercel project as this repo. Either (a) point the clone’s frontend at this repo’s deployed API URL and deploy only the frontend from the clone, or (b) deploy the clone’s backend to a **different** Vercel project/URL and add both client origins to CORS there. Only one source should deploy to a given API URL to avoid CORS and code drift.
+- **Per client:** One frontend URL + one API URL + one Supabase. The frontend’s `VITE_API_BASE_URL` at build time must point to **that** client’s API (the API deployed with that client’s Supabase env). Do not point the Extreme Dept Kidz frontend at the Hunnid API (or vice versa), or you get CORS and wrong data.
+- **This repo** (TheTrustGroup/warehouse-pos): Frontend project “warehouse-pos” has `VITE_API_BASE_URL=https://warehouse-pos-api-v2.vercel.app`. API project “warehouse-pos-api-v2” deploys `inventory-server` from this repo with EDK Supabase env. `warehouse.extremedeptkidz.com` talks only to this API.
+- **Clone (e.g. Hunnid):** Own repo, own Vercel project(s), own Supabase. Deploy the clone’s frontend with `VITE_API_BASE_URL` = the clone’s API URL; deploy the clone’s `inventory-server` with the clone’s Supabase. Then `warehouse.hunnidofficial.com` talks only to Hunnid’s backend.
+- **CORS:** This repo’s backend allows both client origins by default so the same code can serve either frontend if needed. When each client uses its own API URL, each backend only sees its own frontend’s origin.
