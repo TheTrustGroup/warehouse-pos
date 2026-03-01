@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 /** POST /api/inventory/deduct — atomic batch deduction for POS sale. Cashier+ only. */
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const auth = requirePosRole(request);
+  const auth = await requirePosRole(request);
   if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const body = await request.json();

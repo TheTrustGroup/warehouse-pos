@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 /** GET /api/sync-rejections — list failed offline sync attempts (admin only). */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const auth = requireAdmin(request);
+  const auth = await requireAdmin(request);
   if (auth instanceof NextResponse) return auth as NextResponse;
   try {
     const { searchParams } = new URL(request.url);

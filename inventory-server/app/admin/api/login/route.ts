@@ -4,8 +4,10 @@ import {
   setSessionCookie,
   sessionUserToJson,
   createSessionToken,
+  type SessionBinding,
 } from '@/lib/auth/session';
 import { isPosRestrictedEmail, verifyPosPassword } from '@/lib/auth/posPasswords';
+import { getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
 import { corsHeaders } from '@/lib/cors';
 
 export const dynamic = 'force-dynamic';
@@ -42,14 +44,23 @@ export async function POST(request: NextRequest) {
     }
 
     const role = getRoleFromEmail(email);
-    const binding =
+    let binding: SessionBinding | undefined =
       body.warehouse_id != null || body.store_id !== undefined || body.device_id != null
         ? {
             warehouse_id: body.warehouse_id != null ? String(body.warehouse_id).trim() : undefined,
-            store_id: body.store_id !== undefined ? body.store_id : undefined,
+            store_id: body.store_id !== undefined ? String(body.store_id) : undefined,
             device_id: body.device_id != null ? String(body.device_id).trim() : undefined,
           }
         : undefined;
+
+    if (!binding?.warehouse_id) {
+      const singleWarehouseId = await getSingleWarehouseIdForUser(email);
+      if (singleWarehouseId) {
+        binding = binding ?? {};
+        binding.warehouse_id = singleWarehouseId;
+      }
+    }
+
     const sessionPayload = { email, role, exp: 0, ...binding };
     const sessionToken = await createSessionToken(email, role, binding);
     const response = NextResponse.json({

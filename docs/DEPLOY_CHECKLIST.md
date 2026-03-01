@@ -21,3 +21,4 @@
 2. Deploy **entire** `dist/` (e.g. Vercel frontend project).
 3. Deploy API (inventory-server) with correct Supabase env.
 4. Hard refresh or new tab when testing so no old HTML/chunks are used.
+5. **Health:** After API deploy, `GET {API_URL}/api/health` should return `{ "status": "ok", ... }`. Run `npm run test:health` from `inventory-server` with correct env or ping the URL manually.
