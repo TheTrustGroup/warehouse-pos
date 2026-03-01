@@ -23,6 +23,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
+import { onUnauthorized } from '../lib/onUnauthorized';
 import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -132,6 +133,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         });
         clearTimeout(timeout);
         if (!res.ok) {
+          if (res.status === 401) onUnauthorized();
           const body = await res.json().catch(() => ({}));
           throw new Error(
             (body as { message?: string; error?: string }).message ??

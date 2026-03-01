@@ -7,6 +7,7 @@
 
 import { getApiHeaders } from './api';
 import { getApiCircuitBreaker } from './circuit';
+import { onUnauthorized } from './onUnauthorized';
 
 const DEFAULT_MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
@@ -156,6 +157,8 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
       err.status = res.status;
       err.response = res;
       lastError = err;
+
+      if (res.status === 401) onUnauthorized();
 
       // Only open circuit for server errors (5xx). 4xx (e.g. 404 wrong endpoint, 401/403) and CORS are client/config issues.
       if (res.status >= 500) circuit.recordFailure();

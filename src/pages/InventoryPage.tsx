@@ -16,6 +16,7 @@ import ProductCard, { ProductCardSkeleton, type Product } from '../components/in
 import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
+import { onUnauthorized } from '../lib/onUnauthorized';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import type { Warehouse } from '../types';
 
@@ -411,6 +412,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
       clearTimeout(timeout);
 
       if (!res.ok) {
+        if (res.status === 401) onUnauthorized();
         const body = await res.json().catch(() => ({}));
         const msg  = (body as { message?: string; error?: string }).message ?? (body as { error?: string }).error ?? `HTTP ${res.status}`;
         const e    = new Error(msg) as Error & { status: number };

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useRef, ReactNode, useEffect, useC
 import { User } from '../types';
 import { ROLES, PERMISSIONS, Permission } from '../types/permissions';
 import { API_BASE_URL, getAuthToken, handleApiResponse } from '../lib/api';
+import { setOnUnauthorized, clearSessionStorage } from '../lib/onUnauthorized';
 import { parseLoginResponse, parseAuthUserPayload } from '../lib/apiSchemas';
 
 const DEMO_ROLE_KEY = 'warehouse_demo_role';
@@ -232,6 +233,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Session verification: on app load always call auth/me (admin/api/me then api/auth/user). Block dashboard until role is confirmed; no role from localStorage.
   useEffect(() => {
     checkAuthStatus();
+  }, []);
+
+  // When any API returns 401, clear session so ProtectedRoute redirects to login (avoids stuck "logged in" with invalid/expired token).
+  useEffect(() => {
+    setOnUnauthorized(() => {
+      clearSessionStorage();
+      setUser(null);
+    });
+    return () => setOnUnauthorized(null);
   }, []);
 
   // Track user activity for inactivity timeout (only when authenticated)
