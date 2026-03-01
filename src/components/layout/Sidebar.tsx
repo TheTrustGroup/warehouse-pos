@@ -71,11 +71,22 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 w-[280px] min-w-[280px] h-[var(--h-viewport)] max-h-[var(--h-viewport)] solid-panel border-r border-slate-200/80 flex flex-col shadow-lg flex-shrink-0">
-      {/* Logo: monochrome double-E + tagline */}
+      {/* Logo + wordmark: same lockup as login — logo, Extreme Dept Kidz, Inventory & POS beneath */}
       <div className="p-5 border-b border-slate-200/30 flex-shrink-0">
         <div className="flex flex-col gap-2">
-          <DoubleELogo size={44} variant="light" className="flex-shrink-0" />
-          <p className="text-xs font-medium text-slate-500">
+          <div className="flex items-center gap-3">
+            <DoubleELogo size={44} variant="light" className="flex-shrink-0" />
+            <h1
+              className="gradient-text font-extrabold leading-tight tracking-tight text-lg uppercase whitespace-nowrap"
+              style={{
+                fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif",
+                letterSpacing: '0.02em',
+              }}
+            >
+              Extreme Dept Kidz
+            </h1>
+          </div>
+          <p className="text-xs font-semibold text-slate-500 pl-14 tracking-wide">
             Inventory & POS
           </p>
         </div>

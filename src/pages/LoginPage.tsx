@@ -42,7 +42,6 @@ const SERVER_UNREACHABLE = 'Cannot reach the server. Check your connection and t
 const FEATURES = ['Multi-warehouse inventory', 'Size-based stock tracking', 'Fast POS checkout'] as const;
 
 const BRAND_BG = '#1A1917';
-const BRAND_TEXT = 'rgba(240,237,232,0.95)';
 const BRAND_TEXT_MUTED = 'rgba(240,237,232,0.5)';
 const BRAND_TEXT_FOOTER = 'rgba(240,237,232,0.25)';
 
@@ -143,10 +142,21 @@ export default function LoginPage() {
         </svg>
 
         <div className="relative z-10">
-          {/* Monochrome logo + Inventory & POS */}
-          <div className="flex flex-col gap-3">
-            <DoubleELogo size={56} variant="dark" className="flex-shrink-0" />
-            <p className="text-sm font-semibold tracking-tight" style={{ color: BRAND_TEXT }}>
+          {/* Logo + wordmark: world-class lockup */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-4">
+              <DoubleELogo size={56} variant="dark" className="flex-shrink-0" />
+              <span
+                className="gradient-text font-extrabold leading-tight tracking-tight text-[22px] uppercase"
+                style={{
+                  fontFamily: "'Barlow Condensed', 'Arial Narrow', sans-serif",
+                  letterSpacing: '0.02em',
+                }}
+              >
+                Extreme Dept Kidz
+              </span>
+            </div>
+            <p className="text-sm font-semibold tracking-wide pl-[72px]" style={{ color: 'rgba(240,237,232,0.7)' }}>
               Inventory & POS
             </p>
           </div>
