@@ -1,8 +1,36 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { writeFileSync } from 'fs';
+import { join } from 'path';
+
+const buildVersion = String(Date.now());
+
+function versionPlugin() {
+  let outDir = 'dist';
+  return {
+    name: 'version-json',
+    config() {
+      return { define: { __APP_BUILD_VERSION__: JSON.stringify(buildVersion) } };
+    },
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    closeBundle() {
+      try {
+        writeFileSync(
+          join(outDir, 'version.json'),
+          JSON.stringify({ version: buildVersion }),
+          'utf-8'
+        );
+      } catch {
+        // ignore
+      }
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), versionPlugin()],
   build: {
     outDir: 'dist',
     sourcemap: false,

@@ -128,6 +128,53 @@ function ServiceWorkerUpdateListener() {
   return null;
 }
 
+const VERSION_STORAGE_KEY = 'app_build_version';
+const VERSION_CHECK_DEBOUNCE_MS = 60_000;
+
+/** On tab focus, fetch /version.json; if newer than current build, show Refresh toast. */
+function VersionCheckListener() {
+  const { showToast } = useToast();
+  const lastCheckRef = useRef(0);
+  useEffect(() => {
+    const currentVersion =
+      typeof __APP_BUILD_VERSION__ !== 'undefined' ? __APP_BUILD_VERSION__ : null;
+    if (currentVersion && typeof sessionStorage !== 'undefined') {
+      try {
+        sessionStorage.setItem(VERSION_STORAGE_KEY, currentVersion);
+      } catch {
+        /* ignore */
+      }
+    }
+    const handler = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastCheckRef.current < VERSION_CHECK_DEBOUNCE_MS) return;
+      lastCheckRef.current = now;
+      fetch('/version.json', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { version?: string } | null) => {
+          if (!data?.version) return;
+          const stored =
+            typeof sessionStorage !== 'undefined'
+              ? sessionStorage.getItem(VERSION_STORAGE_KEY)
+              : null;
+          if (stored !== null && data.version !== stored) {
+            showToast('warning', 'New version available. Tap Refresh to load.', {
+              action: {
+                label: 'Refresh',
+                onAction: () => window.location.reload(),
+              },
+            });
+          }
+        })
+        .catch(() => {});
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, [showToast]);
+  return null;
+}
+
 /** Listens for offline storage quota exceeded and shows toast once (INTEGRATION_PLAN). */
 function OfflineQuotaToastListener() {
   const { showToast } = useToast();
@@ -210,6 +257,7 @@ function App() {
     <BrowserCheck>
     <ToastProvider>
       <ServiceWorkerUpdateListener />
+      <VersionCheckListener />
       <OfflineQuotaToastListener />
       <NetworkStatusProvider>
         <SettingsProvider>
