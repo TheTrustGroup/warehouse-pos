@@ -13,15 +13,23 @@ export interface SizeCodeRow {
   size_order: number;
 }
 
-/** Get all size codes ordered by size_order. */
+/** Get all size codes ordered by size_order. Returns [] on DB/env error so callers never see 500. */
 export async function getSizeCodes(): Promise<SizeCodeRow[]> {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select('size_code, size_label, size_order')
-    .order('size_order', { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as SizeCodeRow[];
+  try {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('size_code, size_label, size_order')
+      .order('size_order', { ascending: true });
+    if (error) {
+      console.error('[getSizeCodes]', error.message);
+      return [];
+    }
+    return (data ?? []) as SizeCodeRow[];
+  } catch (e) {
+    console.error('[getSizeCodes]', e instanceof Error ? e.message : e);
+    return [];
+  }
 }
 
 /** Get one size code by code. Returns null if not found. */

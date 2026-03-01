@@ -13,20 +13,13 @@ function withCors(res: NextResponse, req: NextRequest): NextResponse {
   return res;
 }
 
-/** GET /api/size-codes — list size codes for admin/POS (size selector). No auth required so POS can cache. Ignores warehouse_id (size codes are global). */
+/** GET /api/size-codes — list size codes for admin/POS (size selector). No auth required. Returns 200 with data: [] on DB/env error so inventory never gets 500. */
 export async function GET(request: NextRequest) {
   try {
     const list = await getSizeCodes();
     return withCors(NextResponse.json({ data: list }), request);
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown error';
-    console.error('[api/size-codes GET]', message);
-    return withCors(
-      NextResponse.json(
-        { message: 'Size codes temporarily unavailable' },
-        { status: 503 }
-      ),
-      request
-    );
+    console.error('[api/size-codes GET]', e instanceof Error ? e.message : e);
+    return withCors(NextResponse.json({ data: [] }), request);
   }
 }

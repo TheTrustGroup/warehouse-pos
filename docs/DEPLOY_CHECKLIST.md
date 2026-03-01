@@ -11,7 +11,8 @@
 ## 2. Backend API (inventory-server-iota.vercel.app)
 
 - **CORS:** All API routes used by the frontend (dashboard, products, warehouses, size-codes, sales, auth, etc.) attach CORS headers. If you add a new route, use `corsHeaders(request)` and `withCors(response, request)` so the browser does not block with "access control checks."
-- **Env:** Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_ANON_KEY`) in the Vercel project for the API. If either is missing, `/api/size-codes` will throw and return **503** (or 500 on older deploy). The frontend no longer sends `warehouse_id` to size-codes; if you still see requests with `warehouse_id=00000000-0000-0000-0000-000000000000`, that is an **old cached bundle** — deploy the latest frontend and ensure index is not cached.
+- **Env:** Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_ANON_KEY`) in the Vercel project for the API. `/api/size-codes` now returns **200 with data: []** when DB/env is missing (no 500), so the inventory page loads even if size codes fail; the size filter may be empty until env is fixed.
+- **POS → designated location:** Cashiers with exactly one row in `user_scopes` get `warehouse_id` from login and from `/api/auth/user`/`/admin/api/me`; the frontend falls back to `/api/auth/user` when the first auth response has no `warehouse_id`, so the "Select location" modal is skipped. Ensure each cashier has exactly one `user_scopes` row with the correct `warehouse_id`.
 - **Redeploy** the API after changing env so the new values are in the build.
 
 ## 3. Order of operations
