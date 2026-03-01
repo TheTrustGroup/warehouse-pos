@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useWarehouse } from '../../contexts/WarehouseContext';
 import { PERMISSIONS, ROLES, type Permission } from '../../types/permissions';
+import { DoubleELogo } from '../ui/DoubleELogo';
 
 interface NavItem {
   name: string;
@@ -70,12 +71,10 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 w-[280px] min-w-[280px] h-[var(--h-viewport)] max-h-[var(--h-viewport)] solid-panel border-r border-slate-200/80 flex flex-col shadow-lg flex-shrink-0">
-      {/* Logo: hierarchy via size, not weight overload */}
+      {/* Logo: monochrome double-E + tagline */}
       <div className="p-5 border-b border-slate-200/30 flex-shrink-0">
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-xl font-bold leading-tight tracking-tight gradient-text">
-            Extreme Dept Kidz
-          </h1>
+        <div className="flex flex-col gap-2">
+          <DoubleELogo size={44} variant="light" className="flex-shrink-0" />
           <p className="text-xs font-medium text-slate-500">
             Inventory & POS
           </p>

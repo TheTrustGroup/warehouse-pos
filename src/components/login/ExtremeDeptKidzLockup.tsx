@@ -1,3 +1,5 @@
+import { DoubleELogo } from '../ui/DoubleELogo';
+
 /**
  * EXTREME DEPT KIDZ — Monochrome lockup for login left panel.
  * Icon 80×80 (double E) + wordmark. Barlow Condensed 800.
@@ -22,40 +24,7 @@ export function ExtremeDeptKidzLockup({
       style={{ fontFamily: "'Barlow Condensed', 'Arial Narrow', 'Impact', sans-serif" }}
       aria-label="Extreme Dept Kidz"
     >
-      {/* 80×80 double-E icon — matches spec exactly */}
-      <svg
-        width={iconSize}
-        height={iconSize}
-        viewBox="0 0 80 80"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="flex-shrink-0"
-        aria-hidden
-      >
-        <rect x="0" y="0" width="80" height="80" rx="12" fill="#1A1917" />
-        <rect
-          x="0"
-          y="0"
-          width="80"
-          height="80"
-          rx="12"
-          fill="none"
-          stroke="rgba(255,255,255,0.09)"
-          strokeWidth="1"
-        />
-        {/* Left E — spine + bars (y 22→58 in 80×80 = spec 32→68 in 100-tall) */}
-        <rect x="11" y="22" width="6" height="36" rx="1.5" fill="rgba(255,255,255,0.32)" />
-        <rect x="11" y="22" width="24" height="7" rx="1.5" fill="#F0EDE8" />
-        <rect x="11" y="36.5" width="19" height="7" rx="1.5" fill="#F0EDE8" />
-        <rect x="11" y="51" width="24" height="7" rx="1.5" fill="#F0EDE8" />
-        {/* Right E — spine + bars */}
-        <rect x="63" y="22" width="6" height="36" rx="1.5" fill="rgba(255,255,255,0.32)" />
-        <rect x="45" y="22" width="24" height="7" rx="1.5" fill="#F0EDE8" />
-        <rect x="50" y="36.5" width="19" height="7" rx="1.5" fill="#F0EDE8" />
-        <rect x="45" y="51" width="24" height="7" rx="1.5" fill="#F0EDE8" />
-        {/* Center seam */}
-        <rect x="39" y="22" width="2" height="36" rx="1" fill="white" opacity="0.18" />
-      </svg>
+      <DoubleELogo size={iconSize} variant="dark" className="flex-shrink-0" />
 
       {showWordmark && (
         <>

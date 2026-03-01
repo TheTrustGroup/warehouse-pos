@@ -1,6 +1,6 @@
 // ============================================================
-// LoginPage.tsx — World-class login: monochrome EXTREME DEPT KIDZ
-// lockup (Barlow Condensed), refined form panel.
+// LoginPage.tsx — Monochrome match to dashboard: same bg,
+// single white card (sidebar-style), slate form, red CTA.
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { validateLoginForm } from '../lib/validationSchemas';
-import { ExtremeDeptKidzLockup } from '../components/login/ExtremeDeptKidzLockup';
+import { DoubleELogo } from '../components/ui/DoubleELogo';
 
 const IconMail = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -38,8 +38,6 @@ const IconEyeOff = () => (
 );
 
 const SERVER_UNREACHABLE = 'Cannot reach the server. Check your connection and try again.';
-
-const FEATURES = ['Multi-warehouse inventory', 'Size-based stock tracking', 'Fast POS checkout'] as const;
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -121,265 +119,172 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#0f0f0e]">
-      {/* —— Left: Monochrome brand panel (#1A1917) —— */}
+    <div className="min-h-[var(--min-h-viewport)] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 px-4 py-12">
       <div
-        className="relative overflow-hidden md:w-[420px] md:min-h-screen flex-shrink-0
-                   flex flex-col justify-between px-6 py-8 md:px-12 md:py-14"
-        style={{ backgroundColor: '#1A1917' }}
+        className={`w-full max-w-[400px] solid-panel border border-slate-200/80 rounded-[var(--radius-card)] shadow-card p-8 transition-all duration-500 ${ready ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+        style={{ transitionTimingFunction: 'cubic-bezier(0.22,1,0.36,1)' }}
       >
-        {/* Subtle grid */}
-        <svg className="absolute inset-0 w-full h-full opacity-[0.04] pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="login-grid" width="32" height="32" patternUnits="userSpaceOnUse">
-              <path d="M32 0L0 0 0 32" fill="none" stroke="#F0EDE8" strokeWidth="0.6" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#login-grid)" />
-        </svg>
-
-        {/* Vertical separator at right edge */}
-        <div
-          className="absolute right-0 top-0 bottom-0 w-px hidden md:block"
-          style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.06), transparent)' }}
-        />
-
-        {/* Lockup: icon + wordmark (Barlow Condensed 800). Slightly scaled on mobile. */}
-        <div className="relative z-10 origin-top-left scale-[0.82] md:scale-100">
-          <ExtremeDeptKidzLockup
-            iconSize={80}
-            showWordmark
-            wordmarkSize={28}
-            letterSpacing={3.5}
-            className="flex-wrap md:flex-nowrap"
-          />
-        </div>
-
-        {/* Tagline + features — desktop only */}
-        <div className="relative z-10 hidden md:block">
-          <p className="text-[15px] leading-relaxed max-w-[260px]" style={{ color: 'rgba(240,237,232,0.5)' }}>
-            Warehouse & point-of-sale for your stores.
-          </p>
-          <ul className="mt-6 space-y-3" aria-label="Features">
-            {FEATURES.map((f, i) => (
-              <li key={i} className="flex items-center gap-3">
-                <span
-                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: 'rgba(240,237,232,0.4)' }}
-                />
-                <span className="text-[13px]" style={{ color: 'rgba(240,237,232,0.45)' }}>
-                  {f}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Footer */}
-        <div className="relative z-10 hidden md:block">
-          <p className="text-[11px] font-mono" style={{ color: 'rgba(240,237,232,0.25)' }}>
-            warehouse.extremedeptkidz.com
+        {/* Branding: same as sidebar — monochrome logo + tagline */}
+        <div className="flex flex-col gap-2 mb-8">
+          <DoubleELogo size={44} variant="light" className="flex-shrink-0" />
+          <p className="text-xs font-medium text-slate-500">
+            Inventory & POS
           </p>
         </div>
-      </div>
 
-      {/* —— Right: Form panel —— */}
-      <div
-        className="flex-1 flex items-center justify-center px-6 py-12 md:py-0 md:px-12"
-        style={{ backgroundColor: '#F0EDE8' }}
-      >
-        <div
-          className={`w-full max-w-[400px] transition-all duration-500 ${ready ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
-          style={{ transitionTimingFunction: 'cubic-bezier(0.22,1,0.36,1)' }}
-        >
-          <header className="mb-10">
-            <h2 className="text-[28px] font-extrabold tracking-tight text-[#1A1917]">
-              Welcome back
-            </h2>
-            <p className="text-[15px] mt-1.5 font-medium" style={{ color: 'rgba(26,25,23,0.55)' }}>
-              Sign in to your workspace
-            </p>
-          </header>
+        <header className="mb-8">
+          <h1 className="text-xl font-bold leading-tight tracking-tight text-slate-900">
+            Welcome back
+          </h1>
+          <p className="text-sm mt-1.5 font-medium text-slate-500">
+            Sign in to your workspace
+          </p>
+        </header>
 
-          {bannerError && (
-            <div
-              className="mb-6 px-4 py-3.5 rounded-2xl flex gap-3 items-start"
-              style={{
-                background: 'rgba(185,28,28,0.08)',
-                border: '1px solid rgba(185,28,28,0.2)',
-                animation: 'loginSlideDown 0.25s ease',
-              }}
-              role="alert"
+        {bannerError && (
+          <div
+            className="mb-6 px-4 py-3.5 rounded-xl flex gap-3 items-start bg-primary-50/80 border border-primary-200 text-primary-700"
+            role="alert"
+            style={{ animation: 'loginSlideDown 0.25s ease' }}
+          >
+            <svg className="flex-shrink-0 mt-0.5 text-primary-600" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <p className="text-sm font-semibold leading-snug">{bannerError}</p>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          <div>
+            <label
+              htmlFor="login-email"
+              className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2"
             >
-              <svg className="flex-shrink-0 mt-0.5" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B91C1C" strokeWidth="2.5" strokeLinecap="round">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
-              <p className="text-[13px] font-semibold text-[#B91C1C] leading-snug">{bannerError}</p>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} noValidate className="space-y-5">
-            <div>
-              <label
-                htmlFor="login-email"
-                className="block text-[11px] font-bold uppercase tracking-[0.08em] mb-2"
-                style={{ color: 'rgba(26,25,23,0.6)' }}
-              >
-                Email
-              </label>
-              <div className="relative">
-                <span
-                  className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: 'rgba(26,25,23,0.4)' }}
-                >
-                  <IconMail />
-                </span>
-                <input
-                  ref={emailRef}
-                  id="login-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setError('');
-                    clearAuthError();
-                  }}
-                  placeholder="you@extremedeptkidz.com"
-                  autoComplete="email"
-                  disabled={loading}
-                  className="w-full pl-11 pr-4 rounded-2xl border-2 bg-white
-                             text-[15px] text-[#1A1917] placeholder:opacity-50
-                             focus:outline-none focus:border-[#1A1917]/35 focus:ring-[3px] focus:ring-[#1A1917]/8
-                             disabled:opacity-50 transition-all duration-150"
-                  style={{
-                    height: 52,
-                    borderColor: 'rgba(26,25,23,0.12)',
-                  }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor="login-password"
-                className="block text-[11px] font-bold uppercase tracking-[0.08em] mb-2"
-                style={{ color: 'rgba(26,25,23,0.6)' }}
-              >
-                Password
-              </label>
-              <div className="relative">
-                <span
-                  className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: 'rgba(26,25,23,0.4)' }}
-                >
-                  <IconLock />
-                </span>
-                <input
-                  id="login-password"
-                  type={showPw ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setError('');
-                    clearAuthError();
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                  placeholder="Enter your password"
-                  autoComplete="current-password"
-                  disabled={loading}
-                  className="w-full pl-11 pr-12 rounded-2xl border-2 bg-white
-                             text-[15px] text-[#1A1917] placeholder:opacity-50
-                             focus:outline-none focus:border-[#1A1917]/35 focus:ring-[3px] focus:ring-[#1A1917]/8
-                             disabled:opacity-50 transition-all duration-150"
-                  style={{
-                    height: 52,
-                    borderColor: 'rgba(26,25,23,0.12)',
-                  }}
-                />
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={() => setShowPw((v) => !v)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors"
-                  style={{ color: 'rgba(26,25,23,0.4)' }}
-                  aria-label={showPw ? 'Hide password' : 'Show password'}
-                >
-                  {showPw ? <IconEyeOff /> : <IconEyeOn />}
-                </button>
-              </div>
-            </div>
-
-            <div className="pt-1">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-2xl border-none text-white text-[16px] font-bold tracking-wide
-                           flex items-center justify-center gap-3
-                           hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed
-                           active:scale-[0.99] transition-all duration-150"
-                style={{
-                  height: 56,
-                  background: '#1A1917',
-                  boxShadow: loading ? 'none' : '0 4px 14px rgba(0,0,0,0.2)',
+              Email
+            </label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <IconMail />
+              </span>
+              <input
+                ref={emailRef}
+                id="login-email"
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError('');
+                  clearAuthError();
                 }}
+                placeholder="you@extremedeptkidz.com"
+                autoComplete="email"
+                disabled={loading}
+                className="input-field w-full pl-11 pr-4 text-sm font-medium text-slate-900 placeholder:text-slate-400
+                           border-slate-200 focus:border-primary-400 focus:ring-primary-500/20
+                           disabled:opacity-50 transition-all duration-150"
+                style={{ minHeight: 44 }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label
+              htmlFor="login-password"
+              className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2"
+            >
+              Password
+            </label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <IconLock />
+              </span>
+              <input
+                id="login-password"
+                type={showPw ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError('');
+                  clearAuthError();
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                disabled={loading}
+                className="input-field w-full pl-11 pr-12 text-sm font-medium text-slate-900 placeholder:text-slate-400
+                           border-slate-200 focus:border-primary-400 focus:ring-primary-500/20
+                           disabled:opacity-50 transition-all duration-150"
+                style={{ minHeight: 44 }}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowPw((v) => !v)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+                aria-label={showPw ? 'Hide password' : 'Show password'}
               >
-                {loading ? (
-                  <>
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      className="animate-spin"
-                    >
-                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                    </svg>
-                    Signing in…
-                  </>
-                ) : (
-                  <>
-                    Sign in
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                      <polyline points="12 5 19 12 12 19" />
-                    </svg>
-                  </>
-                )}
+                {showPw ? <IconEyeOff /> : <IconEyeOn />}
               </button>
             </div>
+          </div>
 
-            {showOfflineOption && (
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleContinueOffline}
-                  className="w-full rounded-2xl border-2 py-3.5 text-[14px] font-semibold transition-all duration-150
-                             hover:bg-[#1A1917]/5"
-                  style={{
-                    borderColor: 'rgba(26,25,23,0.2)',
-                    color: 'rgba(26,25,23,0.7)',
-                  }}
-                >
-                  Continue offline
-                </button>
-              </div>
-            )}
-          </form>
+          <div className="pt-1">
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary w-full flex items-center justify-center gap-3"
+            >
+              {loading ? (
+                <>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    className="animate-spin"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                  Signing in…
+                </>
+              ) : (
+                <>
+                  Sign in
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </>
+              )}
+            </button>
+          </div>
 
-          <footer className="mt-10 pt-6 border-t text-center space-y-1" style={{ borderColor: 'rgba(26,25,23,0.12)' }}>
-            <p className="text-[12px] font-medium" style={{ color: 'rgba(26,25,23,0.45)' }}>
-              Warehouse Management System
-            </p>
-            <p className="text-[11px] font-mono" style={{ color: 'rgba(26,25,23,0.35)' }}>
-              v2.0 · extremedeptkidz.com
-            </p>
-          </footer>
-        </div>
+          {showOfflineOption && (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleContinueOffline}
+                className="btn-secondary w-full"
+              >
+                Continue offline
+              </button>
+            </div>
+          )}
+        </form>
+
+        <footer className="mt-8 pt-6 border-t border-slate-200/80 text-center space-y-1">
+          <p className="text-xs font-medium text-slate-500">
+            Warehouse Management System
+          </p>
+          <p className="text-[11px] font-mono text-slate-400">
+            v2.0 · extremedeptkidz.com
+          </p>
+        </footer>
       </div>
 
       <style>{`
