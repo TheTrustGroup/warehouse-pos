@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
           }
         : undefined;
 
-    if (!binding?.warehouse_id && isPosRestrictedEmail(email)) {
+    if (!binding?.warehouse_id) {
       const singleWarehouseId = await getSingleWarehouseIdForUser(email);
       if (singleWarehouseId) {
         binding = binding ?? {};

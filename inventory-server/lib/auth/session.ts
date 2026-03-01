@@ -144,6 +144,7 @@ async function requireAuthAsync(req: NextRequest): Promise<Session | NextRespons
       role,
       store_id: typeof payload.store_id === 'string' ? payload.store_id : undefined,
       device_id: typeof payload.device_id === 'string' ? payload.device_id : undefined,
+      warehouse_id: typeof payload.warehouse_id === 'string' ? payload.warehouse_id : undefined,
     };
   } catch {
     return NextResponse.json({ error: 'Unauthorized', message: 'Invalid token' }, { status: 401 });
