@@ -37,6 +37,7 @@ export default defineConfig({
     minify: 'terser',
     target: 'es2020',
     reportCompressedSize: false,
+    modulePreload: false,
     terserOptions: {
       compress: { drop_console: false },
     },
