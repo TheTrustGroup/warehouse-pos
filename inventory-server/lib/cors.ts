@@ -2,14 +2,16 @@
  * Central CORS config for API routes.
  * Use corsHeaders() on every response; use handleOptions() for OPTIONS.
  * - ALLOWED_ORIGINS (comma-separated): extra origins; defaults (e.g. warehouse.extremedeptkidz.com) are always included.
- * - ALLOWED_ORIGIN_SUFFIXES (comma-separated): extra hostname suffixes; defaults (vercel.app, extremedeptkidz.com) are always included.
+ * - ALLOWED_ORIGIN_SUFFIXES (comma-separated): extra hostname suffixes; defaults (vercel.app, extremedeptkidz.com, hunnidofficial.com) are always included.
  *   Request origin is allowed if its hostname ends with one of these (e.g. https://warehouse-pos-xxx.vercel.app).
  */
 
 import { NextRequest } from 'next/server';
 
+/** Production frontends (same app, separate clients). Localhost for dev. */
 const DEFAULT_ORIGINS = [
   'https://warehouse.extremedeptkidz.com',
+  'https://warehouse.hunnidofficial.com',
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:4173',
@@ -23,7 +25,7 @@ function getAllowedOrigins(): string[] {
 }
 
 /** Hostname suffixes to allow (e.g. "vercel.app" allows *.vercel.app). */
-const DEFAULT_ORIGIN_SUFFIXES = ['vercel.app', 'extremedeptkidz.com'];
+const DEFAULT_ORIGIN_SUFFIXES = ['vercel.app', 'extremedeptkidz.com', 'hunnidofficial.com'];
 
 /** Suffixes are always defaults plus any from env (env cannot remove this app's suffixes). */
 function getAllowedSuffixes(): string[] {

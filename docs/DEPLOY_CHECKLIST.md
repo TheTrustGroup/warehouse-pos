@@ -10,7 +10,7 @@
 
 ## 2. Backend API (inventory-server-iota.vercel.app)
 
-- **CORS:** All API routes (including `GET /api/health`) attach CORS via `corsHeaders(request)`. Defaults allow `https://warehouse.extremedeptkidz.com` and `*.extremedeptkidz.com`; `ALLOWED_ORIGINS` / `ALLOWED_ORIGIN_SUFFIXES` in Vercel are **additive only** (defaults are always included). Do not rely on env to replace the list—if you set env, it only adds origins. If you add a new route, use `corsHeaders(request)` and `withCors(response, request)`.
+- **CORS:** All API routes (including `GET /api/health`) attach CORS via `corsHeaders(request)`. Defaults allow **both** client frontends: `https://warehouse.extremedeptkidz.com` and `https://warehouse.hunnidofficial.com` (and suffixes `extremedeptkidz.com`, `hunnidofficial.com`). `ALLOWED_ORIGINS` / `ALLOWED_ORIGIN_SUFFIXES` are **additive only**. If you add a new route, use `corsHeaders(request)` and `withCors(response, request)`.
 - **Env:** Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_ANON_KEY`) in the Vercel project for the API. `/api/size-codes` now returns **200 with data: []** when DB/env is missing (no 500), so the inventory page loads even if size codes fail; the size filter may be empty until env is fixed.
 - **POS → designated location:** Cashiers with exactly one row in `user_scopes` get `warehouse_id` from login and from `/api/auth/user`/`/admin/api/me`; the frontend falls back to `/api/auth/user` when the first auth response has no `warehouse_id`, so the "Select location" modal is skipped. Ensure each cashier has exactly one `user_scopes` row with the correct `warehouse_id`.
 - **Redeploy** the API after changing env so the new values are in the build.
@@ -26,3 +26,11 @@
    - From repo root: `cd inventory-server && BASE_URL={API_URL} npm run test:health` (or set `BASE_URL` in `.env.local`).
    - Or: `curl -s -o /dev/null -w "%{http_code}" {API_URL}/api/health` → expect `200`.
    - If health fails, do not consider the deploy complete; fix API/env and redeploy.
+
+## 4. Multi-client (shared backend)
+
+This app is deployed for **separate clients** (e.g. Extreme Dept Kidz, Hunnid Official) from the same codebase. **Right path:**
+
+- **One backend** (this repo’s `inventory-server`) is the canonical API. Deploy it to a single URL (e.g. `inventory-server-iota.vercel.app`). CORS in this repo allows both `warehouse.extremedeptkidz.com` and `warehouse.hunnidofficial.com` by default.
+- **Each client** gets its own frontend deployment (its own domain). Set each frontend’s `VITE_API_BASE_URL` at build time to that **same** API URL so both use the same backend.
+- **Clones:** If you forked this repo for another client (e.g. Hunnid), do **not** connect the clone’s `inventory-server` to the same Vercel project as this repo. Either (a) point the clone’s frontend at this repo’s deployed API URL and deploy only the frontend from the clone, or (b) deploy the clone’s backend to a **different** Vercel project/URL and add both client origins to CORS there. Only one source should deploy to a given API URL to avoid CORS and code drift.
