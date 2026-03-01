@@ -6,7 +6,7 @@ This document explains how **size codes** work in the warehouse + POS system: wh
 
 ## What is `size_code`?
 
-- **`size_code`** is the **system identifier** for a size: normalized, no spaces, stable in the database and API (e.g. `US9`, `M`, `W32`, `OS`, `NA`). **Custom sizes** are supported: users can type any size (e.g. `EU 42`, `3XL`); the backend normalizes and stores it.
+- **`size_code`** is the **system identifier** for a size: normalized, no spaces, stable in the database and API (e.g. `US9`, `M`, `W32`, `OS`, `NA`). Only codes present in the **`size_codes`** table are allowed (enforced by DB trigger) for consistent reporting and big-brand use.
 - **`size_label`** is the **human‑readable** label (e.g. “US 9”, “Medium”, “One Size”). For predefined sizes from `size_codes`; for custom sizes the code is used as the label.
 - **`size_order`** is an optional numeric value used to **sort** sizes in UIs (e.g. shoe sizes in order).
 
@@ -22,11 +22,12 @@ This document explains how **size codes** work in the warehouse + POS system: wh
 
 ### 1. Reference table: `size_codes`
 
-- Holds the **predefined** size list: `size_code`, `size_label`, `size_order`. Used as dropdown suggestions in the product form.
-- **Custom sizes**: Users can type any size in the form; it is normalized and stored in `warehouse_inventory_by_size` even if not in `size_codes`. So the dropdown shows predefined options plus free text.
-- Seeded for **both kids and adult**:
-  - **Adult:** NA, OS, US 6–13 (footwear), XS–XXL (apparel), W28–W36 (waist).
-  - **Kids/infant:** 0-3M, 3-6M, 6-9M, 9-12M, 12-18M, 18-24M (infant months); 2T–5T (toddler); US1K–US13K (kids footwear); 6Y–14Y (youth clothing).
+- Holds the **predefined** size list: `size_code`, `size_label`, `size_order`. Used as dropdown/datalist suggestions in the product form.
+- **Catalog-only:** The DB trigger `enforce_size_rules` requires every `size_code` in `warehouse_inventory_by_size` to exist in `size_codes`. Only these predefined codes are allowed when saving inventory by size (big-brand consistency and reporting).
+- **Full catalog** (seeded for clothing, sneakers, shoes, all ages):
+  - **Adult apparel:** NA, OS, XXS, XS–XXL, 2XL–5XL; W28–W40 (waist).
+  - **Adult footwear:** US5–US15 (US), EU20–EU50 (EU), UK3–UK13 (UK).
+  - **Kids/infant:** 0-3M–18-24M (infant months); 2T–8T (toddler); US1K–US13K (kids footwear); 6Y–14Y (youth clothing).
 - Used by admin (product form) and POS to show consistent labels.
 
 ### 2. Per‑size inventory: `warehouse_inventory_by_size`
