@@ -25,6 +25,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
+import { useAuth } from '../contexts/AuthContext';
 
 import SessionScreen, { type Warehouse } from '../components/pos/SessionScreen';
 import POSHeader from '../components/pos/POSHeader';
@@ -78,6 +79,8 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     currentWarehouseId,
     isWarehouseBoundToSession,
   } = useWarehouse();
+  const { user, tryRefreshSession } = useAuth();
+  const triedRefreshRef = useRef(false);
 
   const warehouse: Warehouse = currentWarehouse ?? {
     id: currentWarehouseId,
@@ -88,6 +91,15 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   /** When cashier/session is bound to one warehouse, skip "Select location" and go straight to POS. */
   const [sessionOpen, setSessionOpen] = useState(true);
   const showLocationSelector = sessionOpen && !isWarehouseBoundToSession;
+
+  // If cashier landed on POS without warehouseId (e.g. stale session), try to refresh session once so /api/auth/user enriches it.
+  useEffect(() => {
+    if (triedRefreshRef.current || !user) return;
+    const isCashier = (user.role ?? '').toString().toLowerCase() === 'cashier';
+    if (!isCashier || user.warehouseId) return;
+    triedRefreshRef.current = true;
+    tryRefreshSession();
+  }, [user, tryRefreshSession]);
   const [products, setProducts] = useState<POSProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');

@@ -20,8 +20,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const payload = sessionUserToJson(auth);
   if (!payload.warehouse_id) {
-    const singleWarehouseId = await getSingleWarehouseIdForUser(auth.email);
-    if (singleWarehouseId) (payload as Record<string, unknown>).warehouse_id = singleWarehouseId;
+    try {
+      const singleWarehouseId = await getSingleWarehouseIdForUser(auth.email);
+      if (singleWarehouseId) (payload as Record<string, unknown>).warehouse_id = singleWarehouseId;
+    } catch {
+      // table missing or DB error; leave warehouse_id unset
+    }
   }
   const assignedPos = await getAssignedPosForUser(auth.email);
   if (assignedPos) (payload as Record<string, unknown>).assignedPos = assignedPos;

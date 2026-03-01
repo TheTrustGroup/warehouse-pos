@@ -135,6 +135,12 @@ function getEffectiveRole(user: User | null): string {
   return DEFAULT_ROLE;
 }
 
+/** Roles that use POS and should have a single warehouse (skip location selector). */
+function isPosRoleWithSingleWarehouse(role: User['role'] | string | undefined): boolean {
+  const r = (role ?? '').toString().trim().toLowerCase();
+  return r === 'cashier' || r === 'sales_person' || r === 'salesperson';
+}
+
 /** Default landing path by role (for redirects after login and when access is forbidden). */
 export function getDefaultPathForRole(role: User['role']): string {
   switch (role) {
@@ -320,6 +326,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem('auth_token');
           }
           return;
+        }
+        // Cashier/POS role must have warehouse_id so POS skips "Select location". If first response (e.g. /admin/api/me) didn't include it, fetch /api/auth/user which always enriches.
+        if (isPosRoleWithSingleWarehouse(normalizedUser.role) && !normalizedUser.warehouseId) {
+          try {
+            const userRes = await fetch(`${API_BASE_URL}/api/auth/user`, opts);
+            if (userRes.ok) {
+              const enrichedData = await handleApiResponse<Record<string, unknown>>(userRes);
+              const wid = (enrichedData?.warehouse_id ?? enrichedData?.warehouseId) as string | undefined;
+              if (typeof wid === 'string' && wid.trim()) {
+                normalizedUser = { ...normalizedUser, warehouseId: wid.trim() };
+              }
+            }
+          } catch {
+            // keep normalizedUser as is
+          }
         }
         setAuthError(null);
         if (typeof localStorage !== 'undefined') localStorage.removeItem(DEMO_ROLE_KEY);
@@ -553,8 +574,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!response.ok) return false;
       const userData = await handleApiResponse<User>(response);
       const payload = parseAuthUserPayload(userData ?? {});
-      const normalizedUser = normalizeUserData(payload);
+      let normalizedUser = normalizeUserData(payload);
       if (!normalizedUser) return false;
+      if (isPosRoleWithSingleWarehouse(normalizedUser.role) && !normalizedUser.warehouseId) {
+        try {
+          const userRes = await fetch(`${API_BASE_URL}/api/auth/user`, opts);
+          if (userRes.ok) {
+            const enrichedData = await handleApiResponse<Record<string, unknown>>(userRes);
+            const wid = (enrichedData?.warehouse_id ?? enrichedData?.warehouseId) as string | undefined;
+            if (typeof wid === 'string' && wid.trim()) {
+              normalizedUser = { ...normalizedUser, warehouseId: wid.trim() };
+            }
+          }
+        } catch {
+          // keep as is
+        }
+      }
       setUser(normalizedUser);
       localStorage.setItem('current_user', JSON.stringify(normalizedUser));
       if (typeof sessionStorage !== 'undefined') {
