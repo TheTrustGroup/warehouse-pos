@@ -129,15 +129,16 @@ export const ROLES: Record<string, Role> = {
   CASHIER: {
     id: 'cashier',
     name: 'Sales Person / Cashier',
-    description: 'Handle sales and customer service',
+    description: 'Handle sales and customer service. Sidebar: Orders, POS, Sales, Deliveries only.',
     permissions: [
       PERMISSIONS.POS.ACCESS,
       PERMISSIONS.POS.APPLY_DISCOUNT,
       PERMISSIONS.POS.VIEW_DAILY_SALES,
-      PERMISSIONS.INVENTORY.VIEW,
       PERMISSIONS.ORDERS.VIEW,
       PERMISSIONS.ORDERS.CREATE,
       PERMISSIONS.ORDERS.UPDATE_STATUS,
+      PERMISSIONS.REPORTS.VIEW_SALES,
+      PERMISSIONS.DELIVERIES.VIEW,
     ],
     limits: {
       maxDiscount: 10,
