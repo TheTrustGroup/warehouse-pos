@@ -1,0 +1,129 @@
+# FIX: HTTP 405 on Product Edit (Save Changes)
+
+## Root Cause
+
+HTTP 405 = "Method Not Allowed" — the server received a `PUT` request but the route has no `PUT` handler **at that URL**.
+
+This is almost always a **deployment issue**, not a code bug. The file `route_products_id.ts` either:
+1. Was never deployed to the server, **OR**
+2. Is at the wrong folder path (most common)
+
+---
+
+## Step 1 — Verify the exact folder structure
+
+Your backend (`inventory-server`) must have this **exact** folder/file structure:
+
+```
+inventory-server/
+└── app/
+    └── api/
+        └── products/
+            ├── route.ts          ← GET + POST (already working)
+            └── [id]/
+                └── route.ts      ← GET + PUT + PATCH + DELETE  ← THIS FILE
+```
+
+**Critical details:**
+- The folder name is `[id]` — with square brackets, exactly like that
+- The file is `route.ts` — not `[id].ts`, not `index.ts`, not `handler.ts`
+- The path is inside `app/` — NOT inside `pages/api/`
+
+---
+
+## Step 2 — Deploy the file
+
+Copy `route_products_id.ts` to:
+```
+inventory-server/app/api/products/[id]/route.ts
+```
+
+In terminal:
+```bash
+cp route_products_id.ts  inventory-server/app/api/products/[id]/route.ts
+```
+
+Then deploy:
+```bash
+cd inventory-server
+git add -A
+git commit -m "fix: add PUT/PATCH/DELETE handlers for /api/products/[id]"
+git push
+```
+
+Vercel auto-deploys on push. Wait ~60 seconds.
+
+---
+
+## Step 3 — Verify it's working (do this before testing the UI)
+
+Run this curl command. Replace `YOUR_API_URL` with your actual Vercel URL:
+
+```bash
+# Should return 401 Unauthorized (not 404 or 405)
+curl -v https://YOUR_API_URL/api/products/test-id
+
+# Expected response: {"error":"Unauthorized"}  with HTTP 401
+# If you get 404 → folder structure is wrong
+# If you get 405 → the file is there but PUT isn't exported (not this file)
+# If you get 401 → route is live and working ✓
+```
+
+---
+
+## Step 4 — Test a real product update
+
+```bash
+# Get your auth token from localStorage in browser DevTools:
+# localStorage.getItem('auth_token')
+
+TOKEN="your-token-here"
+API="https://YOUR_API_URL"
+PRODUCT_ID="actual-product-uuid"
+WAREHOUSE_ID="00000000-0000-0000-0000-000000000001"
+
+curl -X PUT "$API/api/products/$PRODUCT_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"warehouseId\":\"$WAREHOUSE_ID\",\"name\":\"Test\",\"category\":\"Sneakers\",\"sellingPrice\":450,\"sizeKind\":\"sized\",\"quantityBySize\":[{\"sizeCode\":\"EU25\",\"quantity\":4}]}"
+
+# Expected: 200 with updated product JSON
+```
+
+---
+
+## What's in the new route file
+
+| Feature | Detail |
+|---------|--------|
+| `PUT` and `PATCH` both work | Both call the same update handler — covers any frontend variation |
+| Next.js 14 + 15 params | `await Promise.resolve(ctx.params)` works for both sync and async |
+| Manual fallback | If `update_warehouse_product_atomic` RPC doesn't exist, falls back to 3 separate queries |
+| Helpful error messages | "Product X not found in warehouse Y" instead of generic 500 |
+| `DELETE` accepts warehouseId in body OR query string | Flexible |
+| Optimistic concurrency | Returns 409 if someone else edited simultaneously |
+| CORS | Allows your frontend origin on all methods including PUT/PATCH |
+
+---
+
+## Other actions that could fail — pre-emptive fixes
+
+| Action | Route | Common failure |
+|--------|-------|---------------|
+| Edit product | `PUT /api/products/[id]` | **This fix** |
+| Delete product | `DELETE /api/products/[id]` | Same file — fixed |
+| Add product | `POST /api/products` | `route.ts` at `/api/products/` — already deployed |
+| Load products | `GET /api/products` | Working (you can see products) |
+| Record sale | `POST /api/sales` | Fixed in `route_sales.ts` |
+| View sales | `GET /api/sales` | Fixed in `route_sales.ts` |
+
+---
+
+## If you still get 405 after deploying
+
+Check Vercel function logs:
+1. Go to `vercel.com → your project → Functions` tab
+2. Look for `/api/products/[id]`
+3. If it's not listed, the folder structure is wrong
+
+Also check `next.config.js` — if it has custom `rewrites` that redirect `/api/*` elsewhere, that would intercept the request before it reaches your route.
