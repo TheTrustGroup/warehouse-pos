@@ -106,7 +106,7 @@ A script runs `git status --porcelain` and **exits 1** if there are uncommitted 
 
 - **Build:** Vite splits vendor into `react-vendor`, `router`, `recharts`, `idb`, `framer` for better caching and parallel loading. Target is `es2020` for smaller output on modern devices.
 - **Shell:** `index.html` uses non-blocking font loading (preload + async stylesheet) so first paint is not delayed by Google Fonts.
-- **Host:** `vercel.json` sets `Cache-Control: no-store` for `/` and `/index.html` so mobile and CDNs always fetch the latest shell; hashed assets remain cacheable.
+- **Host:** `vercel.json` has **rewrites** so every path (e.g. `/inventory`, `/pos`) is served by `index.html` — required for the SPA; without this, direct or refreshed URLs return 404. It also sets `Cache-Control: no-store` for `/`, `/index.html`, and `/version.json`; hashed assets remain cacheable.
 - **Updates:** When a new deploy is live, the app shows a toast with a "Refresh" button; tapping it reloads the page so users get the new bundle.
 - **Nav:** Single nav config in `src/config/navigation.tsx` keeps Sidebar and MobileMenu in sync and avoids duplicate bundle weight.
 
