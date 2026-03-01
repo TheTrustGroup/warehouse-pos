@@ -18,3 +18,20 @@ export const warehouseItemsBodySchema = z.object({
 });
 
 export type WarehouseItemsBody = z.infer<typeof warehouseItemsBodySchema>;
+
+/** Body for POST /admin/api/login and POST /api/auth/login */
+export const loginBodySchema = z
+  .object({
+    email: z.string().optional(),
+    username: z.string().optional(),
+    password: z.string().optional().default(''),
+    warehouse_id: z.union([z.string(), z.number()]).optional(),
+    store_id: z.union([z.string(), z.number()]).optional(),
+    device_id: z.union([z.string(), z.number()]).optional(),
+  })
+  .refine(
+    (d) => ((d.email ?? '').trim() || (d.username ?? '').trim()).length > 0,
+    { message: 'Email is required', path: ['email'] }
+  );
+
+export type LoginBody = z.infer<typeof loginBodySchema>;

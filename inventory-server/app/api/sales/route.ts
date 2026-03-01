@@ -18,6 +18,7 @@ import { getSupabase } from '@/lib/supabase';
 import { corsHeaders } from '@/lib/cors';
 import { requireAuth, requirePosRole, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { getScopeForUser } from '@/lib/data/userScopes';
+import { getCachedResponse, setCachedResponse } from '@/lib/idempotency';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,9 +120,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (auth instanceof NextResponse) return withCors(auth, req);
 
   const h = corsHeaders(req);
+  const idempotencyKey = req.headers.get('idempotency-key')?.trim() ?? undefined;
+  if (idempotencyKey) {
+    const cached = getCachedResponse(idempotencyKey);
+    if (cached) {
+      return withCors(NextResponse.json(cached, { status: 200, headers: h }), req);
+    }
+  }
+
   let body: Record<string, unknown>;
   try { body = await req.json(); }
-  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: h }); }
+  catch { return withCors(NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: h }), req); }
 
   const bodyWarehouseId = String(body.warehouseId ?? '').trim() || undefined;
   const effectiveWarehouseId = await getEffectiveWarehouseId(auth, bodyWarehouseId, {
@@ -129,9 +138,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     method: 'POST',
   });
   if (!effectiveWarehouseId) {
-    return NextResponse.json(
-      { error: 'warehouseId is required and must be in your scope' },
-      { status: 400, headers: h }
+    return withCors(
+      NextResponse.json(
+        { error: 'warehouseId is required and must be in your scope' },
+        { status: 400, headers: h }
+      ),
+      req
     );
   }
 
@@ -145,7 +157,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const customerName  = String(body.customerName ?? '').trim() || null;
 
   if (!Array.isArray(lines) || lines.length === 0)
-    return NextResponse.json({ error: 'lines must be non-empty' }, { status: 400, headers: h });
+    return withCors(NextResponse.json({ error: 'lines must be non-empty' }, { status: 400, headers: h }), req);
 
   type NormalizedLine = {
     productId: string; sizeCode: string | null; qty: number;
@@ -171,7 +183,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Invalid lines';
-    return NextResponse.json({ error: message }, { status: 400, headers: h });
+    return withCors(NextResponse.json({ error: message }, { status: 400, headers: h }), req);
   }
 
   try {
@@ -194,25 +206,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (error) {
       console.error('[POST /api/sales] RPC error:', error.code, error.message);
       if (error.code === '42883' || error.message?.includes('does not exist')) {
-        return manualSaleFallback({ db, warehouseId, normalizedLines, subtotal, discountPct, discountAmt, total, paymentMethod, customerName, headers: h });
+        return withCors(await manualSaleFallback({ db, warehouseId, normalizedLines, subtotal, discountPct, discountAmt, total, paymentMethod, customerName, headers: h, idempotencyKey }), req);
       }
-      return NextResponse.json({ error: error.message }, { status: 500, headers: h });
+      return withCors(NextResponse.json({ error: error.message }, { status: 500, headers: h }), req);
     }
 
     const result = typeof data === 'string' ? JSON.parse(data) : (data ?? {});
-    return NextResponse.json({
+    const responseBody = {
       id:        result.id ?? result.saleId,
       receiptId: result.receiptId ?? result.receipt_id,
       total,
       itemCount: normalizedLines.reduce((s, l) => s + l.qty, 0),
       status:    'completed',
       createdAt: result.createdAt ?? new Date().toISOString(),
-    }, { status: 201, headers: h });
+    };
+    if (idempotencyKey) setCachedResponse(idempotencyKey, responseBody);
+    return withCors(NextResponse.json(responseBody, { status: 201, headers: h }), req);
 
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Internal error';
     console.error('[POST /api/sales] exception:', message);
-    return NextResponse.json({ error: message }, { status: 500, headers: h });
+    return withCors(NextResponse.json({ error: message }, { status: 500, headers: h }), req);
   }
 }
 
@@ -223,8 +237,9 @@ async function manualSaleFallback(args: {
   subtotal: number; discountPct: number; discountAmt: number; total: number;
   paymentMethod: string; customerName: string | null;
   headers: Record<string, string>;
+  idempotencyKey?: string;
 }): Promise<NextResponse> {
-  const { db, warehouseId, normalizedLines, subtotal, discountPct, discountAmt, total, paymentMethod, customerName, headers } = args;
+  const { db, warehouseId, normalizedLines, subtotal, discountPct, discountAmt, total, paymentMethod, customerName, headers, idempotencyKey } = args;
   const { randomUUID } = await import('crypto');
   const saleId = randomUUID();
   const ts = new Date();
@@ -278,7 +293,9 @@ async function manualSaleFallback(args: {
     }
   }
 
-  return NextResponse.json({ id: saleId, receiptId, total, itemCount, status: 'completed', createdAt: now }, { status: 201, headers });
+  const responseBody = { id: saleId, receiptId, total, itemCount, status: 'completed', createdAt: now };
+  if (idempotencyKey) setCachedResponse(idempotencyKey, responseBody);
+  return NextResponse.json(responseBody, { status: 201, headers });
 }
 
 // ── GET /api/sales ────────────────────────────────────────────────────────

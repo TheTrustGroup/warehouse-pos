@@ -9,6 +9,7 @@ import {
 import { isPosRestrictedEmail, verifyPosPassword } from '@/lib/auth/posPasswords';
 import { getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
 import { corsHeaders } from '@/lib/cors';
+import { loginBodySchema } from '@/lib/schemas/requestBodies';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,9 +25,15 @@ export async function OPTIONS(request: NextRequest) {
 /** Login: validate email (and POS password when applicable). Derive role from email (server-side only). */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json().catch(() => ({}));
-    const email = (body.email || body.username || '').trim().toLowerCase();
-    const password = typeof body.password === 'string' ? body.password : '';
+    const raw = await request.json().catch(() => ({}));
+    const parsed = loginBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? 'Invalid request body';
+      return withCors(NextResponse.json({ error: msg }, { status: 400 }), request);
+    }
+    const d = parsed.data;
+    const email = (d.email ?? d.username ?? '').trim().toLowerCase();
+    const password = typeof d.password === 'string' ? d.password : '';
     if (!email) {
       return withCors(
         NextResponse.json({ error: 'Email is required' }, { status: 400 }),
@@ -45,11 +52,11 @@ export async function POST(request: NextRequest) {
 
     const role = getRoleFromEmail(email);
     let binding: SessionBinding | undefined =
-      body.warehouse_id != null || body.store_id !== undefined || body.device_id != null
+      d.warehouse_id != null || d.store_id !== undefined || d.device_id != null
         ? {
-            warehouse_id: body.warehouse_id != null ? String(body.warehouse_id).trim() : undefined,
-            store_id: body.store_id !== undefined ? String(body.store_id) : undefined,
-            device_id: body.device_id != null ? String(body.device_id).trim() : undefined,
+            warehouse_id: d.warehouse_id != null ? String(d.warehouse_id).trim() : undefined,
+            store_id: d.store_id !== undefined ? String(d.store_id) : undefined,
+            device_id: d.device_id != null ? String(d.device_id).trim() : undefined,
           }
         : undefined;
 
