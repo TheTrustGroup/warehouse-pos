@@ -2,6 +2,7 @@
 
 ## 1. Frontend (warehouse.extremedeptkidz.com or Vercel)
 
+- **SPA routing:** `vercel.json` includes `rewrites: [{ "source": "/(.*)", "destination": "/index.html" }]` so paths like `/pos`, `/inventory`, `/dashboard` serve `index.html` and the client router handles them. Without this, direct visits or refresh on `/pos` return **404 NOT_FOUND**.
 - **Deploy the full `dist/`** from a single `npm run build`. Do not deploy only `index.html` or only some files; hashed chunk names change every build. If the browser has old HTML pointing to old chunk names, you get **404** for assets and **"Importing a module script failed"**.
 - **Performance:** Build uses `manualChunks` so Recharts loads only when the Reports page is opened (smaller initial load). Production build has `sourcemap: false` and Terser minification. API preconnect runs in `main.tsx` to reduce first-request latency.
 - **Cache:** `vercel.json` sets `Cache-Control: no-store` for `/` and `/index.html` so the next request after deploy gets fresh HTML. If you use another host, set the same for the document URL.
