@@ -10,7 +10,7 @@
 
 ## 2. Backend API (inventory-server-iota.vercel.app)
 
-- **CORS:** All API routes used by the frontend (dashboard, products, warehouses, size-codes, sales, auth, etc.) attach CORS headers. If you add a new route, use `corsHeaders(request)` and `withCors(response, request)` so the browser does not block with "access control checks."
+- **CORS:** All API routes (including `GET /api/health`) attach CORS via `corsHeaders(request)`. Defaults allow `https://warehouse.extremedeptkidz.com` and `*.extremedeptkidz.com`; `ALLOWED_ORIGINS` / `ALLOWED_ORIGIN_SUFFIXES` in Vercel are **additive only** (defaults are always included). Do not rely on env to replace the list—if you set env, it only adds origins. If you add a new route, use `corsHeaders(request)` and `withCors(response, request)`.
 - **Env:** Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_ANON_KEY`) in the Vercel project for the API. `/api/size-codes` now returns **200 with data: []** when DB/env is missing (no 500), so the inventory page loads even if size codes fail; the size filter may be empty until env is fixed.
 - **POS → designated location:** Cashiers with exactly one row in `user_scopes` get `warehouse_id` from login and from `/api/auth/user`/`/admin/api/me`; the frontend falls back to `/api/auth/user` when the first auth response has no `warehouse_id`, so the "Select location" modal is skipped. Ensure each cashier has exactly one `user_scopes` row with the correct `warehouse_id`.
 - **Redeploy** the API after changing env so the new values are in the build.

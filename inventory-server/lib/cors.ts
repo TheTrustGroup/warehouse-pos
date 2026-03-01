@@ -1,8 +1,8 @@
 /**
  * Central CORS config for API routes.
  * Use corsHeaders() on every response; use handleOptions() for OPTIONS.
- * - ALLOWED_ORIGINS (comma-separated): exact origins to allow. Overrides defaults.
- * - ALLOWED_ORIGIN_SUFFIXES (comma-separated): hostname suffixes to allow (e.g. ".vercel.app").
+ * - ALLOWED_ORIGINS (comma-separated): extra origins; defaults (e.g. warehouse.extremedeptkidz.com) are always included.
+ * - ALLOWED_ORIGIN_SUFFIXES (comma-separated): extra hostname suffixes; defaults (vercel.app, extremedeptkidz.com) are always included.
  *   Request origin is allowed if its hostname ends with one of these (e.g. https://warehouse-pos-xxx.vercel.app).
  */
 
@@ -15,19 +15,21 @@ const DEFAULT_ORIGINS = [
   'http://localhost:4173',
 ];
 
+/** Origins are always DEFAULT_ORIGINS plus any from env (env cannot remove this app's origins). */
 function getAllowedOrigins(): string[] {
-  const raw = process.env.ALLOWED_ORIGINS?.trim();
-  if (!raw) return DEFAULT_ORIGINS;
-  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  const fromEnv = process.env.ALLOWED_ORIGINS?.trim();
+  const extra = fromEnv ? fromEnv.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  return [...new Set([...DEFAULT_ORIGINS, ...extra])];
 }
 
 /** Hostname suffixes to allow (e.g. "vercel.app" allows *.vercel.app). */
 const DEFAULT_ORIGIN_SUFFIXES = ['vercel.app', 'extremedeptkidz.com'];
 
+/** Suffixes are always defaults plus any from env (env cannot remove this app's suffixes). */
 function getAllowedSuffixes(): string[] {
   const raw = process.env.ALLOWED_ORIGIN_SUFFIXES?.trim();
-  if (!raw) return DEFAULT_ORIGIN_SUFFIXES;
-  return raw.split(',').map((s) => s.trim().toLowerCase().replace(/^\./, '')).filter(Boolean);
+  const extra = raw ? raw.split(',').map((s) => s.trim().toLowerCase().replace(/^\./, '')).filter(Boolean) : [];
+  return [...new Set([...DEFAULT_ORIGIN_SUFFIXES, ...extra])];
 }
 
 function isOriginAllowed(origin: string, allowed: string[], suffixes: string[]): boolean {
