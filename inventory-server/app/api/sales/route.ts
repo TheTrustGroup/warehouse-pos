@@ -4,6 +4,10 @@
 // POST /api/sales  — record completed sale + deduct stock
 // GET  /api/sales  — list completed sales with line items
 //
+// SALES RECORDING: Every sale is recorded with sold_by_email (auth.email from
+// requirePosRole). record_sale RPC inserts into sales + sale_lines and deducts
+// stock atomically; manual fallback also sets sold_by_email.
+//
 // FIXES IN THIS VERSION:
 //   1. POST: p_lines passed as jsonb array (not stringified) → RPC deducts correctly
 //   2. POST: status='completed' explicitly in manual fallback
@@ -11,6 +15,7 @@
 //   4. GET: product_image_url in sale_lines for receipt display
 //   5. Uses getSupabase() + corsHeaders(req); paymentMethod normalized (cash/card/mobile_money → Cash/Card/MoMo).
 //   6. Session auth: requirePosRole (POST), requireAuth (GET); warehouse scope via getScopeForUser / getEffectiveWarehouseId.
+//   7. POST: optional deliverySchedule → after record_sale, update sales with delivery_status=pending and delivery fields.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -156,6 +161,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const total         = Number(body.total       ?? subtotal - discountAmt);
   const customerName  = String(body.customerName ?? '').trim() || null;
 
+  const deliverySchedule = body.deliverySchedule as Record<string, unknown> | undefined;
+  const deliveryPayload =
+    deliverySchedule && typeof deliverySchedule === 'object'
+      ? {
+          expectedDate: typeof deliverySchedule.expectedDate === 'string' ? deliverySchedule.expectedDate.trim() || null : null,
+          recipientName: typeof deliverySchedule.recipientName === 'string' ? deliverySchedule.recipientName.trim() || null : null,
+          recipientPhone: typeof deliverySchedule.recipientPhone === 'string' ? deliverySchedule.recipientPhone.trim() || null : null,
+          deliveryAddress: typeof deliverySchedule.deliveryAddress === 'string' ? deliverySchedule.deliveryAddress.trim() || null : null,
+          deliveryNotes: typeof deliverySchedule.deliveryNotes === 'string' ? deliverySchedule.deliveryNotes.trim() || null : null,
+        }
+      : null;
+
   if (!Array.isArray(lines) || lines.length === 0)
     return withCors(NextResponse.json({ error: 'lines must be non-empty' }, { status: 400, headers: h }), req);
 
@@ -222,8 +239,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const result = typeof data === 'string' ? JSON.parse(data) : (data ?? {});
+    const saleId = result.id ?? result.saleId;
+
+    if (deliveryPayload && saleId) {
+      const updates: Record<string, unknown> = {
+        delivery_status: 'pending',
+        recipient_name: deliveryPayload.recipientName ?? null,
+        recipient_phone: deliveryPayload.recipientPhone ?? null,
+        delivery_address: deliveryPayload.deliveryAddress ?? null,
+        delivery_notes: deliveryPayload.deliveryNotes ?? null,
+      };
+      if (deliveryPayload.expectedDate) {
+        updates.expected_date = deliveryPayload.expectedDate;
+      }
+      const { error: updateErr } = await db
+        .from('sales')
+        .update(updates)
+        .eq('id', saleId)
+        .eq('warehouse_id', warehouseId);
+      if (updateErr) {
+        console.warn('[POST /api/sales] delivery update failed:', updateErr.message);
+      }
+    }
+
     const responseBody = {
-      id:        result.id ?? result.saleId,
+      id:        saleId,
       receiptId: result.receiptId ?? result.receipt_id,
       total,
       itemCount: normalizedLines.reduce((s, l) => s + l.qty, 0),

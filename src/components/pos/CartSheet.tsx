@@ -13,6 +13,15 @@ export interface CartLine {
   imageUrl?: string | null;
 }
 
+/** Optional delivery schedule captured at checkout. When set, sale is recorded with delivery_status = 'pending'. */
+export interface DeliverySchedule {
+  expectedDate?: string | null;   // ISO date (YYYY-MM-DD) or null for ASAP
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  deliveryAddress?: string | null;
+  deliveryNotes?: string | null;
+}
+
 export interface SalePayload {
   warehouseId: string;
   customerName?: string | null;
@@ -31,6 +40,8 @@ export interface SalePayload {
     sizeLabel?: string | null;
     imageUrl?: string | null;
   }>;
+  /** When present, sale is recorded as delivery (pending) with expected date/recipient. */
+  deliverySchedule?: DeliverySchedule | null;
 }
 
 interface CartSheetProps {
@@ -60,6 +71,13 @@ export default function CartSheet({
   const [customerName, setCustomerName] = useState('');
   const [discountPct, setDiscountPct] = useState(0);
   const [charging, setCharging] = useState(false);
+  const [deliveryRequested, setDeliveryRequested] = useState(false);
+  const [deliveryAsap, setDeliveryAsap] = useState(true);
+  const [expectedDate, setExpectedDate] = useState('');
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryNotes, setDeliveryNotes] = useState('');
 
   if (!isOpen) return null;
 
@@ -71,6 +89,16 @@ export default function CartSheet({
     if (!warehouseId || lines.length === 0 || charging) return;
     setCharging(true);
     try {
+      const deliverySchedule: DeliverySchedule | null = deliveryRequested
+        ? {
+            expectedDate: deliveryAsap ? null : (expectedDate.trim() || null),
+            recipientName: recipientName.trim() || null,
+            recipientPhone: recipientPhone.trim() || null,
+            deliveryAddress: deliveryAddress.trim() || null,
+            deliveryNotes: deliveryNotes.trim() || null,
+          }
+        : null;
+
       await onCharge({
         warehouseId,
         customerName: customerName.trim() || null,
@@ -89,6 +117,7 @@ export default function CartSheet({
           sizeLabel: l.sizeLabel,
           imageUrl: l.imageUrl ?? null,
         })),
+        deliverySchedule: deliverySchedule ?? undefined,
       });
     } finally {
       setCharging(false);
@@ -170,6 +199,85 @@ export default function CartSheet({
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>
+
+          {/* Schedule for delivery — optional; when set, sale is recorded as delivery (pending). */}
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                checked={deliveryRequested}
+                onChange={(e) => setDeliveryRequested(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              <span className="text-sm font-medium text-slate-700">Schedule for delivery</span>
+            </label>
+            {deliveryRequested && (
+              <>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={deliveryAsap}
+                    onChange={(e) => setDeliveryAsap(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  <span className="text-sm text-slate-600">ASAP (no specific date)</span>
+                </label>
+                {!deliveryAsap && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500">Preferred date</label>
+                    <input
+                      type="date"
+                      value={expectedDate}
+                      onChange={(e) => setExpectedDate(e.target.value)}
+                      min={new Date().toISOString().slice(0, 10)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500">Recipient name</label>
+                  <input
+                    type="text"
+                    value={recipientName}
+                    onChange={(e) => setRecipientName(e.target.value)}
+                    placeholder="Full name"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500">Phone</label>
+                  <input
+                    type="tel"
+                    value={recipientPhone}
+                    onChange={(e) => setRecipientPhone(e.target.value)}
+                    placeholder="e.g. 0244 XXX XXX"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500">Delivery address</label>
+                  <textarea
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    placeholder="Street, area, landmark"
+                    rows={2}
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500">Notes (optional)</label>
+                  <input
+                    type="text"
+                    value={deliveryNotes}
+                    onChange={(e) => setDeliveryNotes(e.target.value)}
+                    placeholder="Gate code, time window, etc."
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-slate-700">Payment</label>
             <div className="mt-1 flex flex-wrap gap-2">

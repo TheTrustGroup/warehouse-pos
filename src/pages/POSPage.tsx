@@ -405,6 +405,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
             sku: l.sku ?? '',
             imageUrl: l.imageUrl ?? null,
           })),
+          deliverySchedule: payload.deliverySchedule ?? null,
         }),
       });
 
