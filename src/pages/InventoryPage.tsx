@@ -115,10 +115,11 @@ function applyFilters(
   }
   if (colorFilter) {
     const colorNorm = colorFilter.trim().toLowerCase();
+    const getColor = (p: Product) => (p as Product & { color?: string }).color ?? p.variants?.color ?? '';
     if (colorNorm === 'uncategorized') {
-      r = r.filter(p => !(p.variants?.color ?? '').trim());
+      r = r.filter(p => !getColor(p).trim());
     } else {
-      r = r.filter(p => (p.variants?.color ?? '').trim().toLowerCase() === colorNorm);
+      r = r.filter(p => getColor(p).trim().toLowerCase() === colorNorm);
     }
   }
   r.sort((a, b) => {
