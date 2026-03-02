@@ -1,9 +1,15 @@
 /**
  * InventoryPage: warehouse-scoped load, DC excluded from list, filters/sort.
  */
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import InventoryPage from './InventoryPage';
+
+function renderWithRouter(ui: React.ReactElement, { route = '/' }: { route?: string } = {}) {
+  return render(<MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>);
+}
 
 const MOCK_WAREHOUSE_ID = 'wh-inv-test-123';
 const MOCK_WAREHOUSE_NAME = 'Main Town';
@@ -48,7 +54,7 @@ describe('InventoryPage', () => {
   });
 
   it('fetches products with warehouse_id from context', async () => {
-    render(<InventoryPage />);
+    renderWithRouter(<InventoryPage />);
     await waitFor(
       () => {
         const productCall = fetchCalls.find(
@@ -62,7 +68,7 @@ describe('InventoryPage', () => {
   });
 
   it('shows Inventory title and Add product action', async () => {
-    render(<InventoryPage />);
+    renderWithRouter(<InventoryPage />);
     await waitFor(() => {
       const headings = screen.getAllByRole('heading', { name: /inventory/i });
       const addButtons = screen.getAllByRole('button', { name: /add product/i });

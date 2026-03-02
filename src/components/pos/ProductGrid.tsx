@@ -4,9 +4,6 @@ import type { POSProduct } from './SizePickerSheet';
 
 export type { POSProduct };
 
-/** Color filter options — match inventory (InventoryPage). */
-const COLOR_OPTIONS = ['All', 'Black', 'White', 'Red', 'Blue', 'Brown', 'Green', 'Grey', 'Navy', 'Beige', 'Multi', 'Uncategorized'];
-
 interface ProductGridProps {
   products: POSProduct[];
   loading: boolean;
@@ -80,16 +77,6 @@ export default function ProductGrid({
     return Array.from(set).sort((a, b) => (a === 'all' ? -1 : b === 'all' ? 1 : a.localeCompare(b)));
   }, [products]);
 
-  const uniqueSizes = useMemo(() => {
-    const set = new Set<string>();
-    products.forEach((p) => {
-      if (p.sizeKind === 'na') set.add('NA');
-      else if (p.sizeKind === 'one_size') set.add('One size');
-      else for (const s of p.quantityBySize ?? []) if (s.sizeCode) set.add(s.sizeCode);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [products]);
-
   const filtered = useMemo(
     () => applyFilters(products, search, category, sizeFilter, colorFilter),
     [products, search, category, sizeFilter, colorFilter]
@@ -132,74 +119,27 @@ export default function ProductGrid({
   }
 
   return (
-    <div className="p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {categories.length > 1 && (
-          <div className="flex flex-wrap gap-2">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => onCategoryChange(cat)}
-                className={`rounded-full px-4 py-2 text-sm font-medium ${
-                  category === cat ? 'bg-primary-600 text-white' : 'bg-slate-200 text-slate-700'
-                }`}
-              >
-                {cat === 'all' ? 'All' : cat}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="flex-shrink-0 flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Size</span>
-          <select
-            value={sizeFilter}
-            onChange={(e) => onSizeFilterChange(e.target.value)}
-            className="min-w-[100px] cursor-pointer rounded-full border border-slate-200 bg-white pl-2.5 pr-7 py-2 text-[12px] font-medium text-slate-700"
-            aria-label="Filter by size"
-          >
-            <option value="">All</option>
-            {uniqueSizes.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+    <div className="p-4 flex flex-col gap-3">
+      {/* Category tabs: horizontal scroll, active dark, inactive white */}
+      {categories.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => onCategoryChange(cat)}
+              className={`flex-shrink-0 h-[30px] px-3 rounded-[var(--edk-radius-sm)] text-[12px] font-medium whitespace-nowrap transition-colors ${
+                category === cat
+                  ? 'bg-[var(--edk-ink)] text-white border border-[var(--edk-ink)]'
+                  : 'bg-[var(--edk-surface)] text-[var(--edk-ink-2)] border border-[var(--edk-border-mid)] hover:bg-[var(--edk-bg)]'
+              }`}
+            >
+              {cat === 'all' ? 'All' : cat}
+            </button>
+          ))}
         </div>
-        <div className="flex-shrink-0 flex items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Color</span>
-          <div className="flex flex-wrap gap-1.5">
-            {COLOR_OPTIONS.map((c) => {
-              const value = c === 'All' ? '' : c;
-              const selected = colorFilter.toLowerCase() === value.toLowerCase();
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => onColorFilterChange(value)}
-                  className={`flex-shrink-0 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                    selected
-                      ? 'border-primary-600 bg-primary-600 text-white'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'
-                  }`}
-                  aria-pressed={selected}
-                  aria-label={`Filter by color: ${c}`}
-                >
-                  {c}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={handleClearFilters}
-            className="flex-shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-600 hover:border-slate-400"
-          >
-            Clear filters
-          </button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+      )}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         {filtered.map((p) => (
           <POSProductCard key={p.id} product={p} onSelect={onSelect} />
         ))}

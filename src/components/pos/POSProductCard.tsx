@@ -82,6 +82,11 @@ export default function POSProductCard({ product, onSelect }: POSProductCardProp
   const safeSrc = firstImage ? safeProductImageUrl(firstImage) : '';
   const hasImage = safeSrc && safeSrc !== EMPTY_IMAGE_DATA_URL;
 
+  const qty = product.sizeKind === 'sized'
+    ? (product.quantityBySize ?? []).reduce((s, r) => s + r.quantity, 0)
+    : product.quantity;
+  const stockLabel = isOut ? 'Out of stock' : qty <= 5 ? `${qty} left` : `${qty} in stock`;
+
   return (
     <button
       type="button"
@@ -89,82 +94,46 @@ export default function POSProductCard({ product, onSelect }: POSProductCardProp
       onClick={() => onSelect(product)}
       className={`
         group w-full text-left
-        bg-white rounded-2xl overflow-hidden
-        border border-slate-100
-        shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)]
+        bg-[var(--edk-surface)] rounded-[var(--edk-radius)] overflow-hidden
+        border border-[var(--edk-border)]
+        shadow-[0_1px_3px_rgba(0,0,0,0.06)]
         transition-all duration-150
-        active:scale-[0.96] active:shadow-none
+        active:scale-[0.98]
         hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:-translate-y-0.5
-        disabled:opacity-40 disabled:cursor-not-allowed
-        disabled:hover:transform-none disabled:hover:shadow-none
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400
+        disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:transform-none disabled:hover:shadow-none
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--edk-red)]
       `}
     >
-      {/* Image: only show img when URL is allowed (same-origin Storage or data:); else placeholder */}
-      <div className="relative w-full pt-[100%] bg-slate-50 overflow-hidden">
+      {/* Image: 1:1 square */}
+      <div className="relative w-full aspect-square bg-[var(--edk-bg)] overflow-hidden">
         {hasImage ? (
           <img
             src={safeSrc}
             alt={product.name}
             loading="lazy"
-            className="
-              absolute inset-0 w-full h-full object-cover
-              transition-transform duration-300
-              group-hover:scale-105
-            "
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
         ) : (
           <ImagePlaceholder />
         )}
-
-        {/* Stock badge — only low/out */}
-        <StockBadge status={status} qty={product.quantity} />
+        {isOut && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+            <span className="text-white text-[11px] font-bold uppercase">Out of stock</span>
+          </div>
+        )}
+        <StockBadge status={status} qty={qty} />
       </div>
 
-      {/* Body */}
-      <div className="px-3 pt-2.5 pb-3">
-        {/* Name */}
-        <p className="
-          text-[13px] font-bold text-slate-900
-          leading-snug mb-1
-          line-clamp-2 min-h-[2.5em]
-        ">
+      <div className="px-2.5 pt-2 pb-2.5">
+        <p className="text-[12px] font-semibold text-[var(--edk-ink)] truncate mb-0.5">
           {product.name}
         </p>
-
-        {/* Category */}
-        <p className="text-[11px] text-slate-400 font-medium mb-2">
-          {product.category ?? ''}
+        <p className="text-[15px] font-extrabold text-[var(--edk-red)] leading-none mb-0.5" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+          {formatPrice(product.sellingPrice)}
         </p>
-
-        {/* Price + stock row */}
-        <div className="flex items-end justify-between gap-1">
-          <span className="text-[15px] font-extrabold text-red-500 leading-none">
-            {formatPrice(product.sellingPrice)}
-          </span>
-
-          {/* Size indicator for sized products */}
-          {product.sizeKind === 'sized' && !isOut && (
-            <span className="
-              text-[10px] font-semibold text-slate-400
-              bg-slate-100 px-1.5 py-0.5 rounded-md
-              leading-none flex-shrink-0
-            ">
-              {(product.quantityBySize ?? []).filter(r => r.quantity > 0).length} sizes
-            </span>
-          )}
-
-          {/* Qty badge for non-sized products */}
-          {product.sizeKind !== 'sized' && !isOut && (
-            <span className="
-              text-[10px] font-semibold text-slate-400
-              bg-slate-100 px-1.5 py-0.5 rounded-md
-              leading-none flex-shrink-0
-            ">
-              {product.quantity} left
-            </span>
-          )}
-        </div>
+        <p className={`text-[10px] ${qty <= 5 && !isOut ? 'text-[var(--edk-amber)]' : 'text-[var(--edk-ink-3)]'}`}>
+          {stockLabel}
+        </p>
       </div>
     </button>
   );

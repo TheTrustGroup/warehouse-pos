@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { MobileMenu } from './MobileMenu';
+import { MobileBottomNav } from './MobileBottomNav';
 import { SyncStatusBar } from '../SyncStatusBar';
 import { ConflictModalContainer } from '../ConflictModalContainer';
 import { ApiStatusProvider, useApiStatus } from '../../contexts/ApiStatusContext';
@@ -10,8 +11,21 @@ import { useCriticalData } from '../../contexts/CriticalDataContext';
 import { Button } from '../ui/Button';
 
 const DISMISS_BANNER_KEY = 'dismiss_degraded_banner_session';
-/** Only show "server offline" banner after degraded for this long to avoid jitter from brief blips. */
 const BANNER_DEBOUNCE_MS = 4000;
+const MOBILE_BREAKPOINT = 1024;
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const m = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+    const handler = () => setIsMobile(m.matches);
+    m.addEventListener('change', handler);
+    return () => m.removeEventListener('change', handler);
+  }, []);
+  return isMobile;
+}
 
 /** Layout: single vertical rhythm — section spacing (24px) and consistent main padding. Mobile-first. */
 export function Layout() {
@@ -23,6 +37,10 @@ export function Layout() {
 }
 
 function LayoutContent() {
+  const location = useLocation();
+  const isPOS = location.pathname === '/pos';
+  const isMobile = useIsMobile();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { isDegraded: degraded, retry } = useApiStatus();
   const [showBanner, setShowBanner] = useState(false);
   const degradedSinceRef = useRef<number | null>(null);
@@ -73,16 +91,22 @@ function LayoutContent() {
   const showSyncingBar = isSyncingCriticalData;
 
   return (
-    <div className="min-h-[var(--min-h-viewport)] bg-gradient-to-br from-slate-50 via-white to-slate-50">
+    <div className="min-h-[var(--min-h-viewport)] bg-[var(--edk-bg)]">
       <div className="hidden lg:block">
         <Sidebar />
       </div>
-      <MobileMenu />
+      <MobileMenu
+        open={isMobile ? mobileMenuOpen : undefined}
+        onClose={isMobile ? () => setMobileMenuOpen(false) : undefined}
+      />
       <Header />
+      {isMobile && (
+        <MobileBottomNav onMoreClick={() => setMobileMenuOpen(true)} />
+      )}
       {/* Slim hint while phase 2 (inventory, orders) syncs in background after login */}
       {isSyncingCriticalData && (
         <div
-          className="lg:ml-[280px] mt-[calc(72px+var(--safe-top))] bg-primary-50/90 text-primary-900 text-center py-2 px-4 text-sm font-medium flex items-center justify-center gap-2 border-b border-primary-200/50"
+          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-primary-50/90 text-primary-900 text-center py-2 px-4 text-sm font-medium flex items-center justify-center gap-2 border-b border-primary-200/50"
           role="status"
           aria-live="polite"
         >
@@ -93,7 +117,7 @@ function LayoutContent() {
       {/* In-flow banner: reserves layout space so content is never overlapped. Pushes main content down. */}
       {criticalDataError && (
         <div
-          className="lg:ml-[280px] mt-[calc(72px+var(--safe-top))] bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-amber-600/20"
+          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-amber-600/20"
           role="alert"
         >
           <span>Initial load had issues: {criticalDataError}</span>
@@ -104,7 +128,7 @@ function LayoutContent() {
       )}
       {showDegradedBanner && (
         <div
-          className="lg:ml-[280px] mt-[calc(72px+var(--safe-top))] bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-amber-600/20"
+          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-amber-600/20"
           role="status"
         >
           <span>Server temporarily unavailable. Last saved data — read-only. Add, edit, and sales disabled until server is back.</span>
@@ -126,10 +150,12 @@ function LayoutContent() {
           </Button>
         </div>
       )}
-      {/* Phase 6: main padding ≥16px (max(1rem, safe-area)); no edge-touch; reserves space for SyncStatusBar */}
+      {/* Main: offset by sidebar and topbar; on mobile add bottom padding for tab bar */}
       <main
-        className={`lg:ml-[280px] pt-20 lg:pt-8 pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] lg:px-8 pb-[max(3.5rem,calc(var(--safe-bottom)+3.5rem))] min-h-[calc(var(--min-h-viewport)-72px)] max-w-[1600px] overflow-x-hidden ${
-          showDegradedBanner || showSyncingBar ? 'mt-0' : 'mt-[calc(72px+var(--safe-top))]'
+        className={`lg:ml-[var(--edk-sidebar-w)] pt-20 lg:pt-8 pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] lg:px-8 min-h-[calc(var(--min-h-viewport)-var(--edk-topbar-h))] max-w-[1600px] overflow-x-hidden ${
+          showDegradedBanner || showSyncingBar ? 'mt-0' : isPOS ? 'mt-0' : 'mt-[calc(var(--edk-topbar-h)+var(--safe-top))]'
+        } ${
+          isMobile ? 'pb-[max(4.5rem,calc(var(--safe-bottom)+4.5rem))]' : 'pb-[max(3.5rem,calc(var(--safe-bottom)+3.5rem))]'
         }`}
       >
         <Outlet />

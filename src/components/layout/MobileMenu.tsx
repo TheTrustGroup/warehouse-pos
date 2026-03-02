@@ -13,8 +13,17 @@ function getRoleDisplayName(roleId: string | undefined): string {
   return ROLES[key]?.name ?? roleId;
 }
 
-export function MobileMenu() {
-  const [isOpen, setIsOpen] = useState(false);
+interface MobileMenuProps {
+  /** When set, menu is controlled from outside (e.g. "More" in bottom nav). Hamburger is hidden. */
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export function MobileMenu({ open: controlledOpen, onClose }: MobileMenuProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const isOpen = isControlled ? controlledOpen : internalOpen;
+
   const { user, hasPermission, hasAnyPermission, switchRole } = useAuth();
   const { warehouses, currentWarehouseId, setCurrentWarehouseId, currentWarehouse, isWarehouseBoundToSession, isLoading: warehousesLoading } = useWarehouse();
   // Hardening: only admins see "Switch role" (testing). Others cannot try to switch; backend enforces 403.
@@ -35,18 +44,25 @@ export function MobileMenu() {
     return () => document.body.classList.remove('scroll-lock');
   }, [isOpen]);
 
+  const handleClose = () => {
+    if (isControlled && onClose) onClose();
+    else setInternalOpen(false);
+  };
+
   return (
     <>
-      {/* Toggle: 44px touch target, thumb-friendly on mobile */}
-      <Button
-        variant="action"
-        onClick={() => setIsOpen(!isOpen)}
-        className="lg:hidden fixed top-[88px] left-4 z-40 min-h-touch min-w-touch flex items-center justify-center bg-white border border-slate-200 rounded-xl shadow-md"
-        aria-label="Toggle menu"
-        aria-expanded={isOpen}
-      >
-        {isOpen ? <X className="w-6 h-6 text-slate-700" /> : <Menu className="w-6 h-6 text-slate-700" />}
-      </Button>
+      {/* Hamburger only when not controlled (no bottom nav). With bottom nav, "More" opens menu. */}
+      {!isControlled && (
+        <Button
+          variant="action"
+          onClick={() => setInternalOpen(!isOpen)}
+          className="lg:hidden fixed top-[calc(var(--edk-topbar-h)+var(--safe-top)+8px)] left-4 z-40 min-h-[44px] min-w-[44px] flex items-center justify-center bg-white border border-slate-200 rounded-xl shadow-md"
+          aria-label="Toggle menu"
+          aria-expanded={isOpen}
+        >
+          {isOpen ? <X className="w-6 h-6 text-slate-700" /> : <Menu className="w-6 h-6 text-slate-700" />}
+        </Button>
+      )}
 
       {/* Mobile Sidebar */}
       <div
@@ -54,8 +70,8 @@ export function MobileMenu() {
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="absolute inset-0 solid-overlay" onClick={() => setIsOpen(false)} aria-hidden></div>
-        <aside className="relative w-[280px] min-w-[280px] max-w-[85vw] h-full min-h-[var(--h-viewport)] flex flex-col solid-panel shadow-xl border-r border-slate-200/80 flex-shrink-0">
+        <div className="absolute inset-0 solid-overlay" onClick={handleClose} aria-hidden></div>
+        <aside className="relative w-[var(--edk-sidebar-w)] min-w-[var(--edk-sidebar-w)] max-w-[85vw] h-full min-h-[var(--h-viewport)] flex flex-col solid-panel shadow-xl border-r border-slate-200/80 flex-shrink-0">
           <div className="px-5 py-5 border-b border-slate-200/30 flex-shrink-0">
             <div className="flex flex-col gap-0.5">
               <h1 className="text-xl font-bold leading-tight tracking-tight gradient-text">
@@ -76,7 +92,7 @@ export function MobileMenu() {
                   <span className="sr-only">Select warehouse</span>
                   <select
                     value={currentWarehouseId}
-                    onChange={(e) => { setCurrentWarehouseId(e.target.value); setIsOpen(false); }}
+                    onChange={(e) => { setCurrentWarehouseId(e.target.value); handleClose(); }}
                     className="input-field w-full text-sm font-medium text-slate-800 py-2 pr-8"
                     aria-label="Select warehouse"
                   >
@@ -100,7 +116,7 @@ export function MobileMenu() {
               <NavLink
                 key={item.name}
                 to={item.to}
-                onClick={() => setIsOpen(false)}
+                onClick={handleClose}
                 className={({ isActive }) =>
                   `nav-item ${isActive ? 'nav-item-active' : ''}`
                 }
@@ -122,7 +138,7 @@ export function MobileMenu() {
                 <span className="text-xs font-medium text-slate-500 block mb-1">Switch role (testing)</span>
                 <select
                   value={user.role}
-                  onChange={(e) => { switchRole(e.target.value); setIsOpen(false); }}
+                  onChange={(e) => { switchRole(e.target.value); handleClose(); }}
                   className="input-field w-full text-sm font-medium text-slate-900"
                   aria-label="Switch role"
                 >

@@ -12,6 +12,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ProductCard, { ProductCardSkeleton, type Product } from '../components/inventory/ProductCard';
 import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
@@ -261,26 +262,40 @@ function DeleteDialog({
 // ── Stat card ─────────────────────────────────────────────────────────────
 
 function StatCard({
-  label, value, sub, accent = false, warning = false,
+  label, value, sub, accent = false, warning = false, className = '',
 }: {
   label:    string;
   value:    string | number;
   sub?:     string;
   accent?:  boolean;
   warning?: boolean;
+  className?: string;
 }) {
   return (
-    <div className={`flex-1 min-w-0 px-4 py-3 rounded-2xl border
-      ${accent  ? 'bg-red-500 border-red-400 text-white' :
-        warning ? 'bg-amber-50 border-amber-100 text-amber-900' :
-                  'bg-white   border-slate-100 text-slate-900'}`}>
-      <p className={`text-[10px] font-bold uppercase tracking-widest mb-0.5
-                     ${accent ? 'text-red-100' : warning ? 'text-amber-500' : 'text-slate-400'}`}>
+    <div
+      className={`rounded-[var(--edk-radius)] border px-4 py-4 flex flex-col gap-1 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ${className} ${
+        accent
+          ? 'bg-[var(--edk-red)] border-transparent text-white'
+          : warning
+            ? 'bg-[var(--edk-amber-bg)] border-[rgba(217,119,6,0.15)]'
+            : 'bg-[var(--edk-surface)] border-[var(--edk-border)] text-[var(--edk-ink)]'
+      }`}
+    >
+      <p
+        className={`text-[10px] font-semibold uppercase tracking-[0.15em] ${
+          accent ? 'text-white/65' : warning ? 'text-[var(--edk-amber)]' : 'text-[var(--edk-ink-3)]'
+        }`}
+      >
         {label}
       </p>
-      <p className="text-[20px] font-black tabular-nums leading-tight truncate">{value}</p>
+      <p
+        className="text-[28px] font-extrabold tabular-nums leading-none tracking-tight truncate"
+        style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+      >
+        {value}
+      </p>
       {sub && (
-        <p className={`text-[10px] mt-0.5 font-medium ${accent ? 'text-red-100' : 'text-slate-400'}`}>
+        <p className={`text-[11px] mt-0.5 ${accent ? 'text-white/60' : warning ? 'text-[var(--edk-amber)]/70' : 'text-[var(--edk-ink-3)]'}`}>
           {sub}
         </p>
       )}
@@ -290,28 +305,10 @@ function StatCard({
 
 // ── Icons ─────────────────────────────────────────────────────────────────
 
-const SearchIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       strokeWidth="2" strokeLinecap="round">
-    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-  </svg>
-);
-const XIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       strokeWidth="2.5" strokeLinecap="round">
-    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-  </svg>
-);
 const PlusIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        strokeWidth="2.5" strokeLinecap="round">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-  </svg>
-);
-const ChevronDown = ({ size = 10 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       strokeWidth="2.5" strokeLinecap="round">
-    <polyline points="6 9 12 15 18 9"/>
   </svg>
 );
 const BoxIcon = () => (
@@ -328,11 +325,13 @@ const BoxIcon = () => (
 export default function InventoryPage(_props: InventoryPageProps) {
 
   // ── Warehouse from context (SINGLE SOURCE OF TRUTH) ──────────────────────
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchFromUrl = searchParams.get('q') ?? '';
+
   const {
     currentWarehouseId: warehouseId,
     currentWarehouse,
     warehouses: contextWarehouses,
-    setCurrentWarehouseId,
   } = useWarehouse();
   const warehouseList = contextWarehouses?.length ? contextWarehouses : FALLBACK_WAREHOUSES;
   const warehouse = currentWarehouse ?? warehouseList.find(w => w.id === warehouseId) ?? warehouseList[0];
@@ -342,8 +341,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
   const [sizeCodes,      setSizeCodes]      = useState<SizeCode[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [error,          setError]          = useState<string | null>(null);
-  const [whDropdown,     setWhDropdown]     = useState(false);
-  const [search,         setSearch]         = useState('');
+  const search = searchFromUrl;
   const [category,       setCategory]       = useState<FilterKey>('all');
   const [sizeFilter,     setSizeFilter]     = useState('');
   const [colorFilter,    setColorFilter]   = useState('');
@@ -504,7 +502,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
   useEffect(() => {
     setProducts([]); setLoading(true); setError(null);
-    setSearch(''); setCategory('all');
+    setCategory('all');
     didInitialLoad.current = false;
     loadAbortRef.current?.abort();
 
@@ -682,211 +680,145 @@ export default function InventoryPage(_props: InventoryPageProps) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] pb-28">
+    <div className="min-h-screen bg-[var(--edk-bg)] pb-28" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
 
-      {/* ══ Sticky header ══ */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md
-                          border-b border-slate-100 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 text-[12px] text-[var(--edk-ink-3)] mb-4 px-0">
+        <span>{warehouse?.name ?? 'Main Store'}</span>
+        <span className="opacity-40" aria-hidden>›</span>
+        <span className="text-[var(--edk-ink-2)] font-medium">Inventory</span>
+      </div>
 
-        {/* Top bar: title + warehouse + actions */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-3 gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Warehouse pill */}
-            <div className="relative">
-              <button type="button" onClick={() => setWhDropdown(o => !o)}
-                      className="flex items-center gap-1.5 h-9 px-3.5 rounded-xl
-                                 bg-slate-100 hover:bg-slate-200 transition-colors">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"/>
-                <span className="text-[13px] font-bold text-slate-800 whitespace-nowrap">
-                  {warehouse?.name ?? 'Warehouse'}
-                </span>
-                <ChevronDown/>
-              </button>
-              {whDropdown && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setWhDropdown(false)}/>
-                  <div className="absolute left-0 top-11 z-20 bg-white rounded-2xl
-                                  shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-slate-100 py-1.5 w-44">
-                    {warehouseList.map(w => (
-                      <button key={w.id} type="button"
-                              onClick={() => { setCurrentWarehouseId(w.id); setWhDropdown(false); }}
-                              className={`w-full px-4 py-2.5 text-left text-[13px] font-semibold transition-colors
-                                ${warehouseId === w.id
-                                  ? 'text-red-500 bg-red-50'
-                                  : 'text-slate-700 hover:bg-slate-50'}`}>
-                        {warehouseId === w.id && '✓ '}{w.name}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <h1 className="text-[18px] font-black text-slate-900 tracking-tight">
-              Inventory
-            </h1>
-          </div>
-
-          {/* Actions — ONE add button, refresh is implicit via poll */}
-          <button type="button" onClick={openAddModal}
-                  className="h-9 px-4 rounded-xl bg-red-500 hover:bg-red-600
-                             text-white text-[13px] font-bold flex items-center gap-1.5
-                             transition-colors active:scale-[0.97] shadow-[0_2px_8px_rgba(239,68,68,0.3)]
-                             flex-shrink-0">
-            <PlusIcon/> Add product
-          </button>
+      {/* Page header: title + subtitle + Add product */}
+      <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+        <div className="flex flex-col gap-0.5">
+          <h1 className="text-[22px] font-extrabold tracking-wide text-[var(--edk-ink)] uppercase" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+            Inventory
+          </h1>
+          <p className="text-[12px] text-[var(--edk-ink-3)]">
+            {products.length} product{products.length !== 1 ? 's' : ''} · Page {currentPage} of {totalPages}
+          </p>
         </div>
+        <button
+          type="button"
+          onClick={openAddModal}
+          className="h-[34px] px-3.5 rounded-[var(--edk-radius-sm)] bg-[var(--edk-red)] hover:bg-[var(--edk-red-hover)] text-white text-[13px] font-semibold flex items-center gap-1.5 shadow-[0_1px_3px_rgba(232,40,26,0.3)] flex-shrink-0"
+        >
+          <PlusIcon /> Add product
+        </button>
+      </div>
 
-        {/* Search bar */}
-        <div className="px-4 pb-3">
-          <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-              <SearchIcon/>
-            </span>
-            <input
-              type="search" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search by name, SKU, or barcode…"
-              className="w-full h-10 pl-10 pr-9 rounded-xl border border-slate-200 bg-slate-50
-                         text-[13px] text-slate-900 placeholder:text-slate-400
-                         focus:outline-none focus:border-red-400 focus:bg-white
-                         focus:ring-[3px] focus:ring-red-50 transition-all duration-150"
-            />
-            {search && (
-              <button onClick={() => setSearch('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <XIcon/>
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* ══ Stat bar ══ */}
+      {/* Stats: on mobile 2-col with stock value full width; on desktop 3-col */}
       {!loading && !error && products.length > 0 && (
-        <div className="px-4 pt-4 pb-1 flex gap-2.5 overflow-x-auto scrollbar-none">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
           <StatCard
             label="SKUs"
             value={products.length}
             sub={totalPages > 1 ? `Showing ${pageStart + 1}–${Math.min(pageStart + PAGE_SIZE, totalFiltered)} of ${totalFiltered}` : `${totalFiltered} shown`}
           />
-          <StatCard
-            label="Stock value"
-            value={formatGHC(stats.totalValue)}
-            sub={`${stats.totalUnits.toLocaleString()} units`}
-            accent
-          />
           {alertCount > 0 && (
             <StatCard
               label="Alerts"
               value={alertCount}
-              sub={`${stats.outCount} out · ${stats.lowCount} low`}
+              sub={`${stats.outCount} out · ${stats.lowCount} low stock`}
               warning
             />
           )}
+          <StatCard
+            label="Stock Value"
+            value={formatGHC(stats.totalValue)}
+            sub={`${stats.totalUnits.toLocaleString()} total units`}
+            accent
+            className="col-span-2 lg:col-span-1"
+          />
         </div>
       )}
 
-      {/* ══ Filter strip ══ */}
-      <div className="flex flex-wrap items-center gap-2 px-4 pt-3 pb-2">
-        {/* Category chips — horizontal scroll */}
-        <div className="flex gap-2 flex-1 min-w-0 overflow-x-auto scrollbar-none">
-          {(['all', ...CATEGORIES] as string[]).map(cat => (
-            <button key={cat} type="button" onClick={() => setCategory(cat)}
-                    className={`flex-shrink-0 h-8 px-3.5 rounded-full text-[12px] font-bold
-                                border transition-all duration-150 whitespace-nowrap
-                                ${category === cat
-                                  ? 'bg-slate-900 border-slate-900 text-white'
-                                  : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'}`}>
+      {/* Filter toolbar: category pills, Size/Color dropdowns, sort, results count */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+          {(['all', ...CATEGORIES] as string[]).map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setCategory(cat)}
+              className={`flex-shrink-0 h-[30px] px-2.5 rounded-[20px] text-[12px] font-medium border whitespace-nowrap transition-all duration-150 ${
+                category === cat
+                  ? 'bg-[var(--edk-ink)] border-[var(--edk-ink)] text-white'
+                  : 'bg-[var(--edk-surface)] border-[var(--edk-border-mid)] text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)]'
+              }`}
+            >
               {cat === 'all' ? 'All' : cat}
             </button>
           ))}
-        </div>
-
-        {/* Size filter — dropdown (SIZE) */}
-        <div className="flex-shrink-0 flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Size</span>
           <select
             value={sizeFilter}
             onChange={(e) => setSizeFilter(e.target.value)}
-            className="h-8 pl-2.5 pr-7 rounded-full border border-slate-200 bg-white text-[12px] font-bold text-slate-700 min-w-[100px] cursor-pointer"
+            className="h-[30px] pl-2.5 pr-6 rounded-[20px] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] min-w-[100px] cursor-pointer appearance-none bg-no-repeat bg-[length:10px_6px] bg-[right_10px_center]"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238A8784' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")` }}
             aria-label="Filter by size"
           >
-            <option value="">All</option>
-            {uniqueSizes.map(s => (
+            <option value="">Size: All</option>
+            {uniqueSizes.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
-        </div>
-
-        {/* Color filter — pills (COLOR) */}
-        <div className="flex-shrink-0 flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Color</span>
-          <div className="flex flex-wrap gap-1.5">
-            {COLOR_OPTIONS.map(c => {
-              const value = c === 'All' ? '' : c;
-              const selected = colorFilter.toLowerCase() === value.toLowerCase();
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColorFilter(value)}
-                  className={`flex-shrink-0 h-8 px-3 rounded-full text-[12px] font-bold border transition-all duration-150
-                    ${selected
-                      ? 'bg-slate-900 border-slate-900 text-white'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}
-                  aria-pressed={selected}
-                  aria-label={`Filter by color: ${c}`}
-                >
-                  {c}
-                </button>
-              );
-            })}
+          <select
+            value={colorFilter}
+            onChange={(e) => setColorFilter(e.target.value)}
+            className="h-[30px] pl-2.5 pr-6 rounded-[20px] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] min-w-[100px] cursor-pointer appearance-none bg-no-repeat bg-[length:10px_6px] bg-[right_10px_center]"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238A8784' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")` }}
+            aria-label="Filter by color"
+          >
+            <option value="">Color: All</option>
+            {COLOR_OPTIONS.filter((c) => c !== 'All').map((c) => (
+              <option key={c} value={c === 'Uncategorized' ? 'uncategorized' : c}>{c}</option>
+            ))}
+          </select>
+          <div className="relative flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setSortOpen((o) => !o)}
+              className="flex items-center gap-1.5 h-[30px] px-2.5 rounded-[20px] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)] whitespace-nowrap"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="8" y1="6" x2="21" y2="6" />
+                <line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" />
+                <line x1="3" y1="12" x2="3.01" y2="12" />
+                <line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+              {SORT_OPTIONS.find((o) => o.key === sort)?.label}
+            </button>
+            {sortOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} aria-hidden />
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-[var(--edk-border)] py-1.5 w-44">
+                  {SORT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => { setSort(opt.key); setSortOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-[13px] font-medium transition-colors ${
+                        sort === opt.key ? 'text-[var(--edk-red)] bg-[var(--edk-red-soft)]' : 'text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)]'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
-
-        {/* Sort — compact */}
-        <div className="relative flex-shrink-0">
-          <button type="button" onClick={() => setSortOpen(o => !o)}
-                  className="flex items-center gap-1 h-8 px-3 rounded-full border border-slate-200
-                             bg-white text-[12px] font-bold text-slate-600 hover:border-slate-400
-                             transition-colors whitespace-nowrap">
-            {SORT_OPTIONS.find(o => o.key === sort)?.label}
-            <ChevronDown/>
-          </button>
-          {sortOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)}/>
-              <div className="absolute right-0 top-10 z-20 bg-white rounded-2xl
-                              shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-slate-100
-                              py-1.5 w-44">
-                {SORT_OPTIONS.map(opt => (
-                  <button key={opt.key} type="button"
-                          onClick={() => { setSort(opt.key); setSortOpen(false); }}
-                          className={`w-full px-4 py-2.5 text-left text-[13px] font-semibold transition-colors
-                            ${sort === opt.key ? 'text-red-500 bg-red-50' : 'text-slate-700 hover:bg-slate-50'}`}>
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        <span className="text-[11px] text-[var(--edk-ink-3)] whitespace-nowrap">
+          Showing <strong className="text-[var(--edk-ink-2)] font-semibold">{pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, totalFiltered)}</strong> of {totalFiltered}
+        </span>
       </div>
 
-      {/* ══ Count row ══ */}
-      {!loading && !error && (
-        <div className="px-4 pb-3">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            {search || category !== 'all' || sizeFilter || colorFilter
-              ? `${totalFiltered} result${totalFiltered !== 1 ? 's' : ''}`
-              : `${products.length} product${products.length !== 1 ? 's' : ''}`}
-            {totalPages > 1 && ` · Page ${currentPage} of ${totalPages}`}
-          </p>
-        </div>
-      )}
-
-      {/* ══ Main content ══ */}
-      <main className="px-4">
+      {/* Main content */}
+      <main>
 
         {/* Error */}
         {error && (
@@ -938,17 +870,17 @@ export default function InventoryPage(_props: InventoryPageProps) {
             <p className="text-[15px] font-bold text-slate-700">
               No results for current filters
             </p>
-            <button type="button" onClick={() => { setSearch(''); setCategory('all'); setSizeFilter(''); setColorFilter(''); setCurrentPage(1); }}
+            <button type="button" onClick={() => { setSearchParams({}); setCategory('all'); setSizeFilter(''); setColorFilter(''); setCurrentPage(1); }}
                     className="text-[13px] font-bold text-red-500 hover:text-red-700">
               Clear filters
             </button>
           </div>
         )}
 
-        {/* Product grid — view-only cards (no inline stock edit), 50 per page */}
+        {/* Product grid — EDK card style: 10px radius, 4:3 image, hover lift */}
         {!loading && !error && displayed.length > 0 && (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5">
               {displayed.map(product => (
                 <ProductCard
                   key={product.id}

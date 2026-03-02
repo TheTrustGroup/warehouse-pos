@@ -105,7 +105,6 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const [activeProduct, setActiveProduct] = useState<POSProduct | null>(null);
   const [saleResult, setSaleResult] = useState<CompletedSale | null>(null);
   const [charging, setCharging] = useState(false);
-  const [barcodeInput, setBarcodeInput] = useState('');
 
   const { toast, show: showToast } = useToast();
   const isMounted = useRef(true);
@@ -259,9 +258,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   }, [warehouse.id, loadProducts]);
 
   function handleBarcodeSubmit() {
-    const raw = barcodeInput.trim();
-    setBarcodeInput('');
+    const raw = search.trim();
     if (!raw) return;
+    setSearch('');
     const matches = products.filter(
       (p) => (p.barcode ?? '').trim().toLowerCase() === raw.toLowerCase()
     );
@@ -522,50 +521,141 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         ? 'border-l-red-500'
         : 'border-l-emerald-500';
 
+  const subtotal = cart.reduce((s, l) => s + l.unitPrice * l.qty, 0);
+  const total = subtotal;
+
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-[var(--edk-bg)] flex flex-col overflow-hidden">
       <POSHeader
         warehouseName={warehouse.name}
         search={search}
         cartCount={cartCount}
         onSearchChange={setSearch}
         onCartTap={() => cartCount > 0 && setCartOpen(true)}
-        barcodeValue={barcodeInput}
-        onBarcodeChange={setBarcodeInput}
         onBarcodeSubmit={handleBarcodeSubmit}
       />
 
-      <div className="flex-1 overflow-y-auto">
-        {productsLoadError ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-            <p className="text-slate-700 font-medium">Cannot load products</p>
-            <p className="text-sm text-slate-500 max-w-md">{productsLoadError}</p>
+      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[1fr_340px] min-h-0 overflow-hidden">
+        {/* Products panel: on mobile add bottom padding for sticky CartBar */}
+        <div className="flex-1 overflow-y-auto min-h-0 pb-20 lg:pb-0">
+          {productsLoadError ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+              <p className="text-[var(--edk-ink-2)] font-medium">Cannot load products</p>
+              <p className="text-sm text-[var(--edk-ink-3)] max-w-md">{productsLoadError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setProductsLoadError(null);
+                  if (warehouse.id) loadProducts(warehouse.id);
+                }}
+                className="rounded-lg bg-[var(--edk-red)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--edk-red-hover)]"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <ProductGrid
+              products={products}
+              loading={loading}
+              search={search}
+              category={category}
+              sizeFilter={sizeFilter}
+              colorFilter={colorFilter}
+              onSelect={(product) => setActiveProduct(structuredClone(product))}
+              onClearSearch={() => setSearch('')}
+              onCategoryChange={setCategory}
+              onSizeFilterChange={setSizeFilter}
+              onColorFilterChange={setColorFilter}
+            />
+          )}
+        </div>
+
+        {/* Cart panel (desktop): 340px fixed right */}
+        <aside className="hidden lg:flex flex-col border-l border-[var(--edk-border)] bg-[var(--edk-surface)] min-h-0">
+          <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--edk-border)]">
+            <span className="text-[14px] font-extrabold uppercase tracking-wide text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+              Current Sale
+            </span>
             <button
               type="button"
-              onClick={() => {
-                setProductsLoadError(null);
-                if (warehouse.id) loadProducts(warehouse.id);
-              }}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+              onClick={handleClearCart}
+              className="text-[11px] font-medium text-[var(--edk-ink-3)] px-2 py-1 rounded border border-[var(--edk-border-mid)] hover:bg-[var(--edk-bg)]"
             >
-              Retry
+              Clear all
             </button>
           </div>
-        ) : (
-          <ProductGrid
-            products={products}
-            loading={loading}
-            search={search}
-            category={category}
-            sizeFilter={sizeFilter}
-            colorFilter={colorFilter}
-            onSelect={(product) => setActiveProduct(structuredClone(product))}
-            onClearSearch={() => setSearch('')}
-            onCategoryChange={setCategory}
-            onSizeFilterChange={setSizeFilter}
-            onColorFilterChange={setColorFilter}
-          />
-        )}
+          <div className="flex-1 overflow-y-auto min-h-0 p-2">
+            {cart.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 px-4 gap-2 text-[var(--edk-ink-3)]">
+                <div className="w-12 h-12 rounded-full bg-[var(--edk-bg)] flex items-center justify-center mb-1">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                  </svg>
+                </div>
+                <p className="text-[13px] font-semibold text-[var(--edk-ink-2)]">Cart is empty</p>
+                <p className="text-[12px] text-center">Tap a product to add it</p>
+              </div>
+            ) : (
+              <ul className="space-y-1">
+                {cart.map((l) => (
+                  <li key={l.key} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-[var(--edk-bg)]">
+                    <div className="w-10 h-10 rounded-[var(--edk-radius-sm)] bg-[var(--edk-bg)] border border-[var(--edk-border)] flex-shrink-0 overflow-hidden">
+                      {l.imageUrl ? <img src={l.imageUrl} alt="" className="w-full h-full object-cover" /> : null}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold truncate">{l.name}</p>
+                      <p className="text-[10px] text-[var(--edk-ink-3)]">{l.sizeLabel ?? '—'}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-[14px] font-extrabold text-[var(--edk-red)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{fmt(l.unitPrice * l.qty)}</span>
+                      <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => handleUpdateQty(l.key, -1)} className="w-[22px] h-[22px] rounded flex items-center justify-center border border-[var(--edk-border-mid)] bg-[var(--edk-bg)] text-[var(--edk-ink-2)] font-semibold">−</button>
+                        <span className="text-[12px] font-semibold min-w-[14px] text-center">{l.qty}</span>
+                        <button type="button" onClick={() => handleUpdateQty(l.key, 1)} className="w-[22px] h-[22px] rounded flex items-center justify-center border border-[var(--edk-border-mid)] bg-[var(--edk-bg)] text-[var(--edk-ink-2)] font-semibold">+</button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {cart.length > 0 && (
+            <div className="p-4 border-t border-[var(--edk-border)] flex flex-col gap-2.5">
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between text-[12px]">
+                  <span className="text-[var(--edk-ink-3)]">Subtotal ({cartCount} items)</span>
+                  <span className="font-medium text-[var(--edk-ink-2)]">{fmt(subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-[12px]">
+                  <span className="text-[var(--edk-ink-3)]">Discount</span>
+                  <span className="font-medium text-[var(--edk-green)]">−{fmt(0)}</span>
+                </div>
+                <div className="h-px bg-[var(--edk-border)] my-1" />
+                <div className="flex justify-between items-center">
+                  <span className="text-[13px] font-semibold text-[var(--edk-ink)]">Total</span>
+                  <span className="text-[20px] font-extrabold text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{fmt(total)}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCartOpen(true)}
+                className="w-full h-11 rounded-[var(--edk-radius-sm)] bg-[var(--edk-red)] hover:bg-[var(--edk-red-hover)] text-white text-[14px] font-bold flex items-center justify-center gap-2 shadow-[0_2px_6px_rgba(232,40,26,0.3)]"
+              >
+                Charge {fmt(total)}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+              <div className="flex gap-1.5">
+                <button type="button" className="flex-1 h-8 rounded-[var(--edk-radius-sm)] border border-[var(--edk-border-mid)] bg-[var(--edk-bg)] text-[11px] font-medium text-[var(--edk-ink-2)]">
+                  + Discount
+                </button>
+                <button type="button" className="flex-1 h-8 rounded-[var(--edk-radius-sm)] border border-[var(--edk-border-mid)] bg-[var(--edk-bg)] text-[11px] font-medium text-[var(--edk-ink-2)]">
+                  Hold Sale
+                </button>
+              </div>
+            </div>
+          )}
+        </aside>
       </div>
 
       <CartBar lines={cart} onOpen={() => cartCount > 0 && setCartOpen(true)} />

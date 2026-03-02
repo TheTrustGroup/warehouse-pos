@@ -72,11 +72,6 @@ function formatPrice(n: number): string {
   return `GH₵${Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function getLocationString(location?: Product['location']): string {
-  if (!location) return '';
-  return [location.aisle, location.rack, location.bin].filter(Boolean).join(' · ');
-}
-
 // ── Icons ──────────────────────────────────────────────────────────────────
 
 const IconEdit = () => (
@@ -89,12 +84,6 @@ const IconEdit = () => (
 const IconPlus = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-  </svg>
-);
-
-const IconPin = () => (
-  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
   </svg>
 );
 
@@ -117,20 +106,18 @@ const IconSpinner = () => (
 
 function StockBadge({ status }: { status: StockStatus }) {
   const config = {
-    in:  { label: 'In stock',     cls: 'bg-emerald-500/15 text-emerald-800', dot: 'bg-emerald-500' },
-    low: { label: 'Low stock',    cls: 'bg-amber-500/15 text-amber-800',     dot: 'bg-amber-500' },
-    out: { label: 'Out of stock', cls: 'bg-red-500/15 text-red-700',         dot: 'bg-red-500' },
+    in:  { label: 'In stock',     cls: 'bg-white/92 text-[var(--edk-green)] border-[rgba(22,163,74,0.2)]', dot: 'bg-[var(--edk-green)]' },
+    low: { label: 'Low stock',    cls: 'bg-white/92 text-[var(--edk-amber)] border-[rgba(217,119,6,0.3)]', dot: 'bg-[var(--edk-amber)]' },
+    out: { label: 'Out of stock', cls: 'bg-white/92 text-red-600 border-red-200', dot: 'bg-red-500' },
   }[status];
 
   return (
     <span className={`
-      absolute top-2.5 right-2.5
-      flex items-center gap-1.5 h-6 px-2.5 rounded-full
-      text-[11px] font-semibold backdrop-blur-sm
-      bg-white/80 border border-white/60
+      absolute top-2 right-2
+      flex items-center gap-1 h-5 px-1.5 rounded border text-[10px] font-semibold
       ${config.cls}
     `}>
-      <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${config.dot}`} />
       {config.label}
     </span>
   );
@@ -141,8 +128,8 @@ function StockBadge({ status }: { status: StockStatus }) {
 function SizePills({ product }: { product: Product }) {
   if (product.sizeKind === 'na') {
     return (
-      <div className="flex items-center gap-1.5 mb-3">
-        <span className="h-7 px-3 rounded-lg bg-slate-100 text-[12px] font-semibold text-slate-600 flex items-center">
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="h-6 px-2 rounded bg-[var(--edk-bg)] border border-[var(--edk-border-mid)] text-[10px] font-semibold text-[var(--edk-ink-2)] flex items-center">
           Qty: {product.quantity}
         </span>
       </div>
@@ -151,8 +138,8 @@ function SizePills({ product }: { product: Product }) {
 
   if (product.sizeKind === 'one_size') {
     return (
-      <div className="flex items-center gap-1.5 mb-3">
-        <span className="h-7 px-3 rounded-lg bg-slate-100 text-[12px] font-semibold text-slate-600 flex items-center">
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="h-6 px-2 rounded bg-[var(--edk-bg)] border border-[var(--edk-border-mid)] text-[10px] font-semibold text-[var(--edk-ink-2)] flex items-center">
           One size · {product.quantity}
         </span>
       </div>
@@ -161,32 +148,32 @@ function SizePills({ product }: { product: Product }) {
 
   if (product.quantityBySize.length === 0) {
     return (
-      <div className="mb-3">
-        <span className="text-[12px] text-slate-300 italic">No sizes recorded</span>
+      <div className="mb-2">
+        <span className="text-[11px] text-[var(--edk-ink-3)] italic">No sizes recorded</span>
       </div>
     );
   }
 
+  const reorder = product.reorderLevel ?? 3;
+
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-none">
-      {product.quantityBySize.map(row => (
-        <span
-          key={row.sizeCode}
-          className={`
-            flex-shrink-0 h-7 px-2.5 rounded-lg
-            text-[12px] font-semibold flex items-center gap-1
-            ${row.quantity > 0
-              ? 'bg-slate-100 text-slate-700'
-              : 'bg-slate-50 text-slate-300 border border-slate-200'
-            }
-          `}
-        >
-          {row.sizeCode}
-          <span className={`font-medium ${row.quantity > 0 ? 'text-slate-400' : 'text-slate-300'}`}>
-            · {row.quantity}
+    <div className="flex flex-wrap gap-1 overflow-x-auto pb-2 scrollbar-none">
+      {product.quantityBySize.map((row) => {
+        const isLow = row.quantity > 0 && row.quantity <= reorder;
+        return (
+          <span
+            key={row.sizeCode}
+            className={`
+              flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold flex items-center gap-0.5
+              border border-[var(--edk-border-mid)]
+              ${isLow ? 'bg-[var(--edk-amber-bg)] border-[rgba(217,119,6,0.3)] text-[var(--edk-amber)]' : 'bg-[var(--edk-bg)] text-[var(--edk-ink-2)]'}
+            `}
+          >
+            {row.sizeCode}
+            <span className="font-normal text-[var(--edk-ink-3)]">·{row.quantity}</span>
           </span>
-        </span>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -331,78 +318,64 @@ export default function ProductCard({
   const editing = supportsInlineStock && isEditing;
 
   const status = getStockStatus(product);
-  const locationStr = getLocationString(product.location);
   const hasImage = Array.isArray(product.images) && product.images.length > 0;
+
+  const isLowStock = status === 'low';
 
   return (
     <article
       className={`
-        bg-white rounded-2xl overflow-hidden
-        shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.06)]
+        group bg-[var(--edk-surface)] rounded-[10px] overflow-hidden border border-[var(--edk-border)]
+        shadow-[0_1px_3px_rgba(0,0,0,0.06)]
         transition-all duration-200
-        ${editing
-          ? 'ring-2 ring-red-400 shadow-[0_4px_8px_rgba(0,0,0,0.08),0_12px_32px_rgba(0,0,0,0.10)]'
-          : 'hover:shadow-[0_4px_8px_rgba(0,0,0,0.08),0_12px_32px_rgba(0,0,0,0.10)] hover:-translate-y-0.5'
-        }
+        ${editing ? 'ring-2 ring-[var(--edk-red)]' : ''}
+        ${!editing && isLowStock ? 'border-[rgba(217,119,6,0.25)]' : ''}
+        ${!editing ? 'hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:-translate-y-0.5' : ''}
       `}
     >
-      {/* ── Image area ── */}
-      <div className="relative w-full pt-[56.25%] bg-slate-100 overflow-hidden">
+      {/* Image: 4:3 aspect, hover scale */}
+      <div className="relative w-full aspect-[4/3] bg-[var(--edk-bg)] overflow-hidden">
         {hasImage ? (
           <img
             src={product.images![0]}
             alt={product.name}
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 hover:scale-[1.03]"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             loading="lazy"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+          <div className="absolute inset-0 flex items-center justify-center text-[var(--edk-ink-3)]">
             <IconImage />
           </div>
         )}
 
-        {/* Category badge */}
-        <span className="absolute top-2.5 left-2.5 h-6 px-2.5 rounded-full bg-white/85 backdrop-blur-sm border border-white/60 text-[11px] font-semibold text-slate-700">
+        {/* Category tag: top-left, dark backdrop */}
+        <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-black/70 text-white/90">
           {product.category}
         </span>
 
-        {/* Stock badge */}
         <StockBadge status={status} />
       </div>
 
-      {/* ── Card body (hidden when editing) ── */}
+      {/* Card body */}
       {!editing && (
-        <div className="px-4 pt-3.5">
-          {/* Name */}
-          <h3 className="text-[15px] font-bold text-slate-900 truncate leading-snug mb-1">
+        <div className="px-3.5 pt-3 pb-2">
+          <h3 className="text-[13px] font-semibold text-[var(--edk-ink)] truncate mb-0.5">
             {product.name}
           </h3>
-
-          {/* SKU + location */}
-          <div className="flex items-center gap-2 mb-2.5 flex-wrap">
-            <span className="font-mono text-[11px] text-slate-400 truncate">
-              {product.sku}
-            </span>
-            {locationStr && (
-              <span className="flex items-center gap-1 text-[11px] text-slate-400">
-                <IconPin /> {locationStr}
-              </span>
-            )}
-          </div>
-
-          {/* Price row */}
-          <div className="flex items-baseline gap-2 mb-2.5">
-            <span className="text-[17px] font-bold text-red-500">
+          <p className="font-mono text-[10px] text-[var(--edk-ink-3)] mb-2">
+            {product.sku}
+          </p>
+          <div className="flex items-baseline gap-1.5 mb-2">
+            <span className="text-[17px] font-extrabold text-[var(--edk-red)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
               {formatPrice(product.sellingPrice)}
             </span>
             {product.costPrice > 0 && (
-              <span className="text-[12px] text-slate-400">
+              <span className="text-[11px] text-[var(--edk-ink-3)]">
                 Cost: {formatPrice(product.costPrice)}
               </span>
             )}
           </div>
 
-          {/* Size pills */}
           <SizePills product={product} />
         </div>
       )}
@@ -416,19 +389,13 @@ export default function ProductCard({
         />
       )}
 
-      {/* ── Footer (hidden when editing) ── */}
+      {/* Actions: Edit + Delete outlined, 30px height */}
       {!editing && (
-        <div className={`grid border-t border-slate-100 ${supportsInlineStock ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <div className={`flex gap-1.5 px-3.5 py-2 border-t border-[var(--edk-border)] ${supportsInlineStock ? '' : ''}`}>
           <button
             type="button"
             onClick={() => onEditFull(product)}
-            className="
-              h-12 flex items-center justify-center gap-1
-              text-[13px] font-semibold text-slate-500
-              border-r border-slate-100
-              hover:bg-slate-50 hover:text-slate-700
-              transition-colors duration-150
-            "
+            className="flex-1 h-[30px] flex items-center justify-center gap-1 rounded-[var(--edk-radius-sm)] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)] transition-colors"
           >
             <IconEdit /> Edit
           </button>
@@ -436,13 +403,7 @@ export default function ProductCard({
             <button
               type="button"
               onClick={() => onEditOpen?.(product.id)}
-              className="
-                h-12 flex items-center justify-center gap-1
-                text-[13px] font-semibold text-red-500
-                border-r border-slate-100
-                hover:bg-red-50
-                transition-colors duration-150
-              "
+              className="h-[30px] flex items-center justify-center gap-1 px-2 rounded-[var(--edk-radius-sm)] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-red)] hover:bg-red-50 transition-colors"
             >
               <IconPlus /> Stock
             </button>
@@ -450,16 +411,11 @@ export default function ProductCard({
           <button
             type="button"
             onClick={() => onDelete?.(product)}
-            className="
-              h-12 flex items-center justify-center
-              text-slate-400
-              hover:bg-red-50 hover:text-red-500
-              transition-colors duration-150
-            "
+            className="h-[30px] flex items-center justify-center min-w-[30px] rounded-[var(--edk-radius-sm)] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[var(--edk-ink-2)] hover:bg-[#FEF2F2] hover:text-red-600 hover:border-red-200 transition-colors"
             aria-label="Delete product"
             title="Delete product"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6"/>
               <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
               <path d="M10 11v6"/><path d="M14 11v6"/>

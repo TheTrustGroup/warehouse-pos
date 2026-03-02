@@ -20,6 +20,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- EDK design tokens (UI redesign) ---- */
+:root {
+  --edk-red: #E8281A;
+  --edk-red-hover: #C41F13;
+  --edk-red-soft: rgba(232, 40, 26, 0.08);
+  --edk-red-border: rgba(232, 40, 26, 0.2);
+  --edk-bg: #F7F6F4;
+  --edk-surface: #FFFFFF;
+  --edk-surface-2: #F2F0ED;
+  --edk-border: rgba(0, 0, 0, 0.07);
+  --edk-border-mid: rgba(0, 0, 0, 0.11);
+  --edk-sidebar-bg: #0F0E0D;
+  --edk-ink: #111110;
+  --edk-ink-2: #4A4845;
+  --edk-ink-3: #8A8784;
+  --edk-green: #16A34A;
+  --edk-green-bg: #F0FDF4;
+  --edk-amber: #D97706;
+  --edk-amber-bg: #FFFBEB;
+  --edk-sidebar-w: 240px;
+  --edk-topbar-h: 56px;
+  --edk-radius: 10px;
+  --edk-radius-sm: 6px;
+}
+
 /* ---- Design tokens: 4px base grid + mobile-first spacing & typography ---- */
 :root {
   /* 4px base system: 4,8,12,16,20,24,32,40 (Phase 6 + structural audit) */
@@ -256,6 +281,22 @@
   .nav-item-active {
     @apply bg-primary-50/80 text-primary-700 font-semibold;
     box-shadow: none;
+  }
+
+  /* EDK sidebar: active nav item icon red */
+  .sidebar-nav-link.is-active .sidebar-nav-icon {
+    color: var(--edk-red);
+    opacity: 1;
+  }
+  .sidebar-nav-link .sidebar-nav-icon {
+    opacity: 0.7;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 
   /* Skeleton Loading */

@@ -98,18 +98,26 @@ export default function CartSheet({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-slate-900/50" onClick={onClose} aria-hidden />
-      <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[90vh] overflow-y-auto rounded-t-2xl bg-white shadow-xl">
-        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
-          <h3 className="font-semibold text-slate-900">Cart</h3>
-          <div className="flex gap-2">
+      {/* On mobile: full-screen drawer; on desktop: 90vh rounded sheet */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[100dvh] lg:max-h-[90vh] overflow-y-auto rounded-t-2xl lg:rounded-t-2xl bg-[var(--edk-surface)] shadow-xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--edk-border)] bg-[var(--edk-surface)] px-4 py-3">
+          <h3 className="text-[14px] font-extrabold uppercase tracking-wide text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+            Current Sale
+          </h3>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClearCart}
-              className="rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg px-3 py-2 text-[12px] font-medium text-[var(--edk-ink-3)] hover:bg-[var(--edk-bg)]"
             >
               Clear
             </button>
-            <button type="button" onClick={onClose} className="p-2 text-slate-500 hover:text-slate-700">
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-[var(--edk-ink-3)] hover:bg-[var(--edk-bg)]"
+              aria-label="Close cart"
+            >
               ✕
             </button>
           </div>
@@ -117,36 +125,36 @@ export default function CartSheet({
         <div className="p-4 space-y-4">
           <ul className="space-y-2">
             {lines.map((l) => (
-              <li key={l.key} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 p-3">
+              <li key={l.key} className="flex items-center justify-between gap-2 rounded-xl bg-[var(--edk-bg)] p-3">
                 <div className="min-w-0 flex-1">
-                  <span className="font-medium text-slate-900">{l.name}</span>
-                  {l.sizeLabel && <span className="ml-1 text-slate-500">({l.sizeLabel})</span>}
+                  <span className="font-medium text-[var(--edk-ink)] text-[13px]">{l.name}</span>
+                  {l.sizeLabel && <span className="ml-1 text-[11px] text-[var(--edk-ink-3)]">({l.sizeLabel})</span>}
                   <div className="mt-1 flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => onUpdateQty(l.key, -1)}
-                      className="h-7 w-7 rounded border border-slate-200 text-sm font-medium"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded border border-[var(--edk-border-mid)] text-[14px] font-semibold touch-manipulation"
                     >
                       −
                     </button>
-                    <span className="w-6 text-center text-sm">{l.qty}</span>
+                    <span className="w-8 text-center text-[13px] font-semibold">{l.qty}</span>
                     <button
                       type="button"
                       onClick={() => onUpdateQty(l.key, 1)}
-                      className="h-7 w-7 rounded border border-slate-200 text-sm font-medium"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded border border-[var(--edk-border-mid)] text-[14px] font-semibold touch-manipulation"
                     >
                       +
                     </button>
                     <button
                       type="button"
                       onClick={() => onRemoveLine(l.key)}
-                      className="ml-2 text-xs text-red-600 hover:underline"
+                      className="ml-2 min-h-[44px] flex items-center text-[11px] font-medium text-[var(--edk-red)] hover:underline"
                     >
                       Remove
                     </button>
                   </div>
                 </div>
-                <span className="font-semibold text-slate-900">
+                <span className="font-extrabold text-[var(--edk-red)] text-[14px]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
                   GH₵{(l.unitPrice * l.qty).toLocaleString('en-GH', { minimumFractionDigits: 2 })}
                 </span>
               </li>
@@ -206,7 +214,7 @@ export default function CartSheet({
               type="button"
               onClick={handleCharge}
               disabled={charging || lines.length === 0 || !warehouseId}
-              className="rounded-xl bg-primary-600 px-6 py-3 font-semibold text-white disabled:opacity-50"
+              className="min-h-[44px] w-full rounded-[var(--edk-radius-sm)] bg-[var(--edk-red)] hover:bg-[var(--edk-red-hover)] px-6 py-3 font-bold text-white disabled:opacity-50 touch-manipulation"
             >
               {charging ? '…' : `Charge GH₵${total.toLocaleString('en-GH', { minimumFractionDigits: 2 })}`}
             </button>
