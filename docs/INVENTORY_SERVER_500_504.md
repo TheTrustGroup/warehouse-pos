@@ -32,6 +32,8 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
      If the error message mentions a missing column or relation, run the migrations in `inventory-server/supabase/migrations/` (e.g. `size_kind`, `color`, `warehouse_products`, `warehouse_inventory`, `warehouse_inventory_by_size`, `size_codes`) in your Supabase project.
   4. **See the real error**  
      After the CORS fix, 500 responses include a JSON body and CORS headers. In Network tab, open the failing request and check **Response** for the `error` field. If the browser shows "access control checks" instead, the server returned 500 without CORS (env or uncaught throw); the products and dashboard routes now always attach CORS to 500 and validate env first.
+  5. **"canceling statement due to statement timeout"**  
+     The database is killing the query before it finishes. Apply the migration `20260302120000_statement_timeout_30s.sql` in your Supabase project (Dashboard → SQL Editor, or `supabase db push`). It sets `statement_timeout = 30s` for the database so the product-list query can complete.
 
 ## Deploy inventory-server after code changes
 
