@@ -27,6 +27,8 @@ import { onUnauthorized } from '../lib/onUnauthorized';
 import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useInventory } from '../contexts/InventoryContext';
+import type { Product } from '../types';
 
 import type { Warehouse } from '../components/pos/SessionScreen';
 import POSHeader from '../components/pos/POSHeader';
@@ -56,6 +58,25 @@ function buildCartKey(productId: string, sizeCode: string | null): string {
   return `${productId}__${sizeCode ?? 'NA'}`;
 }
 
+/** Map InventoryContext Product to POSProduct so POS can show immediately when phase-2 or cache already has data. */
+function productToPOSProduct(p: Product): POSProduct {
+  const color =
+    (p.variants?.color != null ? String(p.variants.color).trim() : '') || null;
+  return {
+    id: p.id,
+    name: p.name,
+    sku: p.sku,
+    sizeKind: p.sizeKind ?? 'na',
+    quantity: Number(p.quantity) ?? 0,
+    quantityBySize: p.quantityBySize ?? undefined,
+    sellingPrice: Number(p.sellingPrice) ?? 0,
+    category: p.category ?? undefined,
+    images: Array.isArray(p.images) ? p.images : [],
+    color: color || undefined,
+    barcode: p.barcode != null ? String(p.barcode) : null,
+  };
+}
+
 function fmt(n: number): string {
   return `GH₵${Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -75,6 +96,7 @@ function useToast() {
 export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const { currentWarehouse, warehouses, currentWarehouseId } = useWarehouse();
   const { user, tryRefreshSession } = useAuth();
+  const { products: inventoryProducts } = useInventory();
   const triedRefreshRef = useRef(false);
 
   const warehouse: Warehouse = currentWarehouse ?? {
@@ -250,12 +272,22 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     setCategory('all');
     setSizeFilter('');
     setColorFilter('');
-    loadProducts(wid, false, ctrl.signal);
+    // Reuse InventoryContext products when already loaded (CriticalData phase-2 or cache) to avoid duplicate fetch and spinner.
+    const hasInventoryForWarehouse =
+      currentWarehouseId === wid && inventoryProducts.length > 0;
+    if (hasInventoryForWarehouse) {
+      setProducts(inventoryProducts.map(productToPOSProduct));
+      setProductsLoadError(null);
+      setLoading(false);
+      loadProducts(wid, true, ctrl.signal);
+    } else {
+      loadProducts(wid, false, ctrl.signal);
+    }
     return () => {
       ctrl.abort();
       if (loadProductsAbortRef.current === ctrl) loadProductsAbortRef.current = null;
     };
-  }, [warehouse.id, loadProducts]);
+  }, [warehouse.id, currentWarehouseId, loadProducts]);
 
   function handleBarcodeSubmit() {
     const raw = search.trim();

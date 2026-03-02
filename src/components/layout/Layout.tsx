@@ -9,6 +9,8 @@ import { SyncStatusBar } from '../SyncStatusBar';
 import { ConflictModalContainer } from '../ConflictModalContainer';
 import { ApiStatusProvider, useApiStatus } from '../../contexts/ApiStatusContext';
 import { useCriticalData } from '../../contexts/CriticalDataContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { PERMISSIONS } from '../../types/permissions';
 import { Button } from '../ui/Button';
 
 const DISMISS_BANNER_KEY = 'dismiss_degraded_banner_session';
@@ -37,10 +39,21 @@ export function Layout() {
   );
 }
 
+/** Prefetch POS route chunk when user can access POS but is on another page (faster navigation to /pos). */
+function usePrefetchPOSChunk() {
+  const pathname = useLocation().pathname;
+  const { hasPermission } = useAuth();
+  useEffect(() => {
+    if (pathname === '/pos' || !hasPermission(PERMISSIONS.POS.ACCESS)) return;
+    import('../../pages/POSPage');
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps -- only re-run when route changes; hasPermission is stable
+}
+
 function LayoutContent() {
   const location = useLocation();
   const isPOS = location.pathname === '/pos';
   const isMobile = useIsMobile();
+  usePrefetchPOSChunk();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const { isDegraded: degraded, retry } = useApiStatus();
