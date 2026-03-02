@@ -14,11 +14,14 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
 - **To see why /api/products returns 500:** In the browser, open **Network** tab → click the failed **products** request → open **Response**. The body is JSON with an `error` field containing the exact backend reason (e.g. "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY", "Failed to list products: permission denied for table warehouse_inventory", or "canceling statement due to statement timeout"). The Inventory page also shows this message under "Couldn't load products" when the request fails.
 - **"Access control checks" + "network connection was lost":** Usually the connection dropped before the server sent a full response (Vercel function timeout, cold start, or Supabase statement timeout). Apply the `statement_timeout` migration in Supabase; set Vercel Function Max Duration to 30s; retry. It is not a CORS config bug when the response never completes.
 
-## 504 Gateway Timeout
+## 504 Gateway Timeout (or "Request timed out" on the dashboard)
 
-- **Cause:** The serverless function ran longer than Vercel’s limit (often 10s on Hobby).
-- **Fix in code:** `app/api/products/route.ts` and `app/api/dashboard/route.ts` export `maxDuration = 30`. GET `/api/products` list is capped at **250 items per request**; use `offset` for pagination.
-- **Vercel:** In Project → **Settings → Functions**, set **Function Max Duration** to 30 (or 60 on Hobby, 300 on Pro). Redeploy after code or setting changes.
+- **Cause:** The serverless function ran longer than Vercel’s limit (often **10s on Hobby**). The dashboard may show "Request timed out" when the client aborts, or "HTTP 504" when Vercel returns 504.
+- **Do in order:**
+  1. **GET** `https://inventory-server-iota.vercel.app/api/health?db=1` — if `db.ok === false`, fix DB first (migrations, grants). If `db.ok === true`, the bottleneck is function duration.
+  2. **Vercel:** Project → **Settings → Functions** → **Function Max Duration** = **30** (or 60 on Hobby, 300 on Pro). Save and **redeploy**.
+  3. **Supabase:** Apply `20260302120000_statement_timeout_30s.sql` and `20260302153000_products_list_perf_indexes.sql` so the product-list query finishes well under 30s.
+- **Code:** `app/api/products/route.ts` and `app/api/dashboard/route.ts` already export `maxDuration = 30`. GET `/api/products` is capped at 250 items per request.
 
 ## 500 Internal Server Error
 

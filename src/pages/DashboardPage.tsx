@@ -71,7 +71,8 @@ function formatGHCCompact(n: number): string {
 
 // ── apiFetch (with retry for transient network failures) ───────────────────
 
-const FETCH_TIMEOUT_MS = 15_000;
+/** Wait longer than server maxDuration (30s) so we get 200 or 504 with body instead of client abort. */
+const FETCH_TIMEOUT_MS = 35_000;
 const RETRY_DELAYS_MS = [1_000, 2_000];
 
 function isRetryableError(e: unknown): boolean {
