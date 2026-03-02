@@ -31,11 +31,20 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const auth = await requireAuth(req);
-  if (auth instanceof NextResponse) return withCors(auth, req);
-
   const h = corsHeaders(req);
+
+  const fail500 = (message: string): NextResponse =>
+    withCors(NextResponse.json({ error: message }, { status: 500, headers: h }), req);
+
   try {
+    if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+      console.error('[GET /api/products] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+      return fail500('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Set them in Vercel project environment variables.');
+    }
+
+    const auth = await requireAuth(req);
+    if (auth instanceof NextResponse) return withCors(auth, req);
+
     const { searchParams } = new URL(req.url);
     const queryWarehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
     const scope = await getScopeForUser(auth.email);
@@ -85,10 +94,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Failed to load products';
     console.error('[GET /api/products]', message);
-    return withCors(
-      NextResponse.json({ error: message }, { status: 500, headers: h }),
-      req
-    );
+    return fail500(message);
   }
 }
 

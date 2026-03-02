@@ -22,11 +22,20 @@ function withCors(res: NextResponse, req: NextRequest): NextResponse {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const auth = await requireAuth(request);
-  if (auth instanceof NextResponse) return withCors(auth, request);
-
   const h = corsHeaders(request);
+
+  const fail500 = (message: string): NextResponse =>
+    withCors(NextResponse.json({ error: message }, { status: 500, headers: h }), request);
+
   try {
+    if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+      console.error('[GET /api/dashboard] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+      return fail500('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Set them in Vercel project environment variables.');
+    }
+
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return withCors(auth, request);
+
     const { searchParams } = new URL(request.url);
     const warehouseId = searchParams.get('warehouse_id') ?? undefined;
     const date = searchParams.get('date') ?? undefined;
@@ -51,9 +60,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Failed to load dashboard';
     console.error('[api/dashboard GET]', message);
-    return withCors(
-      NextResponse.json({ error: message }, { status: 500, headers: h }),
-      request
-    );
+    return fail500(message);
   }
 }

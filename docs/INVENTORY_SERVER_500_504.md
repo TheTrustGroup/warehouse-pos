@@ -28,7 +28,7 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
   3. **DB schema**  
      If the error message mentions a missing column or relation, run the migrations in `inventory-server/supabase/migrations/` (e.g. `size_kind`, `color`, `warehouse_products`, `warehouse_inventory`, `warehouse_inventory_by_size`, `size_codes`) in your Supabase project.
   4. **See the real error**  
-     After the CORS fix, 500 responses include a JSON body. In Network tab, open the failing request and check **Response** for the `error` field.
+     After the CORS fix, 500 responses include a JSON body and CORS headers. In Network tab, open the failing request and check **Response** for the `error` field. If the browser shows "access control checks" instead, the server returned 500 without CORS (env or uncaught throw); the products and dashboard routes now always attach CORS to 500 and validate env first.
 
 ## Deploy inventory-server after code changes
 
