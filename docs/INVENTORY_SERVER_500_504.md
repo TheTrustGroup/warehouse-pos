@@ -1,11 +1,17 @@
 # Inventory API 500 / 504 — Checklist
 
-When `https://inventory-server-iota.vercel.app/api/products` returns **500** or **504**:
+When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard` returns **500** or **504**:
+
+## Quick check: is the deployment live?
+
+- **GET** `https://inventory-server-iota.vercel.app/api/health` (no auth)  
+  - **200** → App is deployed and CORS works; 500/504 on products or dashboard are likely **env** (SUPABASE_*) or **DB** (schema/connection).  
+  - **4xx/5xx or CORS error** → Deployment may be wrong (wrong repo, wrong root) or not updated; fix Vercel project root and redeploy.
 
 ## 504 Gateway Timeout
 
 - **Cause:** The serverless function ran longer than Vercel’s limit (often 10s on Hobby).
-- **Fix in code:** `app/api/products/route.ts` exports `maxDuration = 30` so the route can run up to 30s. Redeploy the **inventory-server** project so this is live.
+- **Fix in code:** `app/api/products/route.ts` and `app/api/dashboard/route.ts` export `maxDuration = 30`. Redeploy the **inventory-server** project so this is live.
 - **Vercel:** In the project (inventory-server-iota), ensure the plan allows the duration you need; increase Function Max Duration in Settings → Functions if required.
 
 ## 500 Internal Server Error
@@ -13,7 +19,7 @@ When `https://inventory-server-iota.vercel.app/api/products` returns **500** or 
 - **Cause:** Env missing, DB error, or uncaught exception (e.g. missing table/column).
 - **Checks:**
   1. **Deploy the right app**  
-     The project that serves `inventory-server-iota.vercel.app` must build from this repo with **Root Directory** = `inventory-server` (or the folder that contains `app/api/products/route.ts`). Push to `main` and confirm that project’s latest deployment includes the products route.
+     The project that serves `inventory-server-iota.vercel.app` must build from this repo with **Root Directory** = `inventory-server` (or the folder that contains `app/api/products/route.ts`). Push to `main` and confirm that project’s latest deployment includes the products and dashboard routes.
   2. **Env on the inventory-server project**  
      In Vercel → Project → Settings → Environment Variables, set:
      - `SUPABASE_URL` — Supabase project URL
