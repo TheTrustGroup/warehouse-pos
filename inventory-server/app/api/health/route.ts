@@ -15,5 +15,7 @@ export async function OPTIONS(request: NextRequest) {
 /** Health check: no auth. Used by frontend warmup and deploy verification. */
 export async function GET(request: NextRequest) {
   const body = { status: 'ok', ts: new Date().toISOString() };
-  return withCors(NextResponse.json(body), request);
+  const res = withCors(NextResponse.json(body), request);
+  res.headers.set('Cache-Control', 'no-store, max-age=0');
+  return res;
 }

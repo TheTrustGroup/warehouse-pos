@@ -135,11 +135,13 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         if (!res.ok) {
           if (res.status === 401) onUnauthorized();
           const body = await res.json().catch(() => ({}));
-          throw new Error(
+          const msg =
             (body as { message?: string; error?: string }).message ??
-              (body as { message?: string; error?: string }).error ??
-              `HTTP ${res.status}`
-          );
+            (body as { message?: string; error?: string }).error ??
+            `HTTP ${res.status}`;
+          const err = new Error(msg) as Error & { status?: number };
+          err.status = res.status;
+          throw err;
         }
         const text = await res.text();
         return (text ? JSON.parse(text) : {}) as T;
@@ -252,6 +254,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     let completedAt: string | undefined;
     let syncOk = true;
 
+    const idempotencyKey = `pos-${payload.warehouseId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     try {
       const result = await apiFetch<{
         id: string;
@@ -262,6 +265,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         createdAt: string;
       }>('/api/sales', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify({
           warehouseId: payload.warehouseId,
           customerName: payload.customerName || null,
@@ -287,13 +291,22 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       serverReceiptId = result.receiptId;
       completedAt = result.createdAt ?? new Date().toISOString();
     } catch (apiErr: unknown) {
+      const status = (apiErr as { status?: number })?.status;
+      if (status === 409) {
+        setCharging(false);
+        showToast('Insufficient stock for one or more items. Adjust the cart and try again.', 'error');
+        return;
+      }
       console.error(
         '[POS] /api/sales failed — stock NOT deducted in DB:',
         apiErr instanceof Error ? apiErr.message : apiErr
       );
-      syncOk = false;
-      serverReceiptId = 'LOCAL-' + Date.now().toString(36).toUpperCase();
-      completedAt = new Date().toISOString();
+      setCharging(false);
+      showToast(
+        "Sale didn't reach the server. Check your connection and tap Charge again.",
+        'warn'
+      );
+      return;
     }
 
     setProducts((prev) =>

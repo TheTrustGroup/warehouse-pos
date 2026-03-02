@@ -21,6 +21,7 @@ import {
 } from '@/lib/api/productByIdHandlers';
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
 import { corsHeaders } from '@/lib/cors';
+import { isValidId } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,20 +45,47 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const auth = await requireAuth(request);
   if (auth instanceof NextResponse) return withCors(auth, request);
   const { searchParams } = new URL(request.url);
+  const queryWarehouseId = searchParams.get('warehouse_id')?.trim() ?? undefined;
+  const effectiveWarehouseId = await getEffectiveWarehouseId(auth, queryWarehouseId);
+
   const id = searchParams.get('id')?.trim();
   if (id) {
-    const warehouseId = searchParams.get('warehouse_id') ?? '';
-    return withCors(await handleGetProductById(id, warehouseId), request);
+    if (!isValidId(id))
+      return withCors(NextResponse.json({ error: 'Invalid product id' }, { status: 400 }), request);
+    if (!effectiveWarehouseId)
+      return withCors(
+        NextResponse.json({ error: 'warehouse_id is required and must be in your scope' }, { status: 400 }),
+        request
+      );
+    if (queryWarehouseId && queryWarehouseId !== effectiveWarehouseId)
+      return withCors(
+        NextResponse.json({ error: 'You do not have access to this warehouse' }, { status: 403 }),
+        request
+      );
+    return withCors(await handleGetProductById(id, effectiveWarehouseId), request);
   }
+
+  if (!effectiveWarehouseId)
+    return withCors(
+      NextResponse.json({ error: 'warehouse_id is required and must be in your scope' }, { status: 400 }),
+      request
+    );
+  if (!isValidId(effectiveWarehouseId))
+    return withCors(NextResponse.json({ error: 'Invalid warehouse_id' }, { status: 400 }), request);
+  if (queryWarehouseId && queryWarehouseId !== effectiveWarehouseId)
+    return withCors(
+      NextResponse.json({ error: 'You do not have access to this warehouse' }, { status: 403 }),
+      request
+    );
+
   try {
-    const warehouseId = searchParams.get('warehouse_id') ?? undefined;
     const limit = searchParams.get('limit');
     const offset = searchParams.get('offset');
     const q = searchParams.get('q') ?? undefined;
     const category = searchParams.get('category') ?? undefined;
     const lowStock = searchParams.get('low_stock') === '1' || searchParams.get('low_stock') === 'true';
     const outOfStock = searchParams.get('out_of_stock') === '1' || searchParams.get('out_of_stock') === 'true';
-    const result = await getWarehouseProducts(warehouseId, {
+    const result = await getWarehouseProducts(effectiveWarehouseId, {
       limit: limit != null ? parseInt(limit, 10) : undefined,
       offset: offset != null ? parseInt(offset, 10) : undefined,
       q,
@@ -65,7 +93,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       lowStock,
       outOfStock,
     });
-    return withCors(NextResponse.json({ data: result.data, total: result.total }), request);
+    const res = withCors(NextResponse.json({ data: result.data, total: result.total }), request);
+    res.headers.set('Cache-Control', 'private, max-age=0');
+    return res;
   } catch (e) {
     console.error('[api/products GET]', e);
     return withCors(
@@ -89,6 +119,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return withCors(NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 }), request);
   }
   const warehouseId = (body?.warehouseId as string) ?? undefined;
+  if (warehouseId && !isValidId(warehouseId))
+    return withCors(NextResponse.json({ error: 'Invalid warehouseId' }, { status: 400 }), request);
   const scope = await getScopeForUser(auth.email);
   if (scope.allowedWarehouseIds.length > 0 && warehouseId && !scope.allowedWarehouseIds.includes(warehouseId)) {
     return withCors(
@@ -144,12 +176,14 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
   }
   const id = typeof body.id === 'string' ? body.id.trim() : '';
   if (!id) return withCors(NextResponse.json({ error: 'id required in body' }, { status: 400 }), request);
+  if (!isValidId(id)) return withCors(NextResponse.json({ error: 'Invalid product id' }, { status: 400 }), request);
   const bodyWarehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
   const warehouseId = await getEffectiveWarehouseId(auth, bodyWarehouseId || undefined, {
     path: request.nextUrl.pathname,
     method: 'PUT',
   });
   if (!warehouseId) return withCors(NextResponse.json({ error: 'warehouseId required' }, { status: 400 }), request);
+  if (!isValidId(warehouseId)) return withCors(NextResponse.json({ error: 'Invalid warehouseId' }, { status: 400 }), request);
   return withCors(await handlePutProductById(request, id, body, warehouseId, auth), request);
 }
 
@@ -174,5 +208,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   }
   if (!id) return withCors(NextResponse.json({ error: 'id required (query or body)' }, { status: 400 }), request);
   if (!warehouseId) return withCors(NextResponse.json({ error: 'warehouseId required (query or body)' }, { status: 400 }), request);
+  if (!isValidId(id) || !isValidId(warehouseId))
+    return withCors(NextResponse.json({ error: 'Invalid id or warehouseId' }, { status: 400 }), request);
   return withCors(await handleDeleteProductById(request, id, warehouseId, auth), request);
 }

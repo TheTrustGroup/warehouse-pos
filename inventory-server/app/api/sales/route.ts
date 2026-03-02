@@ -205,6 +205,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     if (error) {
       console.error('[POST /api/sales] RPC error:', error.code, error.message);
+      if (error.message?.includes('INSUFFICIENT_STOCK')) {
+        return withCors(
+          NextResponse.json(
+            { error: 'Insufficient stock for one or more items. Please check quantities and try again.' },
+            { status: 409, headers: h }
+          ),
+          req
+        );
+      }
       if (error.code === '42883' || error.message?.includes('does not exist')) {
         return withCors(await manualSaleFallback({ db, warehouseId, normalizedLines, subtotal, discountPct, discountAmt, total, paymentMethod, customerName, headers: h, idempotencyKey }), req);
       }
@@ -231,6 +240,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 }
 
 // ── Manual fallback ───────────────────────────────────────────────────────
+// WARNING: Not atomic. Multiple round-trips; partial state possible on failure. Use only when record_sale RPC is missing.
 async function manualSaleFallback(args: {
   db: ReturnType<typeof getSupabase>; warehouseId: string;
   normalizedLines: Array<{ productId: string; sizeCode: string | null; qty: number; unitPrice: number; lineTotal: number; name: string; sku: string; imageUrl: string | null }>;
@@ -240,6 +250,7 @@ async function manualSaleFallback(args: {
   idempotencyKey?: string;
 }): Promise<NextResponse> {
   const { db, warehouseId, normalizedLines, subtotal, discountPct, discountAmt, total, paymentMethod, customerName, headers, idempotencyKey } = args;
+  console.warn('[POST /api/sales] Using manual fallback (non-atomic). Ensure record_sale RPC is deployed for production.');
   const { randomUUID } = await import('crypto');
   const saleId = randomUUID();
   const ts = new Date();

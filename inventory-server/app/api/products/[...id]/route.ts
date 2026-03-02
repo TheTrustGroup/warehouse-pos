@@ -2,45 +2,23 @@
 // Required catch-all: /api/products/[:id] — same behavior as [id].
 // Uses [...id] so Vercel reliably routes /api/products/:id (avoids 404).
 // GET, PUT, PATCH, DELETE /api/products/:id
+// Security: requireAuth (GET) / requireAdmin (PUT/PATCH/DELETE), warehouse scope enforced.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
+import { corsHeaders } from '@/lib/cors';
+import { requireAuth, requireAdmin, getEffectiveWarehouseId } from '@/lib/auth/session';
+import { isValidId } from '@/lib/validation';
 
-function corsHeaders(req: NextRequest): Record<string, string> {
-  const origin  = req.headers.get('origin') ?? '';
-  const allowed = [
-    'https://warehouse.extremedeptkidz.com',
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://localhost:4173',
-  ];
-  const allowedOrigin = allowed.includes(origin) ? origin : allowed[0];
-  return {
-    'Access-Control-Allow-Origin':      allowedOrigin,
-    'Access-Control-Allow-Methods':     'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers':     'Content-Type, Authorization, x-request-id, Idempotency-Key',
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Max-Age':           '86400',
-  };
+function withCors(res: NextResponse, req: NextRequest): NextResponse {
+  const h = corsHeaders(req);
+  Object.entries(h).forEach(([k, v]) => res.headers.set(k, v));
+  return res;
 }
 
 export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
-}
-
-function getDb() {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables');
-  }
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
-function isAuthorized(req: NextRequest): boolean {
-  const auth = req.headers.get('authorization') ?? '';
-  return auth.startsWith('Bearer ') && auth.length > 10;
 }
 
 type RouteCtx = { params: { id: string[] } | Promise<{ id: string[] }> };
@@ -61,26 +39,40 @@ interface SizeEntry {
 }
 
 export async function GET(req: NextRequest, ctx: RouteCtx) {
-  const h   = corsHeaders(req);
-  const id  = await getId(ctx);
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return withCors(auth, req);
 
-  if (!isAuthorized(req))
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: h });
+  const id = await getId(ctx);
   if (!id)
-    return NextResponse.json({ error: 'Missing product id' }, { status: 400, headers: h });
+    return withCors(NextResponse.json({ error: 'Missing product id' }, { status: 400 }), req);
+  if (!isValidId(id))
+    return withCors(NextResponse.json({ error: 'Invalid product id' }, { status: 400 }), req);
 
-  const wid = req.nextUrl.searchParams.get('warehouse_id') ?? '';
+  const queryWarehouseId = req.nextUrl.searchParams.get('warehouse_id')?.trim() ?? undefined;
+  const effectiveWarehouseId = await getEffectiveWarehouseId(auth, queryWarehouseId);
+  if (!effectiveWarehouseId)
+    return withCors(
+      NextResponse.json({ error: 'warehouse_id is required and must be in your scope' }, { status: 400 }),
+      req
+    );
+  if (queryWarehouseId && queryWarehouseId !== effectiveWarehouseId)
+    return withCors(
+      NextResponse.json({ error: 'You do not have access to this warehouse' }, { status: 403 }),
+      req
+    );
+  if (!isValidId(effectiveWarehouseId))
+    return withCors(NextResponse.json({ error: 'Invalid warehouse_id' }, { status: 400 }), req);
 
   try {
-    const db      = getDb();
-    const product = await fetchOne(db, id, wid);
+    const db = getSupabase();
+    const product = await fetchOne(db, id, effectiveWarehouseId);
     if (!product)
-      return NextResponse.json({ error: 'Product not found' }, { status: 404, headers: h });
-    return NextResponse.json(product, { headers: h });
+      return withCors(NextResponse.json({ error: 'Product not found' }, { status: 404 }), req);
+    return withCors(NextResponse.json(product), req);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[GET /api/products/:id]', msg);
-    return NextResponse.json({ error: msg }, { status: 500, headers: h });
+    return withCors(NextResponse.json({ error: msg }, { status: 500 }), req);
   }
 }
 
@@ -93,27 +85,34 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx) {
 }
 
 async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
-  const h  = corsHeaders(req);
-  const id = await getId(ctx);
+  const auth = await requireAdmin(req);
+  if (auth instanceof NextResponse) return withCors(auth, req);
 
-  if (!isAuthorized(req))
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: h });
+  const id = await getId(ctx);
   if (!id)
-    return NextResponse.json({ error: 'Missing product id in URL' }, { status: 400, headers: h });
+    return withCors(NextResponse.json({ error: 'Missing product id in URL' }, { status: 400 }), req);
+  if (!isValidId(id))
+    return withCors(NextResponse.json({ error: 'Invalid product id' }, { status: 400 }), req);
 
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
   } catch {
-    return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400, headers: h });
+    return withCors(NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 }), req);
   }
 
-  const wid = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
+  const bodyWarehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
+  const wid = await getEffectiveWarehouseId(auth, bodyWarehouseId || undefined);
   if (!wid)
-    return NextResponse.json({ error: 'warehouseId is required in request body' }, { status: 400, headers: h });
+    return withCors(
+      NextResponse.json({ error: 'warehouseId is required and must be in your scope' }, { status: 400 }),
+      req
+    );
+  if (!isValidId(wid))
+    return withCors(NextResponse.json({ error: 'Invalid warehouseId' }, { status: 400 }), req);
 
   try {
-    const db  = getDb();
+    const db = getSupabase();
     const now = new Date().toISOString();
 
     // Look up product: try (id, warehouse_id) first for multi-warehouse schema; then by id only (single row per product).
@@ -138,9 +137,9 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     }
 
     if (!existing) {
-      return NextResponse.json(
-        { error: `Product ${id} not found in warehouse ${wid}` },
-        { status: 404, headers: h }
+      return withCors(
+        NextResponse.json({ error: `Product ${id} not found in warehouse ${wid}` }, { status: 404 }),
+        req
       );
     }
 
@@ -195,20 +194,23 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     if (rpcErr) {
       if (rpcErr.code === '42883' || rpcErr.message?.includes('does not exist')) {
         await manualUpdate(db, id, wid, productRow, totalQty, sizesToWrite, now);
-      } else if (rpcErr.message?.includes('someone else') || rpcErr.code === 'P0001') {
-        return NextResponse.json(
-          { error: 'This product was modified by someone else. Please refresh and try again.' },
-          { status: 409, headers: h }
+      } else       if (rpcErr.message?.includes('someone else') || rpcErr.code === 'P0001') {
+        return withCors(
+          NextResponse.json(
+            { error: 'This product was modified by someone else. Please refresh and try again.' },
+            { status: 409 }
+          ),
+          req
         );
       } else {
         console.error('[PUT /api/products/:id] RPC error:', rpcErr.code, rpcErr.message);
-        return NextResponse.json({ error: rpcErr.message }, { status: 500, headers: h });
+        return withCors(NextResponse.json({ error: rpcErr.message }, { status: 500 }), req);
       }
     }
 
     const updated = await fetchOne(db, id, wid);
     if (!updated)
-      return NextResponse.json({ error: 'Product not found after update' }, { status: 404, headers: h });
+      return withCors(NextResponse.json({ error: 'Product not found after update' }, { status: 404 }), req);
 
     if (sizesToWrite && sizesToWrite.length > 0 && updated.quantityBySize.length === 0) {
       updated.quantityBySize = sizesToWrite.map(r => ({
@@ -217,37 +219,43 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
       updated.quantity = totalQty;
     }
 
-    return NextResponse.json(updated, { headers: h });
-
+    return withCors(NextResponse.json(updated), req);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Internal server error';
     console.error('[PUT /api/products/:id] unhandled error:', msg);
-    return NextResponse.json({ error: msg }, { status: 500, headers: h });
+    return withCors(NextResponse.json({ error: msg }, { status: 500 }), req);
   }
 }
 
 export async function DELETE(req: NextRequest, ctx: RouteCtx) {
-  const h  = corsHeaders(req);
+  const auth = await requireAdmin(req);
+  if (auth instanceof NextResponse) return withCors(auth, req);
+
   const id = await getId(ctx);
-
-  if (!isAuthorized(req))
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: h });
   if (!id)
-    return NextResponse.json({ error: 'Missing product id' }, { status: 400, headers: h });
+    return withCors(NextResponse.json({ error: 'Missing product id' }, { status: 400 }), req);
+  if (!isValidId(id))
+    return withCors(NextResponse.json({ error: 'Invalid product id' }, { status: 400 }), req);
 
-  let wid = req.nextUrl.searchParams.get('warehouse_id') ?? '';
-  if (!wid) {
+  let rawWid = req.nextUrl.searchParams.get('warehouse_id')?.trim() ?? '';
+  if (!rawWid) {
     try {
       const body = (await req.json()) as Record<string, unknown>;
-      wid = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
+      rawWid = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
     } catch { /* body optional for DELETE */ }
   }
 
+  const wid = await getEffectiveWarehouseId(auth, rawWid || undefined);
   if (!wid)
-    return NextResponse.json({ error: 'warehouseId required (body or query param)' }, { status: 400, headers: h });
+    return withCors(
+      NextResponse.json({ error: 'warehouseId is required and must be in your scope' }, { status: 400 }),
+      req
+    );
+  if (!isValidId(wid))
+    return withCors(NextResponse.json({ error: 'Invalid warehouseId' }, { status: 400 }), req);
 
   try {
-    const db = getDb();
+    const db = getSupabase();
     await db.from('warehouse_inventory_by_size').delete()
       .eq('warehouse_id', wid).eq('product_id', id);
     await db.from('warehouse_inventory').delete()
@@ -257,18 +265,17 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
       .eq('id', id).eq('warehouse_id', wid);
 
     if (error)
-      return NextResponse.json({ error: error.message }, { status: 500, headers: h });
+      return withCors(NextResponse.json({ error: error.message }, { status: 500 }), req);
 
-    return NextResponse.json({ success: true, id }, { headers: h });
-
+    return withCors(NextResponse.json({ success: true, id }), req);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[DELETE /api/products/:id]', msg);
-    return NextResponse.json({ error: msg }, { status: 500, headers: h });
+    return withCors(NextResponse.json({ error: msg }, { status: 500 }), req);
   }
 }
 
-type DB = ReturnType<typeof getDb>;
+type DB = ReturnType<typeof getSupabase>;
 
 /** Select list when warehouse_products has no warehouse_id (one row per product). */
 const PRODUCT_SELECT = `
