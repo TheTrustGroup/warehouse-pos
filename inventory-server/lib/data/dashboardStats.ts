@@ -7,7 +7,8 @@ import { getWarehouseProducts, type ProductRecord } from '@/lib/data/warehousePr
 import { getSupabase } from '@/lib/supabase';
 
 const LOW_STOCK_ALERTS_LIMIT = 10;
-const PRODUCTS_LIMIT = 2000;
+/** Cap aligned with getWarehouseProducts (250) to avoid timeouts; stats are over this sample. */
+const PRODUCTS_LIMIT = 250;
 
 function getProductQty(p: ProductRecord): number {
   if (p.sizeKind === 'sized' && p.quantityBySize?.length > 0) {

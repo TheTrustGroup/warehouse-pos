@@ -35,6 +35,7 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
      After the CORS fix, 500 responses include a JSON body and CORS headers. In Network tab, open the failing request and check **Response** for the `error` field. If the browser shows "access control checks" instead, the server returned 500 without CORS (env or uncaught throw); the products and dashboard routes now always attach CORS to 500 and validate env first.
   5. **"canceling statement" or "canceling statement due to statement timeout"**  
      The database is killing the query before it finishes. **Do both:** (1) Apply the migration `20260302120000_statement_timeout_30s.sql` in your Supabase project (Dashboard → SQL Editor, or `supabase db push`). It sets `statement_timeout = 30s` for the database so the product-list query can complete. (2) Ensure the app requests smaller pages (e.g. `limit=100` or `limit=250`); the API and data layer cap at 250 per request — use pagination for more.
+  6. **Resilience:** If only the `warehouse_inventory` (or size) query fails (e.g. timeout), the products list and dashboard now still return: product list shows with quantities as zero and dashboard stats are computed over that list. Check server logs for `[warehouseProducts] warehouse_inventory query failed:` to confirm. Fix DB/indexes so the inventory query succeeds; then quantities and stats will be correct again.
 
 ## When you have more than 100 products
 

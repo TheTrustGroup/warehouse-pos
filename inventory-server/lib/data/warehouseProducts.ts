@@ -171,11 +171,13 @@ export async function getWarehouseProducts(
     ]);
 
     if (invRes.error) {
-      throw new Error(`Failed to list products: ${invRes.error.message}`);
-    }
-    for (const inv of invRes.data ?? []) {
-      const r = inv as { product_id: string; quantity?: number };
-      invMap[r.product_id] = Number(r.quantity ?? 0);
+      console.error('[warehouseProducts] warehouse_inventory query failed:', invRes.error.message);
+      // Continue with empty quantities so list and dashboard still load; client sees zeros until DB is healthy.
+    } else {
+      for (const inv of invRes.data ?? []) {
+        const r = inv as { product_id: string; quantity?: number };
+        invMap[r.product_id] = Number(r.quantity ?? 0);
+      }
     }
 
     if (withJoin.error && (withJoin.error.message?.includes('relation') || withJoin.error.message?.includes('size_codes'))) {
