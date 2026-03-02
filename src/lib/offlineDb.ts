@@ -165,6 +165,122 @@ export async function removeOfflineTransactionById(id: string): Promise<void> {
   }
 }
 
+// ─── POS event queue (offline sales sync) ───────────────────────────────────
+
+export type SaleEventStatus = 'pending' | 'synced' | 'failed';
+
+export interface PosSaleEvent {
+  event_id: string;
+  status: SaleEventStatus;
+  created_at: number;
+  payload: Record<string, unknown>;
+}
+
+/** Generate a stable event id for idempotency (Idempotency-Key). */
+function generateEventId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `pos-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/**
+ * Append a sale to the POS event queue for sync when back online.
+ * @param payload - Same shape as POST /api/sales body (warehouseId, lines, total, etc.)
+ * @param eventId - Optional; if not provided a new UUID is generated.
+ * @returns The event_id used (for receipt or retries).
+ */
+export async function enqueueSaleEvent(
+  payload: Record<string, unknown>,
+  eventId?: string
+): Promise<string> {
+  const event_id = eventId ?? generateEventId();
+  const event: PosSaleEvent = {
+    event_id,
+    status: 'pending',
+    created_at: Date.now(),
+    payload: { ...payload },
+  };
+  try {
+    const db = await openDb();
+    const store = db.transaction(STORE_POS_EVENT_QUEUE, 'readwrite').objectStore(STORE_POS_EVENT_QUEUE);
+    store.put(serializeForDb(event));
+  } catch (e) {
+    if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
+    if (import.meta.env.DEV) console.warn('IndexedDB enqueue sale event failed:', e);
+    throw e;
+  }
+  return event_id;
+}
+
+/**
+ * Get all pending sale events, oldest first (for sync order).
+ */
+export async function getPendingSaleEvents(): Promise<PosSaleEvent[]> {
+  try {
+    const db = await openDb();
+    const store = db.transaction(STORE_POS_EVENT_QUEUE, 'readonly').objectStore(STORE_POS_EVENT_QUEUE);
+    const index = store.index('by_status');
+    const req = index.getAll('pending');
+    const result = await new Promise<PosSaleEvent[]>((resolve, reject) => {
+      req.onsuccess = () => {
+        const rows = (req.result || []) as PosSaleEvent[];
+        rows.sort((a, b) => a.created_at - b.created_at);
+        resolve(rows);
+      };
+      req.onerror = () => reject(req.error);
+    });
+    return result;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Remove a sale event after successful sync (or after marking failed).
+ */
+export async function deleteSaleEvent(eventId: string): Promise<void> {
+  try {
+    const db = await openDb();
+    const store = db.transaction(STORE_POS_EVENT_QUEUE, 'readwrite').objectStore(STORE_POS_EVENT_QUEUE);
+    store.delete(eventId);
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('IndexedDB delete sale event failed:', e);
+  }
+}
+
+/**
+ * Mark a sale event as failed (e.g. 409 insufficient stock). Sync will not retry it.
+ */
+export async function markSaleEventFailed(eventId: string): Promise<void> {
+  try {
+    const db = await openDb();
+    const store = db.transaction(STORE_POS_EVENT_QUEUE, 'readwrite').objectStore(STORE_POS_EVENT_QUEUE);
+    const getReq = store.get(eventId);
+    await new Promise<void>((resolve, reject) => {
+      getReq.onsuccess = () => {
+        const event = getReq.result as PosSaleEvent | undefined;
+        if (event) {
+          event.status = 'failed';
+          store.put(event);
+        }
+        resolve();
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('IndexedDB mark sale event failed:', e);
+  }
+}
+
+/**
+ * Count pending sale events (for UI: "Pending sales: N").
+ */
+export async function getPendingSaleEventsCount(): Promise<number> {
+  const events = await getPendingSaleEvents();
+  return events.length;
+}
+
 /** Check if IndexedDB is available. */
 export function isIndexedDBAvailable(): boolean {
   return typeof indexedDB !== 'undefined';

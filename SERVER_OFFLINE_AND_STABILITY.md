@@ -65,7 +65,7 @@ Vercel has a **4.5 MB** body size limit. Product images are stored as base64 in 
   - **POS**: Complete sale is disabled when degraded or offline (PaymentPanel shows "Read-only. Writes disabled until connection is restored." and disables the Complete button).
   - **Orders**: All order status actions are disabled when degraded or offline so stock is not deducted while offline/degraded.
 - **Labels**:
-  - **Offline**: Top banner (NetworkStatusContext) shows "Working Offline — Read-only. Add, edit, and sales disabled."
+  - **Offline**: Top banner (NetworkStatusContext) shows "Working Offline — Changes save locally. Syncing when back online."
   - **Degraded**: Layout banner shows "Server temporarily unavailable. Last saved data — read-only. Add, edit, and sales disabled until server is back."
   - **Sync pending**: SyncStatusBar shows "Offline — Read-only. Sync pending: N items" when offline with pending sync items; "Syncing N items..." when syncing.
 
@@ -75,9 +75,14 @@ Vercel has a **4.5 MB** body size limit. Product images are stored as base64 in 
 - **PaymentPanel**: `src/components/pos/PaymentPanel.tsx` (`disableComplete` prop).  
 - **Labels**: `src/components/layout/Layout.tsx` (degraded banner copy), `src/contexts/NetworkStatusContext.tsx` (offline banner copy), `src/components/SyncStatusBar.tsx` (offline + sync-pending label).
 
-## Enabling offline product saves
+## Offline mode: products and POS sales
 
-When the device is **offline**, Inventory allows Add/Edit so products can be saved locally and synced when back online. That behavior requires the **offline feature flag** to be on.
+When the device is **offline**:
+
+- **Products:** If `VITE_OFFLINE_ENABLED=true`, Add/Edit save to IndexedDB and sync when back online. Product list shows from cache when the browser reports offline.
+- **POS sales:** Complete sale is allowed offline. The sale is queued in IndexedDB (`pos_event_queue`) and synced when back online. Server uses `Idempotency-Key` so replays are safe. The app shows "Pending sync: N sales" when there are unsynced sales.
+
+**Enabling offline (build-time env):** Product offline path requires the **offline feature flag**; POS sales queue and sync when back online are always enabled.
 
 1. **Set env (build-time)**  
    - **Local**: In `.env.local` (or copy from `.env.example`), set:
@@ -91,4 +96,4 @@ When the device is **offline**, Inventory allows Add/Edit so products can be sav
    Vite inlines env at build time. After changing these variables, run `npm run build` and redeploy the frontend (e.g. push to trigger Vercel deploy).
 
 3. **Where it’s read**  
-   `src/lib/offlineFeatureFlag.ts`: `isOfflineEnabled()` is true when `VITE_OFFLINE_ENABLED` is `true` and (if set) the session falls within `VITE_OFFLINE_ROLLOUT_PERCENT`. When true, Inventory uses IndexedDB + sync queue; add/update offline write locally and sync when online.
+   `src/lib/offlineFeatureFlag.ts`: `isOfflineEnabled()` gates product offline path. POS sales sync when back online runs regardless. See `docs/OFFLINE_SYSTEM_APPROACH.md` for the full approach.

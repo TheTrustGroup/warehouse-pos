@@ -43,6 +43,7 @@ import CartSheet, {
   type SalePayload,
 } from '../components/pos/CartSheet';
 import SaleSuccessScreen, { type CompletedSale as SaleSuccessCompletedSale } from '../components/pos/SaleSuccessScreen';
+import { enqueueSaleEvent, getPendingSaleEventsCount } from '../lib/offlineDb';
 
 interface POSPageProps {
   apiBaseUrl?: string;
@@ -127,6 +128,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const [activeProduct, setActiveProduct] = useState<POSProduct | null>(null);
   const [saleResult, setSaleResult] = useState<CompletedSale | null>(null);
   const [charging, setCharging] = useState(false);
+  const [pendingSalesCount, setPendingSalesCount] = useState(0);
 
   const { toast, show: showToast } = useToast();
   const isMounted = useRef(true);
@@ -137,6 +139,22 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       isMounted.current = false;
     };
   }, []);
+
+  // Refresh pending offline sales count (for "Pending sync: N" indicator)
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      getPendingSaleEventsCount().then((n) => {
+        if (!cancelled && isMounted.current) setPendingSalesCount(n);
+      });
+    };
+    refresh();
+    const id = setInterval(refresh, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [saleResult]);
 
   const apiFetch = useCallback(
     async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
@@ -370,6 +388,89 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     if (charging) return;
     setCharging(true);
 
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+    if (isOffline) {
+      const eventId =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `pos-${payload.warehouseId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const syncPayload = {
+        warehouseId: payload.warehouseId,
+        customerName: payload.customerName || null,
+        paymentMethod: payload.paymentMethod,
+        subtotal: payload.subtotal,
+        discountPct: payload.discountPct,
+        discountAmt: payload.discountAmt,
+        total: payload.total,
+        lines: payload.lines.map((l) => ({
+          productId: l.productId,
+          sizeCode: l.sizeCode || null,
+          qty: l.qty,
+          unitPrice: l.unitPrice,
+          lineTotal: l.unitPrice * l.qty,
+          name: l.name,
+          sku: l.sku ?? '',
+          imageUrl: l.imageUrl ?? null,
+        })),
+        deliverySchedule: payload.deliverySchedule ?? null,
+      };
+      try {
+        await enqueueSaleEvent(syncPayload, eventId);
+      } catch (e) {
+        console.error('[POS] Offline enqueue failed:', e);
+        setCharging(false);
+        showToast('Could not save sale locally. Try again.', 'err');
+        return;
+      }
+      setProducts((prev) =>
+        prev.map((p) => {
+          const saleLines = payload.lines.filter((l) => l.productId === p.id);
+          if (saleLines.length === 0) return p;
+          if (p.sizeKind === 'sized') {
+            const updatedSizes = (p.quantityBySize ?? []).map((row) => {
+              const line = saleLines.find(
+                (l) =>
+                  l.sizeCode &&
+                  row.sizeCode &&
+                  l.sizeCode.toUpperCase() === row.sizeCode.toUpperCase()
+              );
+              return line
+                ? { ...row, quantity: Math.max(0, row.quantity - line.qty) }
+                : row;
+            });
+            return {
+              ...p,
+              quantityBySize: updatedSizes,
+              quantity: updatedSizes.reduce((s, r) => s + r.quantity, 0),
+            };
+          }
+          const totalSold = saleLines.reduce((s, l) => s + l.qty, 0);
+          return { ...p, quantity: Math.max(0, p.quantity - totalSold) };
+        })
+      );
+      setCart([]);
+      setCartOpen(false);
+      setCharging(false);
+      await new Promise((r) => setTimeout(r, 350));
+      if (!isMounted.current) return;
+      setSaleResult({
+        ...payload,
+        saleId: undefined,
+        receiptId: `Offline-${eventId.slice(0, 8)}`,
+        completedAt: new Date().toISOString(),
+        lines: payload.lines.map((l) => ({
+          ...l,
+          key: buildCartKey(l.productId, l.sizeCode ?? null),
+        })),
+      });
+      showToast('Sale saved locally. Will sync when back online.', 'ok');
+      getPendingSaleEventsCount().then((n) => {
+        if (isMounted.current) setPendingSalesCount(n);
+      });
+      return;
+    }
+
     let serverSaleId: string | undefined;
     let serverReceiptId: string | undefined;
     let completedAt: string | undefined;
@@ -567,6 +668,16 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         onCartTap={() => cartCount > 0 && setCartOpen(true)}
         onBarcodeSubmit={handleBarcodeSubmit}
       />
+      {pendingSalesCount > 0 && (
+        <div
+          className="flex items-center justify-center gap-2 py-1.5 px-3 bg-amber-100 text-amber-900 text-xs font-medium border-b border-amber-200"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" aria-hidden />
+          Pending sync: {pendingSalesCount} sale{pendingSalesCount !== 1 ? 's' : ''}
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[1fr_340px] min-h-0 overflow-hidden">
         {/* Products panel: on mobile add bottom padding for sticky CartBar */}

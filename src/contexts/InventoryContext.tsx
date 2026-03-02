@@ -350,6 +350,22 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       setError(null);
     }
+
+    // Offline short-circuit: when browser reports offline, show cache immediately and skip API call.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const localRaw = getStoredData<any[]>(productsCacheKey(wid), []);
+      const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
+      setProducts(localProducts);
+      setError(
+        localProducts.length > 0
+          ? 'Offline — showing last saved data.'
+          : 'Offline. Connect to load products.'
+      );
+      setBackgroundRefreshing(false);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       // Show "Updating..." and hide empty state during any refresh (including silent) to avoid empty-state flash
       if (!cacheValid) setBackgroundRefreshing(true);
