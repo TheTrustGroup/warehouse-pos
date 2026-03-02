@@ -104,6 +104,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const [activeProduct, setActiveProduct] = useState<POSProduct | null>(null);
   const [saleResult, setSaleResult] = useState<CompletedSale | null>(null);
   const [charging, setCharging] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState('');
 
   const { toast, show: showToast } = useToast();
   const isMounted = useRef(true);
@@ -199,6 +200,38 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       setColorFilter('');
     }
   }, [warehouse.id, loadProducts]);
+
+  function handleBarcodeSubmit() {
+    const raw = barcodeInput.trim();
+    setBarcodeInput('');
+    if (!raw) return;
+    const matches = products.filter(
+      (p) => (p.barcode ?? '').trim().toLowerCase() === raw.toLowerCase()
+    );
+    if (matches.length === 0) {
+      showToast('Product not found for this barcode', 'err');
+      return;
+    }
+    const product = matches[0];
+    const isSized = product.sizeKind === 'sized' && (product.quantityBySize?.length ?? 0) > 0;
+    if (isSized) {
+      setActiveProduct(structuredClone(product));
+    } else {
+      handleAddToCart({
+        productId: product.id,
+        name: product.name,
+        sku: product.sku,
+        sizeCode: null,
+        sizeLabel: null,
+        unitPrice: product.sellingPrice,
+        qty: 1,
+        imageUrl: product.images?.[0] ?? null,
+      });
+    }
+    if (matches.length > 1) {
+      showToast('Multiple products match; added first', 'warn');
+    }
+  }
 
   function handleAddToCart(input: CartLineInput) {
     const key = buildCartKey(input.productId, input.sizeCode ?? null);
@@ -440,6 +473,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         cartCount={cartCount}
         onSearchChange={setSearch}
         onCartTap={() => cartCount > 0 && setCartOpen(true)}
+        barcodeValue={barcodeInput}
+        onBarcodeChange={setBarcodeInput}
+        onBarcodeSubmit={handleBarcodeSubmit}
       />
 
       <div className="flex-1 overflow-y-auto">

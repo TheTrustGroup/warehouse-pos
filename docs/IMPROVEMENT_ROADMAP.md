@@ -53,7 +53,7 @@
 |---|--------|----------------------|----------|--------|
 | 6 | **No “sale didn’t reach server” recovery** | Cashier thinks sale went through; server never got it; stock wrong until next sync. | **Done.** On POST /api/sales failure (non-409): cart is kept, no success screen, toast: “Sale didn’t reach the server. Check your connection and tap Charge again.” Optional: disable Charge when circuit breaker is open and show banner. | — |
 | 7 | **Manual sale fallback not atomic** | If RPC is missing, fallback can leave partial sale + partial deduction. | **Done.** Documented + warning log. Ensure record_sale migration is always applied in production. | — |
-| 8 | **No barcode scanner** | Cashiers type/paste barcode; slower. | Add camera scan (Quagga2) or focus a “barcode input” that accepts USB scanner key events; on scan, search by barcode and add to cart or open size picker. | Medium |
+| 8 | **No barcode scanner** | Cashiers type/paste barcode; slower. | **Done.** POS header: focusable "Scan barcode" input; USB scanner + Enter; add to cart or open size picker. Camera (Quagga2) optional later. | — |
 | 9 | **New warehouse onboarding is ad hoc** | Inconsistent setup; missing user_scopes or size_codes. | **Done.** `docs/ONBOARDING_WAREHOUSE.md` runbook: create warehouse, seed size_codes, user_scopes, verify. | — |
 | 10 | **No critical-path E2E** | Regressions in login or POS flow can ship. | **Done.** `e2e/pos-sale.spec.ts`: redirect when unauthenticated; full flow (login → POS → add → charge → success or known error) when `E2E_TEST_USER_EMAIL` and `E2E_TEST_USER_PASSWORD` are set. | — |
 
@@ -76,7 +76,7 @@
 
 1. **Immediate:** #4 (receipt_seq), #5 (RLS/doc). — **Done.**  
 2. **Before next client:** #9 (onboarding doc), #10 (E2E). — **Done.**  
-3. **Next sprint:** #6 (recovery UX), #8 (barcode scanner), #12 (sold_by). (#6, #12 done.)  
+3. **Next sprint:** #6 (recovery UX), #8 (barcode scanner), #12 (sold_by). (#6, #8, #12 done.)  
 4. **When scaling:** #11 (pagination if catalog >1000), #13 (distributed idempotency). (#16 CI/CD done.)  
 5. **When integrating:** #14 (webhooks), #15 (multi-currency/tax).
 
