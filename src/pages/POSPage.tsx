@@ -294,7 +294,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       const status = (apiErr as { status?: number })?.status;
       if (status === 409) {
         setCharging(false);
-        showToast('Insufficient stock for one or more items. Adjust the cart and try again.', 'error');
+        showToast('Insufficient stock for one or more items. Adjust the cart and try again.', 'err');
         return;
       }
       console.error(
