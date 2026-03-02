@@ -4,6 +4,9 @@ import type { POSProduct } from './SizePickerSheet';
 
 export type { POSProduct };
 
+/** Color options for filter dropdown — match Inventory. */
+const COLOR_OPTIONS = ['All', 'Black', 'White', 'Red', 'Blue', 'Brown', 'Green', 'Grey', 'Navy', 'Beige', 'Multi', 'Uncategorized'];
+
 interface ProductGridProps {
   products: POSProduct[];
   loading: boolean;
@@ -77,6 +80,16 @@ export default function ProductGrid({
     return Array.from(set).sort((a, b) => (a === 'all' ? -1 : b === 'all' ? 1 : a.localeCompare(b)));
   }, [products]);
 
+  const uniqueSizes = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      if (p.sizeKind === 'na') set.add('NA');
+      else if (p.sizeKind === 'one_size') set.add('One size');
+      else for (const s of p.quantityBySize ?? []) if (s.sizeCode) set.add(s.sizeCode);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [products]);
+
   const filtered = useMemo(
     () => applyFilters(products, search, category, sizeFilter, colorFilter),
     [products, search, category, sizeFilter, colorFilter]
@@ -139,6 +152,38 @@ export default function ProductGrid({
           ))}
         </div>
       )}
+
+      {/* Size and Color filters + results count — same as Inventory */}
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={sizeFilter}
+          onChange={(e) => onSizeFilterChange(e.target.value)}
+          className="h-[30px] pl-2.5 pr-6 rounded-[20px] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] min-w-[100px] cursor-pointer appearance-none bg-no-repeat bg-[length:10px_6px] bg-[right_10px_center]"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238A8784' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")` }}
+          aria-label="Filter by size"
+        >
+          <option value="">Size: All</option>
+          {uniqueSizes.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          value={colorFilter}
+          onChange={(e) => onColorFilterChange(e.target.value)}
+          className="h-[30px] pl-2.5 pr-6 rounded-[20px] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] min-w-[100px] cursor-pointer appearance-none bg-no-repeat bg-[length:10px_6px] bg-[right_10px_center]"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238A8784' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")` }}
+          aria-label="Filter by color"
+        >
+          <option value="">Color: All</option>
+          {COLOR_OPTIONS.filter((c) => c !== 'All').map((c) => (
+            <option key={c} value={c === 'Uncategorized' ? 'uncategorized' : c}>{c}</option>
+          ))}
+        </select>
+        <span className="text-[11px] text-[var(--edk-ink-3)] whitespace-nowrap">
+          Showing <strong className="text-[var(--edk-ink-2)] font-semibold">{filtered.length}</strong> of {products.length}
+        </span>
+      </div>
+
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         {filtered.map((p) => (
           <POSProductCard key={p.id} product={p} onSelect={onSelect} />
