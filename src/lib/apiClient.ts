@@ -188,7 +188,8 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
       if (!isCorsBlock) circuit.recordFailure();
 
       const retryableNetwork =
-        lastError?.message?.includes('fetch') || /network|timeout|failed to fetch/i.test(lastError?.message || '');
+        lastError?.message?.includes('fetch') ||
+        /network|timeout|failed to fetch|connection was lost|error occurred trying to load/i.test(lastError?.message || '');
       const shouldRetry =
         maxRetries > 0 && attempt < maxRetries && (isTimeout || retryableNetwork);
 

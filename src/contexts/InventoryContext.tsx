@@ -376,8 +376,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       try {
         const path = productsPath('/api/products', { limit: 1000 });
-        // Fail fast on server/network errors so we show cached products instead of spinning (maxRetries: 0).
-        const getOpts = { signal, timeoutMs, maxRetries: 0 };
+        // One retry for GET so a single dropped connection (e.g. "connection was lost") doesn't surface; then cache fallback.
+        const getOpts = { signal, timeoutMs, maxRetries: 1 };
         let raw: { data?: Product[]; total?: number } | Product[] | null = null;
         try {
           raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
@@ -551,7 +551,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const errMsg = err instanceof Error ? err.message : String(err);
       const status = (err as { status?: number })?.status;
       const isNetwork =
-        /load failed|failed to fetch|network error|networkrequestfailed|temporarily unavailable/i.test(errMsg);
+        /load failed|failed to fetch|network error|networkrequestfailed|temporarily unavailable|connection was lost|error occurred trying to load/i.test(errMsg);
       let message: string;
       if (status === 404) {
         message =
