@@ -89,6 +89,15 @@ function normalizeDbConstraintError(dbMessage: string, action: 'create' | 'updat
 const WAREHOUSE_PRODUCTS_SELECT =
   'id, sku, barcode, name, description, category, size_kind, selling_price, cost_price, reorder_level, location, supplier, tags, images, color, version, created_at, updated_at';
 
+/** Minimal select when size_kind/color columns are missing (legacy DB). */
+const WAREHOUSE_PRODUCTS_SELECT_MINIMAL =
+  'id, sku, barcode, name, description, category, selling_price, cost_price, reorder_level, location, supplier, tags, images, version, created_at, updated_at';
+
+function isMissingColumnError(err: { message?: string }): boolean {
+  const m = (err?.message ?? '').toLowerCase();
+  return m.includes('column') && (m.includes('does not exist') || m.includes('undefined'));
+}
+
 /** List products for a warehouse. Works when warehouse_products has no warehouse_id (one row per product). */
 export async function getWarehouseProducts(
   warehouseId: string | undefined,
@@ -113,9 +122,29 @@ export async function getWarehouseProducts(
     query = query.eq('category', options.category.trim());
   }
 
-  const { data: rows, error, count } = await query;
+  let rows: Record<string, unknown>[] | null = null;
+  let count: number | null = null;
+  let error: { message: string } | null = null;
+  ({ data: rows, error, count } = await query);
 
-  if (error) {
+  if (error && isMissingColumnError(error)) {
+    let fallbackQuery = db
+      .from('warehouse_products')
+      .select(WAREHOUSE_PRODUCTS_SELECT_MINIMAL, { count: 'exact' })
+      .order('name')
+      .range(offset, offset + limit - 1);
+    if (options.q?.trim()) {
+      const q = options.q.trim();
+      fallbackQuery = fallbackQuery.or(`name.ilike.%${q}%,sku.ilike.%${q}%`);
+    }
+    if (options.category?.trim()) {
+      fallbackQuery = fallbackQuery.eq('category', options.category.trim());
+    }
+    const fallback = await fallbackQuery;
+    if (fallback.error) throw new Error(`Failed to list products: ${fallback.error.message}`);
+    rows = fallback.data ?? [];
+    count = fallback.count ?? (rows as unknown[]).length;
+  } else if (error) {
     throw new Error(`Failed to list products: ${error.message}`);
   }
 
@@ -135,17 +164,24 @@ export async function getWarehouseProducts(
       const r = inv as { product_id: string; quantity?: number };
       invMap[r.product_id] = Number(r.quantity ?? 0);
     }
-    const { data: sizeRows } = await db
+    type SizeRow = { product_id: string; size_code: string; quantity: number; size_codes?: { size_label?: string } | null };
+    let sizeRows: SizeRow[] = [];
+    const withJoin = await db
       .from('warehouse_inventory_by_size')
       .select('product_id, size_code, quantity, size_codes!left(size_label)')
       .eq('warehouse_id', effectiveWarehouseId)
       .in('product_id', productIds);
-    const sizeList = (sizeRows ?? []) as Array<{
-      product_id: string;
-      size_code: string;
-      quantity: number;
-      size_codes?: { size_label?: string } | null;
-    }>;
+    if (withJoin.error && (withJoin.error.message?.includes('relation') || withJoin.error.message?.includes('size_codes'))) {
+      const withoutJoin = await db
+        .from('warehouse_inventory_by_size')
+        .select('product_id, size_code, quantity')
+        .eq('warehouse_id', effectiveWarehouseId)
+        .in('product_id', productIds);
+      if (!withoutJoin.error) sizeRows = (withoutJoin.data ?? []) as SizeRow[];
+    } else if (!withJoin.error) {
+      sizeRows = (withJoin.data ?? []) as SizeRow[];
+    }
+    const sizeList = sizeRows;
     for (const r of sizeList) {
       if (!sizeMap[r.product_id]) sizeMap[r.product_id] = [];
       sizeMap[r.product_id].push({

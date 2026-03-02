@@ -33,49 +33,43 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (auth instanceof NextResponse) return withCors(auth, req);
 
   const h = corsHeaders(req);
-  const { searchParams } = new URL(req.url);
-  const queryWarehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
-  const scope = await getScopeForUser(auth.email);
-  const allowed = scope.allowedWarehouseIds;
-  const roleNorm = (auth.role ?? '').toLowerCase().replace(/\s+/g, '_');
-  const isAdminNoScope = (roleNorm === 'admin' || roleNorm === 'super_admin') && allowed.length === 0;
-  const warehouseId = queryWarehouseId
-    ? (isAdminNoScope ? queryWarehouseId : (allowed.includes(queryWarehouseId) ? queryWarehouseId : ''))
-    : (allowed[0] ?? '');
+  try {
+    const { searchParams } = new URL(req.url);
+    const queryWarehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
+    const scope = await getScopeForUser(auth.email);
+    const allowed = scope.allowedWarehouseIds;
+    const roleNorm = (auth.role ?? '').toLowerCase().replace(/\s+/g, '_');
+    const isAdminNoScope = (roleNorm === 'admin' || roleNorm === 'super_admin') && allowed.length === 0;
+    const warehouseId = queryWarehouseId
+      ? (isAdminNoScope ? queryWarehouseId : (allowed.includes(queryWarehouseId) ? queryWarehouseId : ''))
+      : (allowed[0] ?? '');
 
-  if (!warehouseId) {
-    return withCors(
-      NextResponse.json(
-        { error: allowed.length ? 'warehouse_id required or must be in your scope' : 'No warehouse access' },
-        { status: 400, headers: h }
-      ),
-      req
-    );
-  }
+    if (!warehouseId) {
+      return withCors(
+        NextResponse.json(
+          { error: allowed.length ? 'warehouse_id required or must be in your scope' : 'No warehouse access' },
+          { status: 400, headers: h }
+        ),
+        req
+      );
+    }
 
-  const productId = searchParams.get('id')?.trim();
-  if (productId) {
-    try {
+    const productId = searchParams.get('id')?.trim();
+    if (productId) {
       const product = await getProductById(warehouseId, productId);
       if (!product) {
         return withCors(NextResponse.json({ error: 'Product not found' }, { status: 404, headers: h }), req);
       }
       return withCors(NextResponse.json(product, { headers: h }), req);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Failed to load product';
-      console.error('[GET /api/products?id=]', message);
-      return withCors(NextResponse.json({ error: message }, { status: 500, headers: h }), req);
     }
-  }
 
-  const limit = Math.min(Math.max(Number(searchParams.get('limit') ?? 1000), 1), 2000);
-  const offset = Math.max(Number(searchParams.get('offset') ?? 0), 0);
-  const q = searchParams.get('q')?.trim() ?? undefined;
-  const category = searchParams.get('category')?.trim() ?? undefined;
-  const lowStock = searchParams.get('low_stock') === 'true' || searchParams.get('low_stock') === '1';
-  const outOfStock = searchParams.get('out_of_stock') === 'true' || searchParams.get('out_of_stock') === '1';
+    const limit = Math.min(Math.max(Number(searchParams.get('limit') ?? 1000), 1), 2000);
+    const offset = Math.max(Number(searchParams.get('offset') ?? 0), 0);
+    const q = searchParams.get('q')?.trim() ?? undefined;
+    const category = searchParams.get('category')?.trim() ?? undefined;
+    const lowStock = searchParams.get('low_stock') === 'true' || searchParams.get('low_stock') === '1';
+    const outOfStock = searchParams.get('out_of_stock') === 'true' || searchParams.get('out_of_stock') === '1';
 
-  try {
     const { data, total } = await getWarehouseProducts(warehouseId, {
       limit,
       offset,
@@ -89,10 +83,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const message = e instanceof Error ? e.message : 'Failed to load products';
     console.error('[GET /api/products]', message);
     return withCors(
-      NextResponse.json(
-        { error: message },
-        { status: 500, headers: h }
-      ),
+      NextResponse.json({ error: message }, { status: 500, headers: h }),
       req
     );
   }
