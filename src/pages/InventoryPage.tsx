@@ -478,9 +478,11 @@ export default function InventoryPage(_props: InventoryPageProps) {
       }
       const pending = pendingDeletesRef.current;
       setProducts(pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list);
+      getApiCircuitBreaker().recordSuccess();
     } catch (e: unknown) {
       const err = e as Error;
       if (err.name === 'AbortError' || ctrl.signal.aborted) return;
+      getApiCircuitBreaker().recordFailure();
       if (!silent) setError(err.message ?? 'Failed to load products');
     } finally {
       if (loadAbortRef.current === ctrl) {
@@ -838,16 +840,18 @@ export default function InventoryPage(_props: InventoryPageProps) {
       <main>
 
         {/* Error */}
-        {error && (
+        {(error || getApiCircuitBreaker().isDegraded()) && (
           <div className="flex flex-col items-center gap-5 py-20 text-center">
             <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center text-red-300">
               <BoxIcon/>
             </div>
             <div>
               <p className="text-[17px] font-black text-slate-800">Couldn&apos;t load products</p>
-              <p className="text-[13px] text-slate-400 mt-1 max-w-[260px] leading-relaxed">{error}</p>
+              <p className="text-[13px] text-slate-500 mt-1 max-w-md mx-auto break-words leading-relaxed">
+                {error || (getApiCircuitBreaker().isDegraded() ? 'Server temporarily unavailable (too many failed requests). Click Retry to try again.' : null)}
+              </p>
             </div>
-            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); loadProducts(); }}
+            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); setError(null); loadProducts(); }}
                     className="h-10 px-6 rounded-xl bg-red-500 text-white text-[13px] font-bold
                                hover:bg-red-600 transition-colors shadow-[0_4px_12px_rgba(239,68,68,0.25)]">
               Retry

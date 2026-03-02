@@ -170,6 +170,9 @@ export async function getWarehouseProducts(
         .in('product_id', productIds),
     ]);
 
+    if (invRes.error) {
+      throw new Error(`Failed to list products: ${invRes.error.message}`);
+    }
     for (const inv of invRes.data ?? []) {
       const r = inv as { product_id: string; quantity?: number };
       invMap[r.product_id] = Number(r.quantity ?? 0);
