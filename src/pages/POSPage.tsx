@@ -95,6 +95,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   }, [user, tryRefreshSession]);
   const [products, setProducts] = useState<POSProduct[]>([]);
   const [loading, setLoading] = useState(false);
+  const [productsLoadError, setProductsLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [sizeFilter, setSizeFilter] = useState('');
@@ -119,7 +120,15 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const apiFetch = useCallback(
     async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15_000);
+      const timeout = setTimeout(() => controller.abort(), 12_000);
+      const callerSignal = init?.signal;
+      if (callerSignal) {
+        if (callerSignal.aborted) {
+          clearTimeout(timeout);
+          throw new DOMException('Aborted', 'AbortError');
+        }
+        callerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
       try {
         const res = await fetch(`${API_BASE_URL}${path}`, {
           ...init,
@@ -155,13 +164,46 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     []
   );
 
+  const loadProductsAbortRef = useRef<AbortController | null>(null);
+  const productsCacheRef = useRef<{ wid: string; list: POSProduct[]; at: number } | null>(null);
+  const PRODUCTS_CACHE_TTL_MS = 30_000;
+
   const loadProducts = useCallback(
-    async (wid: string, silent = false) => {
-      if (!silent) setLoading(true);
+    async (wid: string, silent = false, signal?: AbortSignal) => {
+      const cached = productsCacheRef.current;
+      if (cached?.wid === wid && Date.now() - cached.at < PRODUCTS_CACHE_TTL_MS && cached.list.length >= 0) {
+        if (isMounted.current) {
+          setProducts(cached.list);
+          setProductsLoadError(null);
+        }
+        if (!silent) setLoading(false);
+        const revalidate = await apiFetch<
+          POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }
+        >(`/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000`, { signal }).catch(() => null);
+        if (signal?.aborted || !isMounted.current) return;
+        if (revalidate != null) {
+          const rawList: POSProduct[] = Array.isArray(revalidate)
+            ? revalidate
+            : (revalidate as { data?: POSProduct[] }).data ?? (revalidate as { products?: POSProduct[] }).products ?? [];
+          const list = rawList.map((item) => {
+            const row = item as unknown as { color?: string; variants?: { color?: string }; barcode?: string | null };
+            const color = (row.color != null ? String(row.color).trim() : '') || (row.variants?.color ?? '') || '';
+            return { ...item, color: color || null, barcode: row.barcode != null ? String(row.barcode) : null };
+          });
+          productsCacheRef.current = { wid, list, at: Date.now() };
+          setProducts(list);
+        }
+        return;
+      }
+      if (!silent) {
+        setLoading(true);
+        setProductsLoadError(null);
+      }
       try {
         const data = await apiFetch<
           POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }
-        >(`/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000`);
+        >(`/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000`, { signal });
+        if (signal?.aborted) return;
         const rawList: POSProduct[] = Array.isArray(data)
           ? data
           : (data as { data?: POSProduct[] }).data ??
@@ -179,10 +221,18 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
             barcode: row.barcode != null ? String(row.barcode) : null,
           };
         });
-        if (isMounted.current) setProducts(list);
+        if (isMounted.current) {
+          productsCacheRef.current = { wid, list, at: Date.now() };
+          setProducts(list);
+          setProductsLoadError(null);
+        }
       } catch (e: unknown) {
-        if (!silent && isMounted.current)
-          showToast(e instanceof Error ? e.message : 'Failed to load products', 'err');
+        if (signal?.aborted) return;
+        const message = e instanceof Error ? e.message : 'Failed to load products';
+        if (!silent && isMounted.current) {
+          setProductsLoadError(message);
+          showToast(message, 'err');
+        }
       } finally {
         if (!silent && isMounted.current) setLoading(false);
       }
@@ -191,14 +241,21 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   );
 
   useEffect(() => {
-    if (warehouse.id) {
-      loadProducts(warehouse.id);
-      setCart([]);
-      setSearch('');
-      setCategory('all');
-      setSizeFilter('');
-      setColorFilter('');
-    }
+    const wid = warehouse.id?.trim();
+    if (!wid) return;
+    loadProductsAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    loadProductsAbortRef.current = ctrl;
+    setCart([]);
+    setSearch('');
+    setCategory('all');
+    setSizeFilter('');
+    setColorFilter('');
+    loadProducts(wid, false, ctrl.signal);
+    return () => {
+      ctrl.abort();
+      if (loadProductsAbortRef.current === ctrl) loadProductsAbortRef.current = null;
+    };
   }, [warehouse.id, loadProducts]);
 
   function handleBarcodeSubmit() {
@@ -479,19 +536,36 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       />
 
       <div className="flex-1 overflow-y-auto">
-        <ProductGrid
-          products={products}
-          loading={loading}
-          search={search}
-          category={category}
-          sizeFilter={sizeFilter}
-          colorFilter={colorFilter}
-          onSelect={(product) => setActiveProduct(structuredClone(product))}
-          onClearSearch={() => setSearch('')}
-          onCategoryChange={setCategory}
-          onSizeFilterChange={setSizeFilter}
-          onColorFilterChange={setColorFilter}
-        />
+        {productsLoadError ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+            <p className="text-slate-700 font-medium">Cannot load products</p>
+            <p className="text-sm text-slate-500 max-w-md">{productsLoadError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setProductsLoadError(null);
+                if (warehouse.id) loadProducts(warehouse.id);
+              }}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <ProductGrid
+            products={products}
+            loading={loading}
+            search={search}
+            category={category}
+            sizeFilter={sizeFilter}
+            colorFilter={colorFilter}
+            onSelect={(product) => setActiveProduct(structuredClone(product))}
+            onClearSearch={() => setSearch('')}
+            onCategoryChange={setCategory}
+            onSizeFilterChange={setSizeFilter}
+            onColorFilterChange={setColorFilter}
+          />
+        )}
       </div>
 
       <CartBar lines={cart} onOpen={() => cartCount > 0 && setCartOpen(true)} />

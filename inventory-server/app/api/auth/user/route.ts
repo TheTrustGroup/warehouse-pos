@@ -1,33 +1,43 @@
+/**
+ * GET /api/auth/user — session user with warehouse_id for POS.
+ * Used by frontend to enrich cashier session so POS can send correct warehouse_id to /api/products.
+ */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth, sessionUserToJson } from '@/lib/auth/session';
-import { getAssignedPosForUser, getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
+import { getSession, sessionUserToJson } from '@/lib/auth/session';
+import { getSingleWarehouseIdForUser, getScopeForUser } from '@/lib/data/userScopes';
 import { corsHeaders } from '@/lib/cors';
 
 export const dynamic = 'force-dynamic';
+
+function withCors(res: NextResponse, req: NextRequest): NextResponse {
+  Object.entries(corsHeaders(req)).forEach(([k, v]) => res.headers.set(k, v));
+  return res;
+}
 
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
 
-/** Current user from session. Role from server only. Includes warehouse_id for cashier POS (skip location selector). */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const h = corsHeaders(request);
-  const auth = await requireAuth(request);
-  if (auth instanceof NextResponse) {
-    Object.entries(h).forEach(([k, v]) => auth.headers.set(k, v));
-    return auth;
+  const session = await getSession(request);
+  if (!session) {
+    return withCors(
+      NextResponse.json({ error: 'Unauthorized', message: 'Missing or invalid session' }, { status: 401 }),
+      request
+    );
   }
 
-  const payload = sessionUserToJson(auth);
-  if (!payload.warehouse_id) {
-    try {
-      const singleWarehouseId = await getSingleWarehouseIdForUser(auth.email);
-      if (singleWarehouseId) (payload as Record<string, unknown>).warehouse_id = singleWarehouseId;
-    } catch {
-      // table missing or DB error; leave warehouse_id unset
+  let enriched = session;
+  if (!session.warehouse_id) {
+    const single = await getSingleWarehouseIdForUser(session.email);
+    const warehouseId = single ?? (await getScopeForUser(session.email)).allowedWarehouseIds[0];
+    if (warehouseId) {
+      enriched = { ...session, warehouse_id: warehouseId };
     }
   }
-  const assignedPos = await getAssignedPosForUser(auth.email);
-  if (assignedPos) (payload as Record<string, unknown>).assignedPos = assignedPos;
-  return NextResponse.json(payload, { headers: h });
+
+  const body = sessionUserToJson(enriched);
+  const res = withCors(NextResponse.json(body), request);
+  res.headers.set('Cache-Control', 'private, max-age=0');
+  return res;
 }
