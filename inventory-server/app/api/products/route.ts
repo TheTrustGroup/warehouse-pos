@@ -31,70 +31,83 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const h = corsHeaders(req);
-
-  const fail500 = (message: string): NextResponse =>
-    withCors(NextResponse.json({ error: message }, { status: 500, headers: h }), req);
-
   try {
-    if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
-      console.error('[GET /api/products] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
-      return fail500('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Set them in Vercel project environment variables.');
+    const h = corsHeaders(req);
+    const fail500 = (message: string): NextResponse =>
+      withCors(NextResponse.json({ error: message }, { status: 500, headers: h }), req);
+
+    try {
+      if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+        console.error('[GET /api/products] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+        return fail500('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Set them in Vercel project environment variables.');
+      }
+
+      const auth = await requireAuth(req);
+      if (auth instanceof NextResponse) return withCors(auth, req);
+
+      const { searchParams } = new URL(req.url);
+      const queryWarehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
+      const scope = await getScopeForUser(auth.email);
+      const allowed = scope.allowedWarehouseIds;
+      const roleNorm = (auth.role ?? '').toLowerCase().replace(/\s+/g, '_');
+      const isAdminNoScope = (roleNorm === 'admin' || roleNorm === 'super_admin') && allowed.length === 0;
+      const warehouseId = queryWarehouseId
+        ? (isAdminNoScope ? queryWarehouseId : (allowed.includes(queryWarehouseId) ? queryWarehouseId : ''))
+        : (allowed[0] ?? '');
+
+      if (!warehouseId) {
+        return withCors(
+          NextResponse.json(
+            { error: allowed.length ? 'warehouse_id required or must be in your scope' : 'No warehouse access' },
+            { status: 400, headers: h }
+          ),
+          req
+        );
+      }
+
+      const productId = searchParams.get('id')?.trim();
+      if (productId) {
+        const product = await getProductById(warehouseId, productId);
+        if (!product) {
+          return withCors(NextResponse.json({ error: 'Product not found' }, { status: 404, headers: h }), req);
+        }
+        return withCors(NextResponse.json(product, { headers: h }), req);
+      }
+
+      /** Cap at 250 per request to stay under Vercel function timeout (cold start + Supabase). Use offset for pagination. */
+      const limit = Math.min(Math.max(Number(searchParams.get('limit') ?? 250), 1), 250);
+      const offset = Math.max(Number(searchParams.get('offset') ?? 0), 0);
+      const q = searchParams.get('q')?.trim() ?? undefined;
+      const category = searchParams.get('category')?.trim() ?? undefined;
+      const lowStock = searchParams.get('low_stock') === 'true' || searchParams.get('low_stock') === '1';
+      const outOfStock = searchParams.get('out_of_stock') === 'true' || searchParams.get('out_of_stock') === '1';
+
+      const { data, total } = await getWarehouseProducts(warehouseId, {
+        limit,
+        offset,
+        q,
+        category,
+        lowStock: lowStock || undefined,
+        outOfStock: outOfStock || undefined,
+      });
+      return withCors(NextResponse.json({ data, total }, { headers: h }), req);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Failed to load products';
+      console.error('[GET /api/products]', message);
+      return fail500(message);
     }
-
-    const auth = await requireAuth(req);
-    if (auth instanceof NextResponse) return withCors(auth, req);
-
-    const { searchParams } = new URL(req.url);
-    const queryWarehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
-    const scope = await getScopeForUser(auth.email);
-    const allowed = scope.allowedWarehouseIds;
-    const roleNorm = (auth.role ?? '').toLowerCase().replace(/\s+/g, '_');
-    const isAdminNoScope = (roleNorm === 'admin' || roleNorm === 'super_admin') && allowed.length === 0;
-    const warehouseId = queryWarehouseId
-      ? (isAdminNoScope ? queryWarehouseId : (allowed.includes(queryWarehouseId) ? queryWarehouseId : ''))
-      : (allowed[0] ?? '');
-
-    if (!warehouseId) {
-      return withCors(
-        NextResponse.json(
-          { error: allowed.length ? 'warehouse_id required or must be in your scope' : 'No warehouse access' },
-          { status: 400, headers: h }
-        ),
-        req
+  } catch (outer: unknown) {
+    const msg = outer instanceof Error ? outer.message : 'Failed to load products';
+    console.error('[GET /api/products] outer', msg);
+    try {
+      const h = corsHeaders(req);
+      return withCors(NextResponse.json({ error: msg }, { status: 500, headers: h }), req);
+    } catch {
+      return NextResponse.json(
+        { error: msg },
+        { status: 500, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } }
       );
     }
-
-    const productId = searchParams.get('id')?.trim();
-    if (productId) {
-      const product = await getProductById(warehouseId, productId);
-      if (!product) {
-        return withCors(NextResponse.json({ error: 'Product not found' }, { status: 404, headers: h }), req);
-      }
-      return withCors(NextResponse.json(product, { headers: h }), req);
-    }
-
-    /** Cap at 250 per request to stay under Vercel function timeout (cold start + Supabase). Use offset for pagination. */
-    const limit = Math.min(Math.max(Number(searchParams.get('limit') ?? 250), 1), 250);
-    const offset = Math.max(Number(searchParams.get('offset') ?? 0), 0);
-    const q = searchParams.get('q')?.trim() ?? undefined;
-    const category = searchParams.get('category')?.trim() ?? undefined;
-    const lowStock = searchParams.get('low_stock') === 'true' || searchParams.get('low_stock') === '1';
-    const outOfStock = searchParams.get('out_of_stock') === 'true' || searchParams.get('out_of_stock') === '1';
-
-    const { data, total } = await getWarehouseProducts(warehouseId, {
-      limit,
-      offset,
-      q,
-      category,
-      lowStock: lowStock || undefined,
-      outOfStock: outOfStock || undefined,
-    });
-    return withCors(NextResponse.json({ data, total }, { headers: h }), req);
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Failed to load products';
-    console.error('[GET /api/products]', message);
-    return fail500(message);
   }
 }
 

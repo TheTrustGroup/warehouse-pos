@@ -466,14 +466,25 @@ export default function InventoryPage(_props: InventoryPageProps) {
       const total = (raw != null && typeof raw === 'object' && 'total' in raw) ? (raw as { total?: number }).total : undefined;
       if (typeof total === 'number' && total > list.length && list.length === PAGE) {
         for (let offset = PAGE; offset < Math.min(total, MAX) && !ctrl.signal.aborted; offset += PAGE) {
-          const next = await apiFetch<unknown>(
-            `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=${PAGE}&offset=${offset}`,
-            { signal: ctrl.signal }
-          );
-          if (ctrl.signal.aborted) return;
-          const nextList = unwrapProductList(next);
-          list = list.concat(nextList);
-          if (nextList.length < PAGE) break;
+          try {
+            const next = await apiFetch<unknown>(
+              `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=${PAGE}&offset=${offset}`,
+              { signal: ctrl.signal }
+            );
+            if (ctrl.signal.aborted) return;
+            const nextList = unwrapProductList(next);
+            list = list.concat(nextList);
+            if (nextList.length < PAGE) break;
+          } catch (pageErr) {
+            if (ctrl.signal.aborted) return;
+            const pending = pendingDeletesRef.current;
+            setProducts(pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list);
+            getApiCircuitBreaker().recordFailure();
+            if (!silent) setError(list.length > 0
+              ? `Loaded ${list.length} products; could not load the rest. Try again or continue with the current list.`
+              : (pageErr instanceof Error ? pageErr.message : 'Failed to load products'));
+            return;
+          }
         }
       }
       const pending = pendingDeletesRef.current;

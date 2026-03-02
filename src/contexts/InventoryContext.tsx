@@ -402,15 +402,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         if (typeof totalFromApi === 'number' && totalFromApi > apiProducts.length && apiProducts.length === PAGE_LIMIT) {
           const basePath = path.includes('/admin/api/') ? '/admin/api/products' : '/api/products';
           for (let offset = PAGE_LIMIT; offset < Math.min(totalFromApi, MAX_PRODUCTS) && !signal?.aborted; offset += PAGE_LIMIT) {
-            const nextRaw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(
-              API_BASE_URL,
-              productsPath(basePath, { limit: PAGE_LIMIT, offset }),
-              getOpts
-            );
-            const nextParsed = parseProductsResponse(nextRaw);
-            if (!nextParsed.success || nextParsed.items.length === 0) break;
-            apiProducts = apiProducts.concat(nextParsed.items.map((p) => normalizeProduct(p)));
-            if (nextParsed.items.length < PAGE_LIMIT) break;
+            try {
+              const nextRaw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(
+                API_BASE_URL,
+                productsPath(basePath, { limit: PAGE_LIMIT, offset }),
+                getOpts
+              );
+              const nextParsed = parseProductsResponse(nextRaw);
+              if (!nextParsed.success || nextParsed.items.length === 0) break;
+              apiProducts = apiProducts.concat(nextParsed.items.map((p) => normalizeProduct(p)));
+              if (nextParsed.items.length < PAGE_LIMIT) break;
+            } catch {
+              break;
+            }
           }
         }
         const apiIds = new Set(apiProducts.map((p) => p.id));
