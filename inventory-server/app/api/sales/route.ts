@@ -201,6 +201,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       p_payment_method: paymentMethod,
       p_customer_name:  customerName,
       p_sold_by:        null,
+      p_sold_by_email:  auth.email?.trim() || null,
     });
 
     if (error) {
@@ -215,7 +216,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         );
       }
       if (error.code === '42883' || error.message?.includes('does not exist')) {
-        return withCors(await manualSaleFallback({ db, warehouseId, normalizedLines, subtotal, discountPct, discountAmt, total, paymentMethod, customerName, headers: h, idempotencyKey }), req);
+        return withCors(await manualSaleFallback({ db, warehouseId, normalizedLines, subtotal, discountPct, discountAmt, total, paymentMethod, customerName, soldByEmail: auth.email?.trim() || null, headers: h, idempotencyKey }), req);
       }
       return withCors(NextResponse.json({ error: error.message }, { status: 500, headers: h }), req);
     }
@@ -246,10 +247,11 @@ async function manualSaleFallback(args: {
   normalizedLines: Array<{ productId: string; sizeCode: string | null; qty: number; unitPrice: number; lineTotal: number; name: string; sku: string; imageUrl: string | null }>;
   subtotal: number; discountPct: number; discountAmt: number; total: number;
   paymentMethod: string; customerName: string | null;
+  soldByEmail: string | null;
   headers: Record<string, string>;
   idempotencyKey?: string;
 }): Promise<NextResponse> {
-  const { db, warehouseId, normalizedLines, subtotal, discountPct, discountAmt, total, paymentMethod, customerName, headers, idempotencyKey } = args;
+  const { db, warehouseId, normalizedLines, subtotal, discountPct, discountAmt, total, paymentMethod, customerName, soldByEmail, headers, idempotencyKey } = args;
   console.warn('[POST /api/sales] Using manual fallback (non-atomic). Ensure record_sale RPC is deployed for production.');
   const { randomUUID } = await import('crypto');
   const saleId = randomUUID();
@@ -262,7 +264,7 @@ async function manualSaleFallback(args: {
     id: saleId, warehouse_id: warehouseId, customer_name: customerName,
     payment_method: paymentMethod, subtotal, discount_pct: discountPct,
     discount_amt: discountAmt, total, item_count: itemCount,
-    receipt_id: receiptId, status: 'completed', created_at: now,
+    receipt_id: receiptId, status: 'completed', sold_by_email: soldByEmail, created_at: now,
   });
   if (saleErr) return NextResponse.json({ error: saleErr.message }, { status: 500, headers });
 
@@ -347,7 +349,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .select(`
           id, receipt_id, warehouse_id, customer_name,
           payment_method, subtotal, discount_pct, discount_amt,
-          total, item_count, sold_by, status, created_at,
+          total, item_count, sold_by, sold_by_email, status, created_at,
           delivery_status, recipient_name, recipient_phone,
           delivery_address, delivery_notes, expected_date,
           delivered_at, delivered_by,
@@ -379,7 +381,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .select(`
         id, receipt_id, warehouse_id, customer_name,
         payment_method, subtotal, discount_pct, discount_amt,
-        total, item_count, sold_by, status, created_at, voided_at,
+        total, item_count, sold_by, sold_by_email, status, created_at, voided_at,
         sale_lines (
           id, product_id, size_code, product_name, product_sku,
           unit_price, qty, line_total, product_image_url
@@ -394,7 +396,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const { data, error } = await query;
     if (error) {
-      if (error.message?.includes('product_image_url') || error.message?.includes('status')) {
+      if (error.message?.includes('product_image_url') || error.message?.includes('status') || error.message?.includes('sold_by_email')) {
         return getSalesLegacy(db, warehouseId, from, to, limit, offset, h);
       }
       return NextResponse.json({ error: error.message }, { status: 500, headers: h });
@@ -437,7 +439,7 @@ function shapeSales(rows: Array<Record<string, unknown>>) {
     subtotal:  Number(s.subtotal    ?? 0), discountPct: Number(s.discount_pct ?? 0),
     discountAmt: Number(s.discount_amt ?? 0), total: Number(s.total ?? 0),
     itemCount: s.item_count, status: (s.status as string) ?? 'completed',
-    soldBy: s.sold_by, createdAt: s.created_at,
+    soldBy: s.sold_by, soldByEmail: (s.sold_by_email as string | null) ?? null, createdAt: s.created_at,
     voidedAt: (s.voided_at as string | null) ?? null,
     lines: ((s.sale_lines as Array<Record<string, unknown>>) ?? []).map((l: Record<string, unknown>) => ({
       id: l.id, productId: l.product_id, sizeCode: l.size_code,
@@ -455,7 +457,7 @@ function shapeSalesWithDelivery(rows: Array<Record<string, unknown>>) {
     customerName: s.customer_name, paymentMethod: s.payment_method,
     subtotal:  Number(s.subtotal ?? 0), discountPct: Number(s.discount_pct ?? 0),
     discountAmt: Number(s.discount_amt ?? 0), total: Number(s.total ?? 0),
-    itemCount: s.item_count, soldBy: s.sold_by, createdAt: s.created_at,
+    itemCount: s.item_count, soldBy: s.sold_by, soldByEmail: (s.sold_by_email as string | null) ?? null, createdAt: s.created_at,
     deliveryStatus: (s.delivery_status as string) ?? 'pending',
     recipientName: (s.recipient_name as string | null) ?? null,
     recipientPhone: (s.recipient_phone as string | null) ?? null,

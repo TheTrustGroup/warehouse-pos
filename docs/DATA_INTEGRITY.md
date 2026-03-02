@@ -28,7 +28,7 @@
 
 ## 4. Audit and traceability
 
-- **Sales:** Each row in `sales` has `created_at`; `sold_by` (UUID) is supported by the RPC but currently passed as null from the API. To log who sold what, add mapping from session (e.g. auth user id/email) to `sold_by` or a separate `sold_by_email` column and pass it into the RPC.
+- **Sales:** Each row in `sales` has `created_at`, `sold_by` (UUID, optional), and `sold_by_email` (text). POST /api/sales passes the authenticated user’s email into `record_sale` as `p_sold_by_email`; GET /api/sales returns `soldByEmail` in the payload. Use for disputes and reporting by cashier.
 - **Stock:** Inventory tables use `updated_at`. For full audit of every change, consider a `stock_movements` (or similar) table populated from the same transaction as the deduction.
 
 ---

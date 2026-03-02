@@ -64,7 +64,7 @@
 | # | Problem | Risk if unaddressed | Approach | Effort |
 |---|--------|----------------------|----------|--------|
 | 11 | **Product list not paginated** | With >1000 products, single request is slow. | **Done.** Documented in PERFORMANCE.md. Add cursor pagination or “Load more” when catalog grows. | Medium (when needed) |
-| 12 | **No audit trail for “who sold”** | Hard to resolve disputes or report by cashier. | Add sold_by_email (or populate sold_by from user id) in record_sale and POST /api/sales. | Small |
+| 12 | **No audit trail for “who sold”** | Hard to resolve disputes or report by cashier. | **Done.** Migration `20260301130000_sold_by_email.sql`: column `sold_by_email`, record_sale accepts `p_sold_by_email`; POST /api/sales passes auth.email; GET returns soldByEmail. | — |
 | 13 | **Idempotency in-memory only** | Duplicate POST from different instances can double-deduct. | Use Redis or DB table keyed by Idempotency-Key; return cached response when key seen. | Medium |
 | 14 | **No webhooks** | Cannot push sales to accounting or other systems. | Add configurable webhook URL per tenant/warehouse; on sale completion, POST payload to URL (with retry and secret). | Large |
 | 15 | **Multi-currency / multi-tax** | Cannot expand to regions with different currency or tax. | Add currency_code and tax fields to sales and UI; config per warehouse. | Large |
@@ -76,7 +76,7 @@
 
 1. **Immediate:** #4 (receipt_seq), #5 (RLS/doc). — **Done.**  
 2. **Before next client:** #9 (onboarding doc), #10 (E2E). — **Done.**  
-3. **Next sprint:** #6 (recovery UX), #8 (barcode scanner), #12 (sold_by). (#6 done.)  
+3. **Next sprint:** #6 (recovery UX), #8 (barcode scanner), #12 (sold_by). (#6, #12 done.)  
 4. **When scaling:** #11 (pagination if catalog >1000), #13 (distributed idempotency). (#16 CI/CD done.)  
 5. **When integrating:** #14 (webhooks), #15 (multi-currency/tax).
 
