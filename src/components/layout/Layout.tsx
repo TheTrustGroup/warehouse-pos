@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { MobileMenu } from './MobileMenu';
 import { MobileBottomNav } from './MobileBottomNav';
+import { MoreMenuSheet } from './MoreMenuSheet';
 import { SyncStatusBar } from '../SyncStatusBar';
 import { ConflictModalContainer } from '../ConflictModalContainer';
 import { ApiStatusProvider, useApiStatus } from '../../contexts/ApiStatusContext';
@@ -41,6 +42,7 @@ function LayoutContent() {
   const isPOS = location.pathname === '/pos';
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const { isDegraded: degraded, retry } = useApiStatus();
   const [showBanner, setShowBanner] = useState(false);
   const degradedSinceRef = useRef<number | null>(null);
@@ -99,9 +101,12 @@ function LayoutContent() {
         open={isMobile ? mobileMenuOpen : undefined}
         onClose={isMobile ? () => setMobileMenuOpen(false) : undefined}
       />
+      {isMobile && (
+        <MoreMenuSheet open={moreMenuOpen} onClose={() => setMoreMenuOpen(false)} />
+      )}
       <Header />
       {isMobile && (
-        <MobileBottomNav onMoreClick={() => setMobileMenuOpen(true)} />
+        <MobileBottomNav onMoreClick={() => setMoreMenuOpen(true)} />
       )}
       {/* Slim hint while phase 2 (inventory, orders) syncs in background after login */}
       {isSyncingCriticalData && (

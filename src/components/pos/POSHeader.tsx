@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -10,6 +10,16 @@ interface POSHeaderProps {
   onCartTap: () => void;
   /** Barcode: when user presses Enter in search, this is called with current value (single input for search + scan). */
   onBarcodeSubmit?: () => void;
+}
+
+function MoreVerticalIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="6" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="12" cy="18" r="1.5" />
+    </svg>
+  );
 }
 
 function BellIcon() {
@@ -92,22 +102,62 @@ export default function POSHeader({
         )}
       </button>
 
-      <div className="flex items-center gap-2 shrink-0">
-        <button
-          type="button"
-          className="relative w-[34px] h-[34px] flex items-center justify-center rounded-lg border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] hover:bg-[var(--edk-bg)] text-[var(--edk-ink-2)]"
-          aria-label="Notifications"
-        >
-          <BellIcon />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[var(--edk-red)] rounded-full ring-[1.5px] ring-white" aria-hidden />
-        </button>
-        <POSHeaderLogout />
-      </div>
+      <POSHeaderOverflow />
     </header>
   );
 }
 
-function POSHeaderLogout() {
+/** Single overflow (•••) control: Notifications + Log out to declutter the POS header. */
+function POSHeaderOverflow() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('click', handleClickOutside, true);
+    return () => document.removeEventListener('click', handleClickOutside, true);
+  }, [open]);
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-[34px] h-[34px] flex items-center justify-center rounded-lg border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] hover:bg-[var(--edk-bg)] text-[var(--edk-ink-2)]"
+        aria-label="More options"
+        aria-expanded={open}
+        aria-haspopup="true"
+      >
+        <MoreVerticalIcon />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1 py-1 min-w-[160px] rounded-lg border border-[var(--edk-border)] bg-[var(--edk-surface)] shadow-lg z-50"
+          role="menu"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)]"
+            onClick={() => setOpen(false)}
+          >
+            <span className="relative">
+              <BellIcon />
+              <span className="absolute top-0 right-0 w-1.5 h-1.5 bg-[var(--edk-red)] rounded-full ring-[1.5px] ring-white" aria-hidden />
+            </span>
+            Notifications
+          </button>
+          <POSHeaderLogoutMenuItem onClose={() => setOpen(false)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function POSHeaderLogoutMenuItem({ onClose }: { onClose: () => void }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -115,6 +165,7 @@ function POSHeaderLogout() {
   const handleLogout = async () => {
     if (loggingOut) return;
     setLoggingOut(true);
+    onClose();
     try {
       await logout();
       navigate('/login', { replace: true });
@@ -126,12 +177,13 @@ function POSHeaderLogout() {
   return (
     <button
       type="button"
+      role="menuitem"
       onClick={handleLogout}
       disabled={loggingOut}
-      className="flex items-center gap-1.5 h-[34px] px-3 rounded-lg border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] hover:bg-[var(--edk-bg)] text-[var(--edk-ink-2)] text-[12px] font-medium disabled:opacity-60"
+      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)] disabled:opacity-60"
     >
       <LogOutIcon />
-      Log out
+      {loggingOut ? 'Signing out…' : 'Log out'}
     </button>
   );
 }
