@@ -375,7 +375,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const path = productsPath('/api/products', { limit: 1000 });
+        const PAGE_LIMIT = 100;
+        const MAX_PRODUCTS = 500;
+        const path = productsPath('/api/products', { limit: PAGE_LIMIT, offset: 0 });
         // One retry for GET so a single dropped connection (e.g. "connection was lost") doesn't surface; then cache fallback.
         const getOpts = { signal, timeoutMs, maxRetries: 1 };
         let raw: { data?: Product[]; total?: number } | Product[] | null = null;
@@ -385,7 +387,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           const status = (e as { status?: number })?.status;
           // Only fall back to admin endpoint when /api/products is not found (404). Never on 403 — cashiers must use /api/products only.
           if (status === 404) {
-            raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: 1000 }), getOpts);
+            raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: PAGE_LIMIT, offset: 0 }), getOpts);
           } else {
             throw e;
           }
@@ -395,7 +397,22 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           setError(parsed.message);
           return;
         }
-        const apiProducts = parsed.items.map((p) => normalizeProduct(p));
+        let apiProducts = parsed.items.map((p) => normalizeProduct(p));
+        const totalFromApi = raw != null && typeof raw === 'object' && 'total' in raw ? (raw as { total?: number }).total : undefined;
+        if (typeof totalFromApi === 'number' && totalFromApi > apiProducts.length && apiProducts.length === PAGE_LIMIT) {
+          const basePath = path.includes('/admin/api/') ? '/admin/api/products' : '/api/products';
+          for (let offset = PAGE_LIMIT; offset < Math.min(totalFromApi, MAX_PRODUCTS) && !signal?.aborted; offset += PAGE_LIMIT) {
+            const nextRaw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(
+              API_BASE_URL,
+              productsPath(basePath, { limit: PAGE_LIMIT, offset }),
+              getOpts
+            );
+            const nextParsed = parseProductsResponse(nextRaw);
+            if (!nextParsed.success || nextParsed.items.length === 0) break;
+            apiProducts = apiProducts.concat(nextParsed.items.map((p) => normalizeProduct(p)));
+            if (nextParsed.items.length < PAGE_LIMIT) break;
+          }
+        }
         const apiIds = new Set(apiProducts.map((p) => p.id));
         // Keep products that exist only locally (e.g. added while offline or when API failed) so inventory never vanishes
         const localOnly: Product[] = [];

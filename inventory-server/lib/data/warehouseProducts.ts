@@ -63,9 +63,9 @@ export interface PutProductBody {
 
 function getDb(): SupabaseClient {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key?.trim()) {
+    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for the inventory-server.');
   }
   return createClient(url, key, { auth: { persistSession: false } });
 }
@@ -104,7 +104,7 @@ export async function getWarehouseProducts(
   options: ListOptions = {}
 ): Promise<ListResult> {
   const db = getDb();
-  const limit = Math.min(Math.max(options.limit ?? 500, 1), 2000);
+  const limit = Math.min(Math.max(options.limit ?? 250, 1), 250);
   const offset = Math.max(options.offset ?? 0, 0);
   const effectiveWarehouseId = warehouseId ?? '';
 

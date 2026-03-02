@@ -33,8 +33,16 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
      If the error message mentions a missing column or relation, run the migrations in `inventory-server/supabase/migrations/` (e.g. `size_kind`, `color`, `warehouse_products`, `warehouse_inventory`, `warehouse_inventory_by_size`, `size_codes`) in your Supabase project.
   4. **See the real error**  
      After the CORS fix, 500 responses include a JSON body and CORS headers. In Network tab, open the failing request and check **Response** for the `error` field. If the browser shows "access control checks" instead, the server returned 500 without CORS (env or uncaught throw); the products and dashboard routes now always attach CORS to 500 and validate env first.
-  5. **"canceling statement due to statement timeout"**  
-     The database is killing the query before it finishes. Apply the migration `20260302120000_statement_timeout_30s.sql` in your Supabase project (Dashboard → SQL Editor, or `supabase db push`). It sets `statement_timeout = 30s` for the database so the product-list query can complete.
+  5. **"canceling statement" or "canceling statement due to statement timeout"**  
+     The database is killing the query before it finishes. **Do both:** (1) Apply the migration `20260302120000_statement_timeout_30s.sql` in your Supabase project (Dashboard → SQL Editor, or `supabase db push`). It sets `statement_timeout = 30s` for the database so the product-list query can complete. (2) Ensure the app requests smaller pages (e.g. `limit=100` or `limit=250`); the API and data layer cap at 250 per request — use pagination for more.
+
+## When you have more than 100 products
+
+The app avoids timeouts by requesting **100 products per API call** (Inventory) or **250** (POS). When there are more than 100 products:
+
+- **Inventory (context and page):** The first request returns `{ data, total }`. If `total > 100`, the client automatically fetches the next pages (`offset=100`, `200`, …) in chunks of 100 and merges them, up to **500 products** per load. So you see the full list without one huge request.
+- **Inventory page UI:** "Page 1 of N" is **client-side** pagination over that loaded list (e.g. 20 items per screen page). So with 350 products loaded, you get multiple UI pages over the same 350.
+- **POS:** Loads up to 250 products in one request. For more than 250 at POS, you’d add pagination or "load more" later.
 
 ## Deploy inventory-server after code changes
 

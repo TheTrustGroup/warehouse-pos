@@ -455,12 +455,27 @@ export default function InventoryPage(_props: InventoryPageProps) {
     setError(null);
 
     try {
+      const PAGE = 100;
+      const MAX = 500;
       const raw = await apiFetch<unknown>(
-        `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=1000`,
+        `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=${PAGE}&offset=0`,
         { signal: ctrl.signal }
       );
       if (ctrl.signal.aborted) return;
-      const list    = unwrapProductList(raw);
+      let list = unwrapProductList(raw);
+      const total = (raw != null && typeof raw === 'object' && 'total' in raw) ? (raw as { total?: number }).total : undefined;
+      if (typeof total === 'number' && total > list.length && list.length === PAGE) {
+        for (let offset = PAGE; offset < Math.min(total, MAX) && !ctrl.signal.aborted; offset += PAGE) {
+          const next = await apiFetch<unknown>(
+            `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=${PAGE}&offset=${offset}`,
+            { signal: ctrl.signal }
+          );
+          if (ctrl.signal.aborted) return;
+          const nextList = unwrapProductList(next);
+          list = list.concat(nextList);
+          if (nextList.length < PAGE) break;
+        }
+      }
       const pending = pendingDeletesRef.current;
       setProducts(pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list);
     } catch (e: unknown) {

@@ -219,7 +219,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         if (!silent) setLoading(false);
         const revalidate = await apiFetch<
           POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }
-        >(`/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000`, { signal }).catch(() => null);
+        >(`/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=250`, { signal }).catch(() => null);
         if (signal?.aborted || !isMounted.current) return;
         if (revalidate != null) {
           const rawList: POSProduct[] = Array.isArray(revalidate)
@@ -242,7 +242,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       try {
         const data = await apiFetch<
           POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }
-        >(`/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=1000`, { signal });
+        >(`/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=250`, { signal });
         if (signal?.aborted) return;
         const rawList: POSProduct[] = Array.isArray(data)
           ? data
