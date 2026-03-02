@@ -18,6 +18,7 @@ import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { reportError } from '../lib/errorReporting';
 import { apiRequest } from '../lib/apiClient';
 import { API_BASE_URL } from '../lib/api';
+import { getApiCircuitBreaker } from '../lib/circuit';
 
 const is401 = (e: unknown) => (e as { status?: number })?.status === 401;
 
@@ -180,6 +181,7 @@ export function CriticalDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const reloadCriticalData = useCallback(async () => {
+    getApiCircuitBreaker().reset();
     triggerReload();
   }, [triggerReload]);
 

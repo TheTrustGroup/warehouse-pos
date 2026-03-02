@@ -17,6 +17,7 @@ import ProductCard, { ProductCardSkeleton, type Product } from '../components/in
 import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
+import { getApiCircuitBreaker } from '../lib/circuit';
 import { onUnauthorized } from '../lib/onUnauthorized';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import type { Warehouse } from '../types';
@@ -831,7 +832,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
               <p className="text-[17px] font-black text-slate-800">Couldn&apos;t load products</p>
               <p className="text-[13px] text-slate-400 mt-1 max-w-[260px] leading-relaxed">{error}</p>
             </div>
-            <button type="button" onClick={() => loadProducts()}
+            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); loadProducts(); }}
                     className="h-10 px-6 rounded-xl bg-red-500 text-white text-[13px] font-bold
                                hover:bg-red-600 transition-colors shadow-[0_4px_12px_rgba(239,68,68,0.25)]">
               Retry

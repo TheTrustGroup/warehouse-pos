@@ -23,6 +23,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
+import { getApiCircuitBreaker } from '../lib/circuit';
 import { onUnauthorized } from '../lib/onUnauthorized';
 import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
@@ -689,6 +690,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
               <button
                 type="button"
                 onClick={() => {
+                  getApiCircuitBreaker().reset();
                   setProductsLoadError(null);
                   if (warehouse.id) loadProducts(warehouse.id);
                 }}

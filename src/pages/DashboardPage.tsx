@@ -21,6 +21,7 @@ import type { LucideIcon } from 'lucide-react';
 import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle } from 'lucide-react';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
+import { getApiCircuitBreaker } from '../lib/circuit';
 
 // ── Types (match GET /api/dashboard response) ──────────────────────────────
 
@@ -326,7 +327,7 @@ export default function DashboardPage() {
               <p className="text-[14px] font-bold text-red-700">Failed to load data</p>
               <p className="text-[12px] text-red-500 mt-0.5">{error}</p>
             </div>
-            <button onClick={() => loadData(warehouseId)}
+            <button onClick={() => { getApiCircuitBreaker().reset(); loadData(warehouseId); }}
                     className="ml-auto px-4 py-2 rounded-xl bg-red-500 text-white text-[12px] font-bold hover:bg-red-600">
               Retry
             </button>
