@@ -17,6 +17,8 @@ import {
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
 
 export const dynamic = 'force-dynamic';
+/** Allow up to 30s so cold start + Supabase list + inventory/sizes queries don't hit 504. Vercel default can be 10s. */
+export const maxDuration = 30;
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   const h = corsHeaders(req);
