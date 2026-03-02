@@ -26,6 +26,11 @@ function withCors(res: NextResponse, req: NextRequest): NextResponse {
   return res;
 }
 
+function isStatementTimeoutError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /statement timeout|canceling statement due to statement timeout/i.test(msg);
+}
+
 export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
@@ -94,6 +99,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load products';
       console.error('[GET /api/products]', message);
+      if (isStatementTimeoutError(e)) {
+        const res = withCors(
+          NextResponse.json(
+            { error: 'Query timed out. The request took too long. Please try again or use a smaller limit/offset.' },
+            { status: 503, headers: h }
+          ),
+          req
+        );
+        res.headers.set('Retry-After', '60');
+        return res;
+      }
       return fail500(message);
     }
   } catch (outer: unknown) {

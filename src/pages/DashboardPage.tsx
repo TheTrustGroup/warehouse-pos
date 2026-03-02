@@ -335,6 +335,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-[14px] font-bold text-red-700">Failed to load data</p>
               <p className="text-[12px] text-red-500 mt-0.5">{error}</p>
+              <p className="text-[11px] text-slate-500 mt-1">After the server is fixed, click Retry to reset the circuit and try again.</p>
             </div>
             <button onClick={() => { getApiCircuitBreaker().reset(); loadData(warehouseId); }}
                     className="ml-auto px-4 py-2 rounded-xl bg-red-500 text-white text-[12px] font-bold hover:bg-red-600">

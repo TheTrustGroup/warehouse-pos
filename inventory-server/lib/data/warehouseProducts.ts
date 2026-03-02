@@ -98,6 +98,11 @@ function isMissingColumnError(err: { message?: string }): boolean {
   return m.includes('column') && (m.includes('does not exist') || m.includes('undefined'));
 }
 
+function isStatementTimeoutError(err: { message?: string }): boolean {
+  const m = (err?.message ?? '').toLowerCase();
+  return m.includes('statement timeout') || m.includes('canceling statement due to statement timeout');
+}
+
 /** List products for a warehouse. Works when warehouse_products has no warehouse_id (one row per product). */
 export async function getWarehouseProducts(
   warehouseId: string | undefined,
@@ -108,43 +113,65 @@ export async function getWarehouseProducts(
   const offset = Math.max(options.offset ?? 0, 0);
   const effectiveWarehouseId = warehouseId ?? '';
 
-  let query = db
-    .from('warehouse_products')
-    .select(WAREHOUSE_PRODUCTS_SELECT, { count: 'exact' })
-    .order('name')
-    .range(offset, offset + limit - 1);
-
-  if (options.q?.trim()) {
-    const q = options.q.trim();
-    query = query.or(`name.ilike.%${q}%,sku.ilike.%${q}%`);
+  function buildBaseQuery(withWarehouseFilter: boolean) {
+    let q = db
+      .from('warehouse_products')
+      .select(WAREHOUSE_PRODUCTS_SELECT, { count: 'exact' })
+      .order('name')
+      .range(offset, offset + limit - 1);
+    if (withWarehouseFilter && effectiveWarehouseId) {
+      q = q.eq('warehouse_id', effectiveWarehouseId);
+    }
+    if (options.q?.trim()) {
+      const search = options.q.trim();
+      q = q.or(`name.ilike.%${search}%,sku.ilike.%${search}%`);
+    }
+    if (options.category?.trim()) {
+      q = q.eq('category', options.category.trim());
+    }
+    return q;
   }
-  if (options.category?.trim()) {
-    query = query.eq('category', options.category.trim());
-  }
 
+  let query = buildBaseQuery(true);
   let rows: Record<string, unknown>[] | null = null;
   let count: number | null = null;
   let error: { message: string } | null = null;
   ({ data: rows, error, count } = await query);
 
+  if (error && isStatementTimeoutError(error)) {
+    throw new Error(error.message);
+  }
+
   if (error && isMissingColumnError(error)) {
-    let fallbackQuery = db
-      .from('warehouse_products')
-      .select(WAREHOUSE_PRODUCTS_SELECT_MINIMAL, { count: 'exact' })
-      .order('name')
-      .range(offset, offset + limit - 1);
-    if (options.q?.trim()) {
-      const q = options.q.trim();
-      fallbackQuery = fallbackQuery.or(`name.ilike.%${q}%,sku.ilike.%${q}%`);
+    const retry = await buildBaseQuery(false);
+    if (!retry.error) {
+      rows = retry.data ?? [];
+      count = retry.count ?? (rows as unknown[]).length;
+      error = null;
+    } else if (isMissingColumnError(retry.error)) {
+      let fallbackQuery = db
+        .from('warehouse_products')
+        .select(WAREHOUSE_PRODUCTS_SELECT_MINIMAL, { count: 'exact' })
+        .order('name')
+        .range(offset, offset + limit - 1);
+      if (options.q?.trim()) {
+        const q = options.q.trim();
+        fallbackQuery = fallbackQuery.or(`name.ilike.%${q}%,sku.ilike.%${q}%`);
+      }
+      if (options.category?.trim()) {
+        fallbackQuery = fallbackQuery.eq('category', options.category.trim());
+      }
+      const fallback = await fallbackQuery;
+      if (fallback.error) throw new Error(`Failed to list products: ${fallback.error.message}`);
+      rows = fallback.data ?? [];
+      count = fallback.count ?? (rows as unknown[]).length;
+      error = null;
+    } else {
+      throw new Error(`Failed to list products: ${retry.error.message}`);
     }
-    if (options.category?.trim()) {
-      fallbackQuery = fallbackQuery.eq('category', options.category.trim());
-    }
-    const fallback = await fallbackQuery;
-    if (fallback.error) throw new Error(`Failed to list products: ${fallback.error.message}`);
-    rows = fallback.data ?? [];
-    count = fallback.count ?? (rows as unknown[]).length;
-  } else if (error) {
+  }
+
+  if (error) {
     throw new Error(`Failed to list products: ${error.message}`);
   }
 
