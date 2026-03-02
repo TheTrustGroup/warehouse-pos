@@ -7,6 +7,9 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
 - **GET** `https://inventory-server-iota.vercel.app/api/health` (no auth)  
   - **200** → App is deployed and CORS works; 500/504 on products or dashboard are likely **env** (SUPABASE_*) or **DB** (schema/connection).  
   - **4xx/5xx or CORS error** → Deployment may be wrong (wrong repo, wrong root) or not updated; fix Vercel project root and redeploy.
+- **GET** `https://inventory-server-iota.vercel.app/api/health?env=1`  
+  - Response includes `env: { supabaseUrl: true/false, supabaseKey: true/false }`. If either is `false`, set that variable in Vercel → Project → Settings → Environment Variables and redeploy.
+- **To see why /api/products returns 500:** In the browser, open **Network** tab → click the failed **products** request → open **Response**. The body is JSON with an `error` field (e.g. "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" or a DB error message).
 
 ## 504 Gateway Timeout
 
