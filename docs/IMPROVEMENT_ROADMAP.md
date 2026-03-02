@@ -68,7 +68,7 @@
 | 13 | **Idempotency in-memory only** | Duplicate POST from different instances can double-deduct. | Use Redis or DB table keyed by Idempotency-Key; return cached response when key seen. | Medium |
 | 14 | **No webhooks** | Cannot push sales to accounting or other systems. | Add configurable webhook URL per tenant/warehouse; on sale completion, POST payload to URL (with retry and secret). | Large |
 | 15 | **Multi-currency / multi-tax** | Cannot expand to regions with different currency or tax. | Add currency_code and tax fields to sales and UI; config per warehouse. | Large |
-| 16 | **CI/CD not codified** | Deploy and branch strategy may drift. | Add GitHub Actions (or equivalent): on push to main run `npm run ci`, build frontend and backend; document deploy (e.g. Vercel auto-deploy from main). | Small |
+| 16 | **CI/CD not codified** | Deploy and branch strategy may drift. | **Done.** `.github/workflows/ci.yml` runs on push/PR to main: frontend lint + `npm run ci` + backend build. Deploy and branch strategy documented in `docs/ENGINEERING_RULES.md` §10. | — |
 
 ---
 
@@ -77,7 +77,7 @@
 1. **Immediate:** #4 (receipt_seq), #5 (RLS/doc). — **Done.**  
 2. **Before next client:** #9 (onboarding doc), #10 (E2E). — **Done.**  
 3. **Next sprint:** #6 (recovery UX), #8 (barcode scanner), #12 (sold_by). (#6 done.)  
-4. **When scaling:** #11 (pagination if catalog >1000), #13 (distributed idempotency), #16 (CI/CD).  
+4. **When scaling:** #11 (pagination if catalog >1000), #13 (distributed idempotency). (#16 CI/CD done.)  
 5. **When integrating:** #14 (webhooks), #15 (multi-currency/tax).
 
 ---

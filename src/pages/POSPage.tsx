@@ -252,7 +252,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     let serverSaleId: string | undefined;
     let serverReceiptId: string | undefined;
     let completedAt: string | undefined;
-    let syncOk = true;
+    const syncOk = true;
 
     const idempotencyKey = `pos-${payload.warehouseId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     try {

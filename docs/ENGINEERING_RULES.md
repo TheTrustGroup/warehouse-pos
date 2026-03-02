@@ -112,7 +112,15 @@ A script runs `git status --porcelain` and **exits 1** if there are uncommitted 
 
 ---
 
-## 10. If you use the parent repo
+## 10. CI and deploy
+
+- **CI:** GitHub Actions runs on every push and pull request to `main`. Workflow: `.github/workflows/ci.yml`. It runs frontend lint, frontend tests, frontend build, then backend (inventory-server) build. No E2E in this workflow by default (E2E requires optional env and a running API).
+- **Branch strategy:** Work on `main` or short-lived branches; merge to `main` and push. CI must pass before considering deploy.
+- **Deploy:** Frontend (Vite SPA) and backend (Next.js in `inventory-server/`) are deployed separately. Typical setup: Vercel (or similar) deploys from `main` — frontend at project root (build command `npm run build`, output `dist`), API via a second Vercel project or subpath pointing at `inventory-server` (build `npm run build`). Ensure env and secrets (e.g. `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) are set in the deployment dashboard for the API.
+
+---
+
+## 11. If you use the parent repo
 
 - After pushing from `warehouse-pos/`, if the parent repo points at `warehouse-pos` as a gitlink, update it so it doesn’t "revert" to an old commit:
   ```bash
@@ -124,4 +132,4 @@ A script runs `git status --porcelain` and **exits 1** if there are uncommitted 
 
 ---
 
-**Summary:** Commit and push from `warehouse-pos/` at feature boundaries and before you leave. Use the guard script to avoid leaving uncommitted work. Keep one source of truth (this repo). Migrations and UI changes stay in version control with the code that uses them. Keep Sidebar and MobileMenu nav in sync via `src/config/navigation.tsx`; control caching so mobile users get updates (see §8); see §9 for performance choices and §10 for parent repo.
+**Summary:** Commit and push from `warehouse-pos/` at feature boundaries and before you leave. CI runs on push to `main` (§10).  Use the guard script to avoid leaving uncommitted work. Keep one source of truth (this repo). Migrations and UI changes stay in version control with the code that uses them. Keep Sidebar and MobileMenu nav in sync via `src/config/navigation.tsx`; control caching so mobile users get updates (see §8); see §9 for performance choices and §10 for parent repo.
