@@ -93,13 +93,21 @@ async function apiFetchOnce<T = unknown>(path: string): Promise<T> {
     });
     clearTimeout(t);
     if (!res.ok) {
-      const b = await res.json().catch(() => ({}));
-      throw new Error((b as { error?: string; message?: string }).error ?? (b as { error?: string; message?: string }).message ?? `HTTP ${res.status}`);
+      const raw = await res.text();
+      let msg = `HTTP ${res.status}`;
+      try {
+        const b = raw ? (JSON.parse(raw) as { error?: string; message?: string }) : {};
+        msg = b.error ?? b.message ?? msg;
+      } catch {
+        if (raw && raw.length < 200) msg = raw;
+      }
+      throw new Error(msg);
     }
     const text = await res.text();
     return (text ? JSON.parse(text) : {}) as T;
   } catch (e: unknown) {
     clearTimeout(t);
+    if (e instanceof SyntaxError) throw new Error('Invalid JSON from server');
     if (e instanceof Error && e.name === 'AbortError') throw new Error('Request timed out');
     throw e;
   }

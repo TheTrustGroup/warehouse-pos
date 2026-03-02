@@ -9,6 +9,8 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
   - **4xx/5xx or CORS error** → Deployment may be wrong (wrong repo, wrong root) or not updated; fix Vercel project root and redeploy.
 - **GET** `https://inventory-server-iota.vercel.app/api/health?env=1`  
   - Response includes `env: { supabaseUrl: true/false, supabaseKey: true/false }`. If either is `false`, set that variable in Vercel → Project → Settings → Environment Variables and redeploy.
+- **GET** `https://inventory-server-iota.vercel.app/api/health?db=1`  
+  - Probes the DB (select from `warehouse_products` limit 1). Response includes `db: { ok: true }` or `db: { ok: false, error: "..." }`. If `ok: false`, the error is the root cause (e.g. relation does not exist, permission denied, timeout). Run migrations and fix grants; then products/dashboard should work.
 - **To see why /api/products returns 500:** In the browser, open **Network** tab → click the failed **products** request → open **Response**. The body is JSON with an `error` field containing the exact backend reason (e.g. "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY", "Failed to list products: permission denied for table warehouse_inventory", or "canceling statement due to statement timeout"). The Inventory page also shows this message under "Couldn't load products" when the request fails.
 - **"Access control checks" + "network connection was lost":** Usually the connection dropped before the server sent a full response (Vercel function timeout, cold start, or Supabase statement timeout). Apply the `statement_timeout` migration in Supabase; set Vercel Function Max Duration to 30s; retry. It is not a CORS config bug when the response never completes.
 
