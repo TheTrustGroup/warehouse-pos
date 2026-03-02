@@ -74,8 +74,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       return withCors(NextResponse.json(product, { headers: h }), req);
     }
 
-    /** Cap at 500 per request to avoid 504 on cold start + large list (Vercel function timeout). Use offset for pagination. */
-    const limit = Math.min(Math.max(Number(searchParams.get('limit') ?? 500), 1), 500);
+    /** Cap at 250 per request to stay under Vercel function timeout (cold start + Supabase). Use offset for pagination. */
+    const limit = Math.min(Math.max(Number(searchParams.get('limit') ?? 250), 1), 250);
     const offset = Math.max(Number(searchParams.get('offset') ?? 0), 0);
     const q = searchParams.get('q')?.trim() ?? undefined;
     const category = searchParams.get('category')?.trim() ?? undefined;

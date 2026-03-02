@@ -11,8 +11,8 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
 ## 504 Gateway Timeout
 
 - **Cause:** The serverless function ran longer than Vercel’s limit (often 10s on Hobby).
-- **Fix in code:** `app/api/products/route.ts` and `app/api/dashboard/route.ts` export `maxDuration = 30`. Redeploy the **inventory-server** project so this is live. GET `/api/products` list is capped at **500 items per request**; use `offset` for pagination.
-- **Vercel:** Hobby allows up to 60s, Pro up to 300s. Ensure the project is redeployed after code changes.
+- **Fix in code:** `app/api/products/route.ts` and `app/api/dashboard/route.ts` export `maxDuration = 30`. GET `/api/products` list is capped at **250 items per request**; use `offset` for pagination.
+- **Vercel:** In Project → **Settings → Functions**, set **Function Max Duration** to 30 (or 60 on Hobby, 300 on Pro). Redeploy after code or setting changes.
 
 ## 500 Internal Server Error
 
