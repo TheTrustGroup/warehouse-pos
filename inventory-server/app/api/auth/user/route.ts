@@ -28,7 +28,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   let enriched = session;
-  if (!session.warehouse_id) {
+  const role = (session.role ?? '').toLowerCase();
+  const isAdminOrSuperAdmin = role === 'admin' || role === 'super_admin';
+  if (!session.warehouse_id && !isAdminOrSuperAdmin) {
     const single = await getSingleWarehouseIdForUser(session.email);
     const warehouseId = single ?? (await getScopeForUser(session.email)).allowedWarehouseIds[0];
     if (warehouseId) {

@@ -140,3 +140,9 @@ $$;
 
 COMMENT ON FUNCTION record_sale(uuid, jsonb, numeric, numeric, numeric, numeric, text, text, uuid, text) IS
   'Record sale + lines + deduct stock atomically. sold_by_email = cashier email; sold_by = optional user uuid. Raises INSUFFICIENT_STOCK if any line would go negative.';
+
+-- SECURITY: record_sale is SECURITY DEFINER and must not be callable by client roles.
+REVOKE ALL ON FUNCTION record_sale(uuid, jsonb, numeric, numeric, numeric, numeric, text, text, uuid, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION record_sale(uuid, jsonb, numeric, numeric, numeric, numeric, text, text, uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION record_sale(uuid, jsonb, numeric, numeric, numeric, numeric, text, text, uuid, text) FROM authenticated;
+GRANT EXECUTE ON FUNCTION record_sale(uuid, jsonb, numeric, numeric, numeric, numeric, text, text, uuid, text) TO service_role;

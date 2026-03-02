@@ -19,7 +19,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/supabase';
+import { getServiceSupabase, getSupabase } from '@/lib/supabase';
 import { corsHeaders } from '@/lib/cors';
 import { requireAuth, requirePosRole, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { getScopeForUser } from '@/lib/data/userScopes';
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const db = getSupabase();
+    const db = getServiceSupabase();
 
     // KEY FIX: Pass normalizedLines as a JS array — Supabase RPC auto-casts to jsonb.
     // Do NOT JSON.stringify — that sends a string, not jsonb, causing silent insert-only (no deduction).
