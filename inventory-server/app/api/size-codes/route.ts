@@ -15,11 +15,15 @@ function withCors(res: NextResponse, req: NextRequest): NextResponse {
 
 /** GET /api/size-codes — list size codes for admin/POS (size selector). No auth required. Returns 200 with data: [] on DB/env error so inventory never gets 500. */
 export async function GET(request: NextRequest) {
+  const ok = (data: { data: unknown[] }) => withCors(NextResponse.json(data), request);
   try {
+    if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+      return ok({ data: [] });
+    }
     const list = await getSizeCodes();
-    return withCors(NextResponse.json({ data: list }), request);
+    return ok({ data: list });
   } catch (e) {
     console.error('[api/size-codes GET]', e instanceof Error ? e.message : e);
-    return withCors(NextResponse.json({ data: [] }), request);
+    return ok({ data: [] });
   }
 }

@@ -10,6 +10,7 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
 - **GET** `https://inventory-server-iota.vercel.app/api/health?env=1`  
   - Response includes `env: { supabaseUrl: true/false, supabaseKey: true/false }`. If either is `false`, set that variable in Vercel → Project → Settings → Environment Variables and redeploy.
 - **To see why /api/products returns 500:** In the browser, open **Network** tab → click the failed **products** request → open **Response**. The body is JSON with an `error` field (e.g. "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" or a DB error message).
+- **"Access control checks" + "network connection was lost":** Usually the connection dropped before the server sent a full response (Vercel function timeout, cold start, or Supabase statement timeout). Apply the `statement_timeout` migration in Supabase; set Vercel Function Max Duration to 30s; retry. It is not a CORS config bug when the response never completes.
 
 ## 504 Gateway Timeout
 
