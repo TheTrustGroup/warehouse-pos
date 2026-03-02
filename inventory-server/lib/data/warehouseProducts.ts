@@ -155,22 +155,26 @@ export async function getWarehouseProducts(
   const sizeMap: Record<string, Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>> = {};
 
   if (effectiveWarehouseId && productIds.length > 0) {
-    const { data: invRows } = await db
-      .from('warehouse_inventory')
-      .select('product_id, quantity')
-      .eq('warehouse_id', effectiveWarehouseId)
-      .in('product_id', productIds);
-    for (const inv of invRows ?? []) {
+    type SizeRow = { product_id: string; size_code: string; quantity: number; size_codes?: { size_label?: string } | null };
+    let sizeRows: SizeRow[] = [];
+    const [invRes, withJoin] = await Promise.all([
+      db
+        .from('warehouse_inventory')
+        .select('product_id, quantity')
+        .eq('warehouse_id', effectiveWarehouseId)
+        .in('product_id', productIds),
+      db
+        .from('warehouse_inventory_by_size')
+        .select('product_id, size_code, quantity, size_codes!left(size_label)')
+        .eq('warehouse_id', effectiveWarehouseId)
+        .in('product_id', productIds),
+    ]);
+
+    for (const inv of invRes.data ?? []) {
       const r = inv as { product_id: string; quantity?: number };
       invMap[r.product_id] = Number(r.quantity ?? 0);
     }
-    type SizeRow = { product_id: string; size_code: string; quantity: number; size_codes?: { size_label?: string } | null };
-    let sizeRows: SizeRow[] = [];
-    const withJoin = await db
-      .from('warehouse_inventory_by_size')
-      .select('product_id, size_code, quantity, size_codes!left(size_label)')
-      .eq('warehouse_id', effectiveWarehouseId)
-      .in('product_id', productIds);
+
     if (withJoin.error && (withJoin.error.message?.includes('relation') || withJoin.error.message?.includes('size_codes'))) {
       const withoutJoin = await db
         .from('warehouse_inventory_by_size')
