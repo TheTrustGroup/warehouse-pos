@@ -6,6 +6,7 @@
  */
 import { clearDbInstance, isTransactionError } from '../db/inventoryDB';
 import { clearLogDbInstance } from '../utils/logger';
+import { clearOfflineDbInstance } from './offlineDb';
 
 /**
  * Call once at app init (e.g. in App.tsx useEffect) to handle unhandled rejections
@@ -18,6 +19,7 @@ export function initIdbErrorRecovery(): void {
     if (!isTransactionError(event.reason)) return;
     clearDbInstance();
     clearLogDbInstance();
+    clearOfflineDbInstance();
     if (import.meta.env?.DEV) {
       console.warn('[idb] Cleared DB caches after transaction error; next access will reopen.');
     }

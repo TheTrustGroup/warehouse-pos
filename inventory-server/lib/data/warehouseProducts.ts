@@ -443,7 +443,7 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
       .map((r) => ({
         product_id: id,
         warehouse_id: warehouseId,
-        size_code: String(r.sizeCode).trim(),
+        size_code: String(r.sizeCode).trim().toUpperCase(),
         quantity: Number(r.quantity) || 0,
       }));
     if (sizeRows.length > 0) {
@@ -560,7 +560,7 @@ export async function updateWarehouseProduct(
       .map((r) => ({
         product_id: productId,
         warehouse_id: warehouseId,
-        size_code: String(r.sizeCode).trim(),
+        size_code: String(r.sizeCode).trim().toUpperCase(),
         quantity: Number(r.quantity) || 0,
       }));
     if (sizeRows.length > 0) {
