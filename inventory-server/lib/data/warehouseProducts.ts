@@ -290,9 +290,12 @@ export async function getWarehouseProducts(
           (p) => invMap[p.id] !== undefined || (sizeMap[p.id]?.length ?? 0) > 0
         );
 
+  // Return full count so the client can paginate (fetch all pages). When warehouse is set we still
+  // return only filtered rows for this page, but total must be the full list count, not this page's length.
+  const total = count ?? data.length;
   return {
     data: filtered,
-    total: effectiveWarehouseId ? filtered.length : (count ?? data.length),
+    total,
   };
 }
 
