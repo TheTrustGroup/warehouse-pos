@@ -47,5 +47,6 @@ On the **live** app URL (production):
 ## Step 4 — If something is wrong
 
 - **401 still:** Backend must return `token` or `access_token` in login (and optionally /me) response; client stores it and sends `Authorization: Bearer`. See `docs/AUTH_401_CROSS_ORIGIN.md`.
-- **e.trans or IDB errors:** Report the exact stack trace; logger and DebugPanel are guarded but other IDB paths may need the same.
+- **e.trans or IDB errors:** All Dexie useLiveQuery callbacks now catch IDB rejections (e.trans) and return safe values ([] or 0). If it still appears, report the exact stack trace.
+- **"The network connection was lost":** Intermittent; one products request can succeed (200) while a retry or duplicate fails. If it’s rare, the app will recover on refresh or next load. If frequent: check Vercel function cold starts, reduce duplicate product fetches, or increase client timeout.
 - **Build/test failed before deploy:** Fix the reported errors, run `npm run build` and `npm run test` again, then repeat from Step 2.

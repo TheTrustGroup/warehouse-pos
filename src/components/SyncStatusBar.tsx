@@ -20,18 +20,30 @@ export function SyncStatusBar() {
   const { isOnline } = useNetworkStatusContext();
   const [modalOpen, setModalOpen] = useState(false);
 
-  const pending = useLiveQuery(
-    () => getDB().then((d) => (d ? d.syncQueue.where('status').equals('pending').count() : 0)).catch(() => 0),
-    []
-  ) ?? 0;
-  const syncing = useLiveQuery(
-    () => getDB().then((d) => (d ? d.syncQueue.where('status').equals('syncing').count() : 0)).catch(() => 0),
-    []
-  ) ?? 0;
-  const failed = useLiveQuery(
-    () => getDB().then((d) => (d ? d.syncQueue.where('status').equals('failed').count() : 0)).catch(() => 0),
-    []
-  ) ?? 0;
+  const pending =
+    useLiveQuery(
+      () =>
+        getDB()
+          .then((d) => (d ? d.syncQueue.where('status').equals('pending').count().catch(() => 0) : 0))
+          .catch(() => 0),
+      []
+    ) ?? 0;
+  const syncing =
+    useLiveQuery(
+      () =>
+        getDB()
+          .then((d) => (d ? d.syncQueue.where('status').equals('syncing').count().catch(() => 0) : 0))
+          .catch(() => 0),
+      []
+    ) ?? 0;
+  const failed =
+    useLiveQuery(
+      () =>
+        getDB()
+          .then((d) => (d ? d.syncQueue.where('status').equals('failed').count().catch(() => 0) : 0))
+          .catch(() => 0),
+      []
+    ) ?? 0;
 
   const total = pending + syncing + failed;
 

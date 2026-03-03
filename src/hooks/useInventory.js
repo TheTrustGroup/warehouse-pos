@@ -12,10 +12,18 @@ import * as inventoryDb from '../db/inventoryDB';
 import { syncService } from '../services/syncService';
 import { isOfflineEnabled } from '../lib/offlineFeatureFlag';
 
-/** Safe query: run fn(d) only when getDB() resolves to non-null; return [] on any error or null db. */
+/** Safe query: run fn(d) only when getDB() resolves to non-null; return [] on any error or null db. Catches e.trans and IDB rejections. */
 function safeQuery(fn) {
   return getDB()
-    .then((d) => (d ? fn(d) : []))
+    .then(async (d) => {
+      if (!d) return [];
+      try {
+        const result = await fn(d);
+        return result ?? [];
+      } catch {
+        return [];
+      }
+    })
     .catch(() => []);
 }
 
@@ -84,7 +92,10 @@ export function useInventory() {
     []
   );
   const unsyncedCount = useLiveQuery(
-    () => getDB().then((d) => (d ? d.products.where('syncStatus').notEqual('synced').count() : 0)).catch(() => 0),
+    () =>
+      getDB()
+        .then((d) => (d ? d.products.where('syncStatus').notEqual('synced').count().catch(() => 0) : 0))
+        .catch(() => 0),
     []
   );
   const [isSyncing, setIsSyncing] = useState(false);

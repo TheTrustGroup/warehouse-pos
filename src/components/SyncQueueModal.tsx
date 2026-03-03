@@ -36,7 +36,7 @@ export function SyncQueueModal({ isOpen, onClose }: SyncQueueModalProps) {
       const d = await getDB();
       if (!d) return [];
       try {
-        const all = await d.syncQueue.orderBy('timestamp').toArray();
+        const all = await d.syncQueue.orderBy('timestamp').toArray().catch(() => []);
         return all as QueueItem[];
       } catch {
         return [];
