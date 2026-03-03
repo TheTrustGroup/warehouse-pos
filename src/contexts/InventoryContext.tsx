@@ -11,11 +11,13 @@
  * No "saved" without confirmed 2xx. Offline path still uses local-first; ADD_PRODUCT_SAVED_LOCALLY for that flow.
  */
 import React, { createContext, useContext, useState, useRef, ReactNode, useEffect, useMemo, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPost, apiPut, apiDelete } from '../lib/apiClient';
 import { getApiCircuitBreaker } from '../lib/circuit';
+import { queryKeys } from '../lib/queryKeys';
 import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
@@ -130,7 +132,11 @@ export const ADD_PRODUCT_SAVED_LOCALLY =
 /** Sentinel: used when selection is Main Store id but UI shows "Main Town" so we never load Main Store data for that label. API returns [] for this id. */
 const SENTINEL_EMPTY_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000099';
 
+const PRODUCTS_STALE_MS = 2 * 60 * 1000;  // 2 minutes
+const PRODUCTS_GC_MS = 10 * 60 * 1000;   // 10 minutes
+
 export function InventoryProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const { currentWarehouseId, currentWarehouse } = useWarehouse();
   const { showToast } = useToast();
   const { tryRefreshSession } = useAuth();
@@ -375,48 +381,58 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
 
       try {
+        if (bypassCache) {
+          await queryClient.invalidateQueries({ queryKey: queryKeys.products(wid) });
+        }
+        const pathForWid = (base: string, opts?: { limit?: number; offset?: number }) => {
+          const params = new URLSearchParams();
+          params.set('warehouse_id', wid);
+          if (opts?.limit != null) params.set('limit', String(opts.limit));
+          if (opts?.offset != null) params.set('offset', String(opts.offset));
+          const qs = params.toString();
+          return `${base}${base.includes('?') ? '&' : '?'}${qs}`;
+        };
         const PAGE_LIMIT = 100;
         const MAX_PRODUCTS = 500;
-        const path = productsPath('/api/products', { limit: PAGE_LIMIT, offset: 0 });
-        // One retry for GET so a single dropped connection (e.g. "connection was lost") doesn't surface; then cache fallback.
         const getOpts = { signal, timeoutMs, maxRetries: 1 };
-        let raw: { data?: Product[]; total?: number } | Product[] | null = null;
-        try {
-          raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
-        } catch (e) {
-          const status = (e as { status?: number })?.status;
-          // Only fall back to admin endpoint when /api/products is not found (404). Never on 403 — cashiers must use /api/products only.
-          if (status === 404) {
-            raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: PAGE_LIMIT, offset: 0 }), getOpts);
-          } else {
-            throw e;
-          }
-        }
-        const parsed = parseProductsResponse(raw);
-        if (!parsed.success) {
-          setError(parsed.message);
-          return;
-        }
-        let apiProducts = parsed.items.map((p) => normalizeProduct(p));
-        const totalFromApi = raw != null && typeof raw === 'object' && 'total' in raw ? (raw as { total?: number }).total : undefined;
-        if (typeof totalFromApi === 'number' && totalFromApi > apiProducts.length && apiProducts.length === PAGE_LIMIT) {
-          const basePath = path.includes('/admin/api/') ? '/admin/api/products' : '/api/products';
-          for (let offset = PAGE_LIMIT; offset < Math.min(totalFromApi, MAX_PRODUCTS) && !signal?.aborted; offset += PAGE_LIMIT) {
+        let apiProducts = await queryClient.fetchQuery({
+          queryKey: queryKeys.products(wid),
+          queryFn: async (): Promise<Product[]> => {
+            const path = pathForWid('/api/products', { limit: PAGE_LIMIT, offset: 0 });
+            let raw: { data?: Product[]; total?: number } | Product[] | null = null;
             try {
-              const nextRaw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(
-                API_BASE_URL,
-                productsPath(basePath, { limit: PAGE_LIMIT, offset }),
-                getOpts
-              );
-              const nextParsed = parseProductsResponse(nextRaw);
-              if (!nextParsed.success || nextParsed.items.length === 0) break;
-              apiProducts = apiProducts.concat(nextParsed.items.map((p) => normalizeProduct(p)));
-              if (nextParsed.items.length < PAGE_LIMIT) break;
-            } catch {
-              break;
+              raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
+            } catch (e) {
+              const status = (e as { status?: number })?.status;
+              if (status === 404) {
+                raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, pathForWid('/admin/api/products', { limit: PAGE_LIMIT, offset: 0 }), getOpts);
+              } else {
+                throw e;
+              }
             }
-          }
-        }
+            const parsed = parseProductsResponse(raw);
+            if (!parsed.success) throw new Error(parsed.message);
+            let list = parsed.items.map((p) => normalizeProduct(p));
+            const totalFromApi = raw != null && typeof raw === 'object' && 'total' in raw ? (raw as { total?: number }).total : undefined;
+            if (typeof totalFromApi === 'number' && totalFromApi > list.length && list.length === PAGE_LIMIT) {
+              const basePath = path.includes('/admin/api/') ? '/admin/api/products' : '/api/products';
+              for (let offset = PAGE_LIMIT; offset < Math.min(totalFromApi, MAX_PRODUCTS) && !signal?.aborted; offset += PAGE_LIMIT) {
+                try {
+                  const nextRaw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, pathForWid(basePath, { limit: PAGE_LIMIT, offset }), getOpts);
+                  const nextParsed = parseProductsResponse(nextRaw);
+                  if (!nextParsed.success || nextParsed.items.length === 0) break;
+                  list = list.concat(nextParsed.items.map((p) => normalizeProduct(p)));
+                  if (nextParsed.items.length < PAGE_LIMIT) break;
+                } catch {
+                  break;
+                }
+              }
+            }
+            return list;
+          },
+          staleTime: PRODUCTS_STALE_MS,
+          gcTime: PRODUCTS_GC_MS,
+        });
         const apiIds = new Set(apiProducts.map((p) => p.id));
         // Keep products that exist only locally (e.g. added while offline or when API failed) so inventory never vanishes
         const localOnly: Product[] = [];
@@ -904,6 +920,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       logInventoryCreate({ productId: resolvedId, sku: productData.sku ?? '', listLength: apiOnlyProducts.length + 1 });
       showToast('success', 'Product saved.');
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update');
         console.timeEnd('Total Save Time');
@@ -1012,6 +1030,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setLastSyncAt(new Date());
       logInventoryUpdate({ productId: id, sku: product.sku });
       showToast('success', 'Product updated.');
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update (update)');
         console.timeEnd('Total Update Time');
@@ -1054,6 +1074,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       recentlyDeletedIdsRef.current.add(id);
       setTimeout(() => recentlyDeletedIdsRef.current.delete(id), RECENT_DELETE_WINDOW_MS);
       setProducts((prev) => prev.filter((p) => p.id !== id));
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       loadProducts(undefined, { bypassCache: true, silent: true }).catch(() => {});
     } catch (err) {
       const status = (err as { status?: number })?.status;
@@ -1119,6 +1141,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setTimeout(() => recentlyDeletedIdsRef.current.delete(id), RECENT_DELETE_WINDOW_MS);
     });
     setProducts((prev) => prev.filter((p) => !idSet.has(p.id)));
+    queryClient.invalidateQueries({ queryKey: ['products'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     loadProducts(undefined, { bypassCache: true, silent: true }).catch(() => {});
   };
 

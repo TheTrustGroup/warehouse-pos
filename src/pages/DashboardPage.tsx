@@ -2,51 +2,15 @@
 // DashboardPage.tsx
 // File: warehouse-pos/src/pages/DashboardPage.tsx
 //
-// THE FIX: This replaces whatever Dashboard component was using
-// "apiClient.ts:138" with a hardcoded Main Store warehouse_id.
-//
-// ROOT CAUSE OF THE BUG (confirmed from network tab):
-//   Old dashboard: warehouse_id = hardcoded or stale ...0001 (Main Store)
-//   UI label showed "Main Town" but data was still Main Store.
-//
-// HOW THIS FILE FIXES IT:
-//   Reads warehouseId from WarehouseContext.
-//   Every time warehouse changes → useEffect re-runs → fetches correct data.
-//   Stats are computed from the fetched products (accurate, real numbers).
-//   Today's sales are fetched from /api/sales filtered by warehouse + date.
+// Uses WarehouseContext for warehouseId. Data via React Query (useDashboardQuery)
+// with staleTime 1 min so navigating back is instant. Skeleton screens while loading.
 // ============================================================
 
-import { useState, useEffect, useCallback } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle } from 'lucide-react';
 import { useWarehouse } from '../contexts/WarehouseContext';
-import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
-
-// ── Types (match GET /api/dashboard response) ──────────────────────────────
-
-interface DashboardLowStockItem {
-  id: string;
-  name: string;
-  category: string;
-  quantity: number;
-  quantityBySize: { sizeCode: string; quantity: number }[];
-  reorderLevel: number;
-}
-
-interface DashboardCategorySummary {
-  [category: string]: { count: number; value: number };
-}
-
-interface DashboardData {
-  totalStockValue: number;
-  totalProducts: number;
-  lowStockCount: number;
-  outOfStockCount: number;
-  todaySales: number;
-  lowStockItems: DashboardLowStockItem[];
-  categorySummary: DashboardCategorySummary;
-}
+import { useDashboardQuery, type DashboardLowStockItem } from '../hooks/useDashboardQuery';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -69,66 +33,18 @@ function formatGHCCompact(n: number): string {
   return sign + 'GH₵' + abs.toLocaleString('en-GH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-// ── apiFetch (with retry for transient network failures) ───────────────────
+// ── Skeleton (matches StatCard layout) ──────────────────────────────────────
 
-/** Wait longer than server maxDuration (30s) so we get 200 or 504 with body instead of client abort. */
-const FETCH_TIMEOUT_MS = 35_000;
-const RETRY_DELAYS_MS = [1_000, 2_000];
-
-function isRetryableError(e: unknown): boolean {
-  if (e instanceof Error) {
-    const msg = e.message.toLowerCase();
-    if (e.name === 'AbortError' || msg.includes('timeout')) return true;
-    if (msg.includes('network') || msg.includes('connection') || msg.includes('failed to fetch')) return true;
-  }
-  return false;
-}
-
-async function apiFetchOnce<T = unknown>(path: string): Promise<T> {
-  const ctrl = new AbortController();
-  const t    = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      headers: getApiHeaders() as HeadersInit,
-      signal:  ctrl.signal,
-    });
-    clearTimeout(t);
-    if (!res.ok) {
-      const raw = await res.text();
-      let msg = `HTTP ${res.status}`;
-      try {
-        const b = raw ? (JSON.parse(raw) as { error?: string; message?: string }) : {};
-        msg = b.error ?? b.message ?? msg;
-      } catch {
-        if (raw && raw.length < 200) msg = raw;
-      }
-      throw new Error(msg);
-    }
-    const text = await res.text();
-    return (text ? JSON.parse(text) : {}) as T;
-  } catch (e: unknown) {
-    clearTimeout(t);
-    if (e instanceof SyntaxError) throw new Error('Invalid JSON from server');
-    if (e instanceof Error && e.name === 'AbortError') throw new Error('Request timed out');
-    throw e;
-  }
-}
-
-async function apiFetch<T = unknown>(path: string): Promise<T> {
-  let lastErr: unknown;
-  for (let i = 0; i <= RETRY_DELAYS_MS.length; i++) {
-    try {
-      return await apiFetchOnce<T>(path);
-    } catch (e) {
-      lastErr = e;
-      if (i < RETRY_DELAYS_MS.length && isRetryableError(e)) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[i]));
-        continue;
-      }
-      throw e;
-    }
-  }
-  throw lastErr;
+function StatCardSkeleton() {
+  return (
+    <div className="flex flex-col justify-between p-6 rounded-2xl border bg-white border-slate-200 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <div className="h-[13px] w-24 bg-slate-100 rounded animate-pulse" />
+        <div className="h-7 w-7 bg-slate-100 rounded animate-pulse" />
+      </div>
+      <div className="h-[28px] w-20 bg-slate-100 rounded animate-pulse" />
+    </div>
+  );
 }
 
 // ── Stat card ─────────────────────────────────────────────────────────────
@@ -213,45 +129,12 @@ function LowStockTable({ items }: { items: DashboardLowStockItem[] }) {
 // ── Main component ────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  // THIS IS THE KEY FIX:
-  // Uses WarehouseContext — same warehouse state as Sidebar, Inventory, POS.
-  // When sidebar changes warehouse → warehouseId updates → useEffect re-fetches.
   const { currentWarehouseId, currentWarehouse, warehouses } = useWarehouse();
-  const warehouseId   = currentWarehouseId;
+  const warehouseId = currentWarehouseId ?? '';
   const warehouseName = currentWarehouse?.name ?? 'Warehouse';
 
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [todayByWarehouse, setTodayByWarehouse] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadData = useCallback(async (wid: string) => {
-    setLoading(true);
-    setError(null);
-    setDashboard(null);
-
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const [data, byLocation] = await Promise.all([
-        apiFetch<DashboardData>(
-          `/api/dashboard?warehouse_id=${encodeURIComponent(wid)}&date=${today}`
-        ),
-        apiFetch<Record<string, number>>(
-          `/api/dashboard/today-by-warehouse?date=${today}`
-        ).catch(() => ({})),
-      ]);
-      setDashboard(data);
-      setTodayByWarehouse((typeof byLocation === 'object' && byLocation !== null ? byLocation : {}) as Record<string, number>);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData(warehouseId);
-  }, [warehouseId, loadData]);
+  const { dashboard, todayByWarehouse, isLoading: loading, error: queryError, refetch } = useDashboardQuery(warehouseId);
+  const error = queryError?.message ?? null;
 
   const stats = dashboard
     ? {
@@ -337,37 +220,43 @@ export default function DashboardPage() {
               <p className="text-[12px] text-red-500 mt-0.5">{error}</p>
               <p className="text-[11px] text-slate-500 mt-1">After the server is fixed, click Retry to reset the circuit and try again.</p>
             </div>
-            <button onClick={() => { getApiCircuitBreaker().reset(); loadData(warehouseId); }}
+            <button onClick={() => { getApiCircuitBreaker().reset(); refetch(); }}
                     className="ml-auto px-4 py-2 rounded-xl bg-red-500 text-white text-[12px] font-bold hover:bg-red-600">
               Retry
             </button>
           </div>
         )}
 
-        {/* ── Stat cards ── */}
+        {/* ── Stat cards (skeleton when loading) ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="Total Stock Value"
-            value={loading || !stats ? '—' : formatGHCCompact(stats.totalStockValue)}
-            icon={DollarSign}
-            accent
-          />
-          <StatCard
-            label="Total Products"
-            value={loading || !stats ? '—' : stats.totalProducts}
-            icon={Package}
-          />
-          <StatCard
-            label="Low Stock Items"
-            value={loading || !stats ? '—' : stats.lowStockCount + stats.outOfStockCount}
-            icon={AlertTriangle}
-            warning={stats ? stats.lowStockCount + stats.outOfStockCount > 0 : false}
-          />
-          <StatCard
-            label="Today's Sales"
-            value={loading || !stats ? '—' : formatGHCCompact(stats.todaysSales)}
-            icon={Receipt}
-          />
+          {loading && !dashboard ? (
+            Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
+          ) : (
+            <>
+              <StatCard
+                label="Total Stock Value"
+                value={stats ? formatGHCCompact(stats.totalStockValue) : '—'}
+                icon={DollarSign}
+                accent
+              />
+              <StatCard
+                label="Total Products"
+                value={stats?.totalProducts ?? '—'}
+                icon={Package}
+              />
+              <StatCard
+                label="Low Stock Items"
+                value={stats ? stats.lowStockCount + stats.outOfStockCount : '—'}
+                icon={AlertTriangle}
+                warning={stats ? stats.lowStockCount + stats.outOfStockCount > 0 : false}
+              />
+              <StatCard
+                label="Today's Sales"
+                value={stats ? formatGHCCompact(stats.todaysSales) : '—'}
+                icon={Receipt}
+              />
+            </>
+          )}
         </div>
 
         {/* ── Low stock alerts ── */}

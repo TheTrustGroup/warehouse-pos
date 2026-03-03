@@ -1,5 +1,7 @@
 import { Suspense, useEffect, useRef } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { lazyWithRetry } from './lib/lazyWithRetry';
+import { queryClient } from './lib/queryClient';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -262,6 +264,7 @@ function App() {
       <NetworkStatusProvider>
         <SettingsProvider>
           <AuthProvider>
+            <QueryClientProvider client={queryClient}>
             <BrowserRouter>
             <OnboardingModal />
             <Suspense fallback={<div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 gap-4"><LoadingSpinner size="lg" /><p className="text-slate-600 text-sm font-medium">Loading…</p></div>}>
@@ -387,6 +390,7 @@ function App() {
             </Suspense>
             <DebugPanel />
             </BrowserRouter>
+            </QueryClientProvider>
           </AuthProvider>
         </SettingsProvider>
       </NetworkStatusProvider>

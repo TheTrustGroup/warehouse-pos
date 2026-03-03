@@ -21,7 +21,8 @@
 //   → Next loadProducts() call will restore real server values
 // ============================================================
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
 import { onUnauthorized } from '../lib/onUnauthorized';
@@ -60,6 +61,37 @@ function buildCartKey(productId: string, sizeCode: string | null): string {
   return `${productId}__${sizeCode ?? 'NA'}`;
 }
 
+/** Apply sale lines deduction to a products list (pure, for optimistic apply and rollback). */
+function applySaleDeduction(
+  products: POSProduct[],
+  lines: SalePayload['lines']
+): POSProduct[] {
+  return products.map((p) => {
+    const saleLines = lines.filter((l) => l.productId === p.id);
+    if (saleLines.length === 0) return p;
+    if (p.sizeKind === 'sized') {
+      const updatedSizes = (p.quantityBySize ?? []).map((row) => {
+        const line = saleLines.find(
+          (l) =>
+            l.sizeCode &&
+            row.sizeCode &&
+            l.sizeCode.toUpperCase() === row.sizeCode.toUpperCase()
+        );
+        return line
+          ? { ...row, quantity: Math.max(0, row.quantity - line.qty) }
+          : row;
+      });
+      return {
+        ...p,
+        quantityBySize: updatedSizes,
+        quantity: updatedSizes.reduce((s, r) => s + r.quantity, 0),
+      };
+    }
+    const totalSold = saleLines.reduce((s, l) => s + l.qty, 0);
+    return { ...p, quantity: Math.max(0, p.quantity - totalSold) };
+  });
+}
+
 /** Map InventoryContext Product to POSProduct so POS can show immediately when phase-2 or cache already has data. */
 function productToPOSProduct(p: Product): POSProduct {
   const color =
@@ -96,6 +128,7 @@ function useToast() {
 }
 
 export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
+  const queryClient = useQueryClient();
   const { currentWarehouse, warehouses, currentWarehouseId } = useWarehouse();
   const { user, tryRefreshSession } = useAuth();
   const { products: inventoryProducts } = useInventory();
@@ -133,6 +166,16 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   const { toast, show: showToast } = useToast();
   const isMounted = useRef(true);
+
+  /** Zero-latency barcode lookup (no API, no filter over array). Critical for scanner flow. */
+  const barcodeToProduct = useMemo(() => {
+    const map = new Map<string, POSProduct>();
+    for (const p of products) {
+      const b = (p.barcode ?? '').trim();
+      if (b && !map.has(b.toLowerCase())) map.set(b.toLowerCase(), p);
+    }
+    return map;
+  }, [products]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -308,18 +351,114 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     };
   }, [warehouse.id, currentWarehouseId, loadProducts]);
 
+  type SaleMutationVars = {
+    payload: SalePayload;
+    cartSnapshot: CartLine[];
+    productsSnapshot: POSProduct[];
+  };
+
+  type SaleMutationResult = {
+    id: string;
+    receiptId: string;
+    total?: number;
+    itemCount?: number;
+    status?: string;
+    createdAt: string;
+  };
+
+  const saleMutation = useMutation({
+    mutationFn: async ({ payload }: SaleMutationVars): Promise<SaleMutationResult> => {
+      const idempotencyKey = `pos-${payload.warehouseId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const result = await apiFetch<SaleMutationResult>('/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({
+          warehouseId: payload.warehouseId,
+          customerName: payload.customerName || null,
+          paymentMethod: payload.paymentMethod,
+          subtotal: payload.subtotal,
+          discountPct: payload.discountPct,
+          discountAmt: payload.discountAmt,
+          total: payload.total,
+          lines: payload.lines.map((l) => ({
+            productId: l.productId,
+            sizeCode: l.sizeCode || null,
+            qty: l.qty,
+            unitPrice: l.unitPrice,
+            lineTotal: l.unitPrice * l.qty,
+            name: l.name,
+            sku: l.sku ?? '',
+            imageUrl: l.imageUrl ?? null,
+          })),
+          deliverySchedule: payload.deliverySchedule ?? null,
+        }),
+      });
+      return result;
+    },
+    onMutate: async ({ payload, cartSnapshot, productsSnapshot }: SaleMutationVars) => {
+      const previousProducts = productsSnapshot;
+      const previousCart = cartSnapshot;
+      setProducts(applySaleDeduction(productsSnapshot, payload.lines));
+      setCart([]);
+      setCartOpen(false);
+      setCharging(false);
+      await new Promise((r) => setTimeout(r, 50));
+      if (!isMounted.current) return { previousCart, previousProducts };
+      setSaleResult({
+        ...payload,
+        saleId: undefined,
+        receiptId: 'Pending…',
+        completedAt: new Date().toISOString(),
+        lines: payload.lines.map((l) => ({
+          ...l,
+          key: buildCartKey(l.productId, l.sizeCode ?? null),
+        })),
+      });
+      return { previousCart, previousProducts };
+    },
+    onError: (err: unknown, _vars: SaleMutationVars, context: { previousCart: CartLine[]; previousProducts: POSProduct[] } | undefined) => {
+      const status = (err as { status?: number })?.status;
+      if (context) {
+        setProducts(context.previousProducts);
+        setCart(context.previousCart);
+      }
+      setSaleResult(null);
+      if (status === 409) {
+        showToast('Insufficient stock for one or more items. Adjust the cart and try again.', 'err');
+      } else {
+        console.error('[POS] /api/sales failed — rolled back optimistic sale:', err);
+        showToast(
+          "Sale didn't reach the server. Check your connection and tap Charge again.",
+          'warn'
+        );
+      }
+    },
+    onSuccess: (result, _vars: SaleMutationVars) => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      if (!isMounted.current) return;
+      setSaleResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              saleId: result.id,
+              receiptId: result.receiptId,
+              completedAt: result.createdAt ?? new Date().toISOString(),
+            }
+          : null
+      );
+    },
+  });
+
   function handleBarcodeSubmit() {
     const raw = search.trim();
     if (!raw) return;
     setSearch('');
-    const matches = products.filter(
-      (p) => (p.barcode ?? '').trim().toLowerCase() === raw.toLowerCase()
-    );
-    if (matches.length === 0) {
+    const product = barcodeToProduct.get(raw.toLowerCase());
+    if (!product) {
       showToast('Product not found for this barcode', 'err');
       return;
     }
-    const product = matches[0];
     const isSized = product.sizeKind === 'sized' && (product.quantityBySize?.length ?? 0) > 0;
     if (isSized) {
       setActiveProduct(structuredClone(product));
@@ -334,9 +473,6 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         qty: 1,
         imageUrl: product.images?.[0] ?? null,
       });
-    }
-    if (matches.length > 1) {
-      showToast('Multiple products match; added first', 'warn');
     }
   }
 
@@ -472,120 +608,11 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       return;
     }
 
-    let serverSaleId: string | undefined;
-    let serverReceiptId: string | undefined;
-    let completedAt: string | undefined;
-    const syncOk = true;
-
-    const idempotencyKey = `pos-${payload.warehouseId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    try {
-      const result = await apiFetch<{
-        id: string;
-        receiptId: string;
-        total?: number;
-        itemCount?: number;
-        status?: string;
-        createdAt: string;
-      }>('/api/sales', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-        body: JSON.stringify({
-          warehouseId: payload.warehouseId,
-          customerName: payload.customerName || null,
-          paymentMethod: payload.paymentMethod,
-          subtotal: payload.subtotal,
-          discountPct: payload.discountPct,
-          discountAmt: payload.discountAmt,
-          total: payload.total,
-          lines: payload.lines.map((l) => ({
-            productId: l.productId,
-            sizeCode: l.sizeCode || null,
-            qty: l.qty,
-            unitPrice: l.unitPrice,
-            lineTotal: l.unitPrice * l.qty,
-            name: l.name,
-            sku: l.sku ?? '',
-            imageUrl: l.imageUrl ?? null,
-          })),
-          deliverySchedule: payload.deliverySchedule ?? null,
-        }),
-      });
-
-      serverSaleId = result.id;
-      serverReceiptId = result.receiptId;
-      completedAt = result.createdAt ?? new Date().toISOString();
-    } catch (apiErr: unknown) {
-      const status = (apiErr as { status?: number })?.status;
-      if (status === 409) {
-        setCharging(false);
-        showToast('Insufficient stock for one or more items. Adjust the cart and try again.', 'err');
-        return;
-      }
-      console.error(
-        '[POS] /api/sales failed — stock NOT deducted in DB:',
-        apiErr instanceof Error ? apiErr.message : apiErr
-      );
-      setCharging(false);
-      showToast(
-        "Sale didn't reach the server. Check your connection and tap Charge again.",
-        'warn'
-      );
-      return;
-    }
-
-    setProducts((prev) =>
-      prev.map((p) => {
-        const saleLines = payload.lines.filter((l) => l.productId === p.id);
-        if (saleLines.length === 0) return p;
-
-        if (p.sizeKind === 'sized') {
-          const updatedSizes = (p.quantityBySize ?? []).map((row) => {
-            const line = saleLines.find(
-              (l) =>
-                l.sizeCode &&
-                row.sizeCode &&
-                l.sizeCode.toUpperCase() === row.sizeCode.toUpperCase()
-            );
-            return line
-              ? { ...row, quantity: Math.max(0, row.quantity - line.qty) }
-              : row;
-          });
-          return {
-            ...p,
-            quantityBySize: updatedSizes,
-            quantity: updatedSizes.reduce((s, r) => s + r.quantity, 0),
-          };
-        }
-
-        const totalSold = saleLines.reduce((s, l) => s + l.qty, 0);
-        return { ...p, quantity: Math.max(0, p.quantity - totalSold) };
-      })
-    );
-
-    setCart([]);
-    setCartOpen(false);
-    setCharging(false);
-
-    await new Promise((r) => setTimeout(r, 350));
-
-    if (!isMounted.current) return;
-
-    setSaleResult({
-      ...payload,
-      saleId: serverSaleId,
-      receiptId: serverReceiptId,
-      completedAt,
-      lines: payload.lines.map((l) => ({
-        ...l,
-        key: buildCartKey(l.productId, l.sizeCode ?? null),
-      })),
+    saleMutation.mutate({
+      payload,
+      cartSnapshot: cart,
+      productsSnapshot: products,
     });
-
-    if (!syncOk) {
-      setTimeout(() => {
-        showToast('⚠ Not synced — deploy /api/sales route', 'warn');
-      }, 600);
-    }
   }
 
   function handleNewSale() {
