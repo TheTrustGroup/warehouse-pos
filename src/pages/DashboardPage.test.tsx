@@ -4,6 +4,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '../lib/queryClient';
 import DashboardPage from './DashboardPage';
 
 const MOCK_WAREHOUSE_ID = 'warehouse-from-context-123';
@@ -53,7 +55,11 @@ describe('DashboardPage', () => {
   });
 
   it('fetches dashboard with warehouse_id from context', async () => {
-    render(<DashboardPage />);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DashboardPage />
+      </QueryClientProvider>
+    );
 
     await waitFor(
       () => {

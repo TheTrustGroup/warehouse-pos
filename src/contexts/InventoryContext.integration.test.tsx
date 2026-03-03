@@ -7,6 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '../lib/queryClient';
 import { ToastProvider } from './ToastContext';
 import { WarehouseProvider } from './WarehouseContext';
 import { InventoryProvider, useInventory } from './InventoryContext';
@@ -64,11 +66,13 @@ vi.mock('./AuthContext', async (importOriginal) => {
 import { apiGet, apiPost } from '../lib/apiClient';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <ToastProvider>
-    <WarehouseProvider>
-      <InventoryProvider>{children}</InventoryProvider>
-    </WarehouseProvider>
-  </ToastProvider>
+  <QueryClientProvider client={queryClient}>
+    <ToastProvider>
+      <WarehouseProvider>
+        <InventoryProvider>{children}</InventoryProvider>
+      </WarehouseProvider>
+    </ToastProvider>
+  </QueryClientProvider>
 );
 
 const minimalProduct = {

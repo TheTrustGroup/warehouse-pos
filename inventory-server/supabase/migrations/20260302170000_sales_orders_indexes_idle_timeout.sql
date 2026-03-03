@@ -18,9 +18,13 @@ CREATE INDEX IF NOT EXISTS idx_sale_lines_sale_id
 CREATE INDEX IF NOT EXISTS idx_sale_lines_product_id
   ON public.sale_lines (product_id);
 
--- Orders
-CREATE INDEX IF NOT EXISTS idx_orders_warehouse_created
-  ON public.orders (warehouse_id, created_at DESC);
+-- Orders (only if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'orders') THEN
+    CREATE INDEX IF NOT EXISTS idx_orders_warehouse_created ON public.orders (warehouse_id, created_at DESC);
+  END IF;
+END $$;
 
 -- Prevent zombie connections: auto-kill idle in-transaction sessions
 ALTER ROLE authenticator SET idle_in_transaction_session_timeout = '30s';
