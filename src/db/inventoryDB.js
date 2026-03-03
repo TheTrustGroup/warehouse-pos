@@ -109,6 +109,21 @@ class ExtremeDeptKidzDexie extends Dexie {
 let dbInstance = null;
 let dbInitPromise = null;
 
+/** True if error looks like Dexie/idb transaction null (e.trans / n.type). */
+function isTransactionError(e) {
+  const msg = e && typeof e.message === 'string' ? e.message : String(e);
+  return /e\.trans|n\.type|null is not an object.*trans|Transaction.*invalid|Database closed/i.test(msg);
+}
+
+/**
+ * Clear cached DB instance so next getDB() will reopen. Call after a transaction/read failure
+ * so we don't keep using a closed or bad connection (prevents repeated e.trans).
+ */
+export function clearDbInstance() {
+  dbInstance = null;
+  dbInitPromise = null;
+}
+
 /**
  * Lazy-init Dexie. Returns Promise<ExtremeDeptKidzDexie | null>. Resolves to null if IndexedDB
  * is unavailable or open fails (e.g. private mode, quota). Prevents "null is not an object (evaluating 'e.trans'|'n.type')"
@@ -158,22 +173,33 @@ function nowTs() {
 // ---------------------------------------------------------------------------
 
 /**
- * Get all products from local DB.
+ * Get all products from local DB. Safe: returns [] on any Dexie/idb error (e.trans, closed DB).
  * @returns {Promise<ProductRecord[]>}
  */
 export async function getAllProducts() {
-  const d = await getDB();
-  return d ? d.products.toArray() : [];
+  try {
+    const d = await getDB();
+    if (!d) return [];
+    return await d.products.toArray();
+  } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
+    return [];
+  }
 }
 
 /**
- * Get a single product by id.
+ * Get a single product by id. Safe: returns undefined on any Dexie/idb error.
  * @param {string} id - Product UUID
  * @returns {Promise<ProductRecord|undefined>}
  */
 export async function getProductById(id) {
-  const d = await getDB();
-  return d ? d.products.get(id) : undefined;
+  try {
+    const d = await getDB();
+    return d ? await d.products.get(id) : undefined;
+  } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
+    return undefined;
+  }
 }
 
 /**
@@ -216,6 +242,7 @@ export async function addProduct(data) {
       status: 'pending',
     });
   } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
     if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
     throw e;
   }
@@ -259,6 +286,7 @@ export async function updateProduct(id, data) {
       status: 'pending',
     });
   } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
     if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
     throw e;
   }
@@ -291,6 +319,7 @@ export async function deleteProduct(id) {
       status: 'pending',
     });
   } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
     if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
     throw e;
   }
@@ -306,9 +335,9 @@ export async function deleteProduct(id) {
  */
 export async function mirrorProductsFromApi(apiProducts) {
   if (!Array.isArray(apiProducts) || apiProducts.length === 0) return;
-  const d = await getDB();
-  if (!d) return;
   try {
+    const d = await getDB();
+    if (!d) return;
     await d.products.clear();
     const now = nowISO();
     const ts = nowTs();
@@ -336,45 +365,66 @@ export async function mirrorProductsFromApi(apiProducts) {
       await d.products.bulkAdd(records);
     }
   } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
     if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
     if (import.meta.env.DEV) console.warn('mirrorProductsFromApi failed:', e);
   }
 }
 
 /**
- * Get all products that are not yet synced (syncStatus !== 'synced').
+ * Get all products that are not yet synced. Safe: returns [] on Dexie/idb error.
  * @returns {Promise<ProductRecord[]>}
  */
 export async function getUnsyncedItems() {
-  const d = await getDB();
-  return d ? d.products.where('syncStatus').notEqual('synced').toArray() : [];
+  try {
+    const d = await getDB();
+    return d ? await d.products.where('syncStatus').notEqual('synced').toArray() : [];
+  } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
+    return [];
+  }
 }
 
 /**
- * Get pending sync queue items (for background sync).
+ * Get pending sync queue items. Safe: returns [] on Dexie/idb error.
  * @returns {Promise<SyncQueueItem[]>}
  */
 export async function getSyncQueueItems() {
-  const d = await getDB();
-  return d ? d.syncQueue.where('status').equals('pending').sortBy('timestamp') : Promise.resolve([]);
+  try {
+    const d = await getDB();
+    return d ? await d.syncQueue.where('status').equals('pending').sortBy('timestamp') : [];
+  } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
+    return [];
+  }
 }
 
 /**
- * Get failed sync queue items (for admin dashboard).
+ * Get failed sync queue items. Safe: returns [] on Dexie/idb error.
  * @returns {Promise<SyncQueueItem[]>}
  */
 export async function getFailedQueueItems() {
-  const d = await getDB();
-  return d ? d.syncQueue.where('status').equals('failed').sortBy('timestamp').reverse().toArray() : [];
+  try {
+    const d = await getDB();
+    return d ? await d.syncQueue.where('status').equals('failed').sortBy('timestamp').reverse().toArray() : [];
+  } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
+    return [];
+  }
 }
 
 /**
- * Get all sync queue items (pending + syncing + failed) for export.
+ * Get all sync queue items. Safe: returns [] on Dexie/idb error.
  * @returns {Promise<SyncQueueItem[]>}
  */
 export async function getAllSyncQueueItems() {
-  const d = await getDB();
-  return d ? d.syncQueue.orderBy('timestamp').reverse().toArray() : [];
+  try {
+    const d = await getDB();
+    return d ? await d.syncQueue.orderBy('timestamp').reverse().toArray() : [];
+  } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
+    return [];
+  }
 }
 
 /**
@@ -384,20 +434,26 @@ export async function getAllSyncQueueItems() {
  * @returns {Promise<{ version: number, exportedAt: string, products: ProductRecord[], syncQueue: SyncQueueItem[], metadata: Array<{key: string, value: *, updatedAt: number}> }>}
  */
 export async function exportAllData() {
-  const d = await getDB();
-  if (!d) return { version: 2, exportedAt: new Date().toISOString(), products: [], syncQueue: [], metadata: [] };
-  const [products, syncQueue, metadataArr] = await Promise.all([
-    d.products.toArray(),
-    d.syncQueue.toArray(),
-    d.metadata.toArray(),
-  ]);
-  return {
-    version: 2,
-    exportedAt: new Date().toISOString(),
-    products,
-    syncQueue,
-    metadata: metadataArr.map(({ key, value, updatedAt }) => ({ key, value, updatedAt })),
-  };
+  const empty = { version: 2, exportedAt: new Date().toISOString(), products: [], syncQueue: [], metadata: [] };
+  try {
+    const d = await getDB();
+    if (!d) return empty;
+    const [products, syncQueue, metadataArr] = await Promise.all([
+      d.products.toArray(),
+      d.syncQueue.toArray(),
+      d.metadata.toArray(),
+    ]);
+    return {
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      products,
+      syncQueue,
+      metadata: metadataArr.map(({ key, value, updatedAt }) => ({ key, value, updatedAt })),
+    };
+  } catch (e) {
+    if (isTransactionError(e)) clearDbInstance();
+    return empty;
+  }
 }
 
 /**

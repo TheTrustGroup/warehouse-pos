@@ -392,9 +392,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           const qs = params.toString();
           return `${base}${base.includes('?') ? '&' : '?'}${qs}`;
         };
-        const PAGE_LIMIT = 100;
+        // Smaller first page = faster TTFB and less chance of "network connection was lost" on slow links
+        const PAGE_LIMIT = 50;
         const MAX_PRODUCTS = 500;
-        const getOpts = { signal, timeoutMs, maxRetries: 1 };
+        const PRODUCTS_REQUEST_TIMEOUT_MS = 25_000;
+        const getOpts = { signal, timeoutMs: timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 2 };
         let apiProducts = await queryClient.fetchQuery({
           queryKey: queryKeys.products(wid),
           queryFn: async (): Promise<Product[]> => {
@@ -631,22 +633,21 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
   loadProductsRef.current = loadProducts;
 
-  // On mount: show cached products immediately when available so entering Inventory doesn't show a full-screen "Loading products..." spinner. Then refresh from API (silent if we had cache).
+  // On mount: first paint from cache when available (no empty flash), then refresh from API. Never clear to [] when we have cache for this warehouse.
   useEffect(() => {
     clearMockData();
     mountedRef.current = true;
     const ac = new AbortController();
-    let hadCache = false;
-
-    // Always clear first so we never show the previous warehouse's stats under the new warehouse's name.
-    setProducts([]);
-    setError(null);
     const productsFromCache = getCachedProductsForWarehouse(effectiveWarehouseId);
-    if (productsFromCache.length > 0) {
+    const hadCache = productsFromCache.length > 0;
+
+    if (hadCache) {
       setProducts(productsFromCache);
+      setError(null);
       setIsLoading(false);
-      hadCache = true;
     } else {
+      setProducts([]);
+      setError(null);
       setIsLoading(true);
     }
 

@@ -12,7 +12,7 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
 - **GET** `https://inventory-server-iota.vercel.app/api/health?db=1`  
   - Probes the DB (select from `warehouse_products` limit 1). Response includes `db: { ok: true }` or `db: { ok: false, error: "..." }`. If `ok: false`, the error is the root cause (e.g. relation does not exist, permission denied, timeout). Run migrations and fix grants; then products/dashboard should work.
 - **To see why /api/products returns 500:** In the browser, open **Network** tab → click the failed **products** request → open **Response**. The body is JSON with an `error` field containing the exact backend reason (e.g. "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY", "Failed to list products: permission denied for table warehouse_inventory", or "canceling statement due to statement timeout"). The Inventory page also shows this message under "Couldn't load products" when the request fails.
-- **"Access control checks" + "network connection was lost":** Usually the connection dropped before the server sent a full response (Vercel function timeout, cold start, or Supabase statement timeout). Apply the `statement_timeout` migration in Supabase; set Vercel Function Max Duration to 30s; retry. It is not a CORS config bug when the response never completes.
+- **"Access control checks" + "network connection was lost":** Usually the connection dropped before the server sent a full response (Vercel function timeout, cold start, or Supabase statement timeout). The app now uses **cache-first first paint** (show cached products immediately), a **smaller first request** (50 items), and a **25s client timeout** so we fail fast and show cache instead of hanging. Apply the `statement_timeout` migration in Supabase; set Vercel Function Max Duration to 30s. Run `20260303120000_user_scopes_user_email_index.sql` so scope lookup is fast. It is not a CORS config bug when the response never completes.
 
 ## 504 Gateway Timeout (or "Request timed out" on the dashboard)
 
@@ -44,12 +44,12 @@ When `https://inventory-server-iota.vercel.app/api/products` or `/api/dashboard`
   7. **Vercel / database connection:** If using Supabase (or PlanetScale/Neon), check the **Supabase Dashboard → Reports → Query Performance** (or equivalent) for slow query logs. Fix slow queries with indexes or smaller limits. In Vercel, check **Project → Logs** and **Functions** for timeouts or cold starts.
   8. **Resilience:** If only the `warehouse_inventory` (or size) query fails (e.g. timeout), the products list and dashboard now still return: product list shows with quantities as zero and dashboard stats are computed over that list. Check server logs for `[warehouseProducts] warehouse_inventory query failed:` to confirm. Fix DB/indexes so the inventory query succeeds; then quantities and stats will be correct again.
 
-## When you have more than 100 products
+## When you have more than 50 products
 
-The app avoids timeouts by requesting **100 products per API call** (Inventory) or **250** (POS). When there are more than 100 products:
+The app avoids "network connection was lost" by using a **smaller first request (50 items)** and **25s client timeout** so the first paint is fast and failures fall back to cache. Additional pages load in background.
 
-- **Inventory (context and page):** The first request returns `{ data, total }`. If `total > 100`, the client automatically fetches the next pages (`offset=100`, `200`, …) in chunks of 100 and merges them, up to **500 products** per load. So you see the full list without one huge request.
-- **Inventory page UI:** "Page 1 of N" is **client-side** pagination over that loaded list (e.g. 20 items per screen page). So with 350 products loaded, you get multiple UI pages over the same 350.
+- **Inventory (context and page):** First request fetches **50 products**; if `total > 50`, the client fetches next pages (`offset=50`, `100`, …) in chunks of 50, up to **500 products** per load. Cached data is shown immediately on mount when available.
+- **Inventory page UI:** "Page 1 of N" is **client-side** pagination over that loaded list (e.g. 50 items per screen page). So with 350 products loaded, you get multiple UI pages over the same 350.
 - **POS:** Loads up to 250 products in one request. For more than 250 at POS, you’d add pagination or "load more" later.
 
 ## Deploy inventory-server after code changes

@@ -35,6 +35,7 @@ export interface InventoryDBInstance {
 }
 
 export function getDB(): Promise<InventoryDBInstance | null>;
+export function clearDbInstance(): void;
 
 export function getAllProducts(): Promise<unknown[]>;
 export function getProductById(id: string): Promise<unknown>;
