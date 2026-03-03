@@ -1,35 +1,70 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+/** Default origins when no env is set (must match lib/cors.ts so CORS works without config). */
+const DEFAULT_ORIGINS = [
+  'https://warehouse.extremedeptkidz.com',
+  'https://warehouse.hunnidofficial.com',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:4173',
+];
+
+/** Hostname suffixes to allow (e.g. vercel.app, extremedeptkidz.com). */
+const DEFAULT_SUFFIXES = ['vercel.app', 'extremedeptkidz.com', 'hunnidofficial.com'];
+
+function isOriginAllowed(origin: string, origins: string[], suffixes: string[]): boolean {
+  if (!origin || !origin.startsWith('http')) return false;
+  if (origins.includes(origin)) return true;
+  try {
+    const host = new URL(origin).hostname.toLowerCase();
+    if (suffixes.some((s) => host === s || host.endsWith('.' + s))) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 /** Allowed origins for CORS (comma-separated in env, or * for any). Frontend must be allowed to call this API. */
-const getAllowedOrigins = (): { origins: string[]; strict: boolean } => {
-  const raw = process.env.CORS_ORIGINS;
-  if (raw === '*') return { origins: ['*'], strict: false };
-  if (raw) return { origins: raw.split(',').map((o) => o.trim()).filter(Boolean), strict: true };
-  // When CORS_ORIGINS not set: allow request origin so frontend (e.g. warehouse.extremedeptidz.com) can call this API.
-  const frontend = process.env.FRONTEND_ORIGIN;
-  const vercel = process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`, `https://www.${process.env.VERCEL_URL}`] : [];
-  const origins = [...vercel, ...(frontend ? [frontend.trim()] : [])];
-  return { origins, strict: false };
+const getAllowedOrigins = (): { origins: string[]; suffixes: string[]; strict: boolean } => {
+  const raw = process.env.CORS_ORIGINS ?? process.env.ALLOWED_ORIGINS;
+  if (raw === '*') return { origins: ['*'], suffixes: [], strict: false };
+  if (raw?.trim()) {
+    const list = raw.split(',').map((o) => o.trim()).filter(Boolean);
+    return { origins: list, suffixes: [], strict: true };
+  }
+  const frontend = process.env.FRONTEND_ORIGIN?.trim();
+  const vercel = process.env.VERCEL_URL
+    ? [`https://${process.env.VERCEL_URL}`, `https://www.${process.env.VERCEL_URL}`]
+    : [];
+  const origins = [...new Set([...DEFAULT_ORIGINS, ...vercel, ...(frontend ? [frontend] : [])])];
+  const suffixRaw = process.env.ALLOWED_ORIGIN_SUFFIXES?.trim();
+  const suffixes = suffixRaw
+    ? suffixRaw.split(',').map((s) => s.trim().toLowerCase().replace(/^\./, '')).filter(Boolean)
+    : DEFAULT_SUFFIXES;
+  return { origins, suffixes, strict: false };
 };
 
 function corsHeaders(request: NextRequest): HeadersInit {
-  const { origins, strict } = getAllowedOrigins();
-  const origin = request.headers.get('origin') || '';
-  // Always reflect request origin when present so cross-origin frontend (e.g. after refresh) is never blocked.
+  const { origins, suffixes, strict } = getAllowedOrigins();
+  const origin = (request.headers.get('origin') ?? '').trim();
+  // With credentials, browser requires exact origin. Reflect request origin only when allowed.
   let allowOrigin: string;
-  if (origin && /^https?:\/\//.test(origin)) {
-    allowOrigin = origin;
-  } else if (origins.includes('*') || origins.length === 0 || !strict) {
-    allowOrigin = origin || '*';
+  if (origins.includes('*')) {
+    allowOrigin = '*';
+  } else if (origin && /^https?:\/\//.test(origin)) {
+    const allowed = isOriginAllowed(origin, origins, suffixes);
+    allowOrigin = allowed ? origin : origins[0] ?? 'https://warehouse.extremedeptkidz.com';
   } else {
-    allowOrigin = origins.includes(origin) ? origin : origins[0];
+    allowOrigin = origins[0] ?? 'https://warehouse.extremedeptkidz.com';
   }
   const headers: HeadersInit = {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, x-request-id, x-correlation-id',
+    'Access-Control-Allow-Headers':
+      'Content-Type, Authorization, Accept, X-Requested-With, Idempotency-Key, x-request-id, x-correlation-id',
     'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
   };
   // Required when frontend sends credentials: 'include'
   if (allowOrigin !== '*') {
