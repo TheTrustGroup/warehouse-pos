@@ -9,6 +9,11 @@ export interface UserScope {
 /**
  * Resolve allowed warehouse IDs for a user. Reads user_scopes table when present; else env ALLOWED_WAREHOUSE_IDS.
  * When user has exactly one warehouse in user_scopes, that single ID is returned (used to bind cashier to POS location).
+ *
+ * IMPORTANT: Uses getSupabase() which is the service-role client (supabaseAdmin). Service role bypasses RLS.
+ * If user_scopes has a deny_all_select RLS policy (qual: false), anon/authenticated would get 0 rows or hang;
+ * with service role the query succeeds. If you see getScopeForUser taking ~10s, the client may not be using
+ * SUPABASE_SERVICE_ROLE_KEY — verify lib/supabase/admin.ts is used and env is set.
  */
 export async function getScopeForUser(email: string): Promise<UserScope> {
   const trimmed = email?.trim().toLowerCase();

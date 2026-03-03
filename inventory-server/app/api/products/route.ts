@@ -54,7 +54,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
       const { searchParams } = new URL(req.url);
       const queryWarehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
+      const t0 = Date.now();
       const scope = await getScopeForUser(auth.email);
+      console.log('[products] getScopeForUser took:', Date.now() - t0, 'ms');
       const allowed = scope.allowedWarehouseIds;
       const roleNorm = (auth.role ?? '').toLowerCase().replace(/\s+/g, '_');
       const isAdminNoScope = (roleNorm === 'admin' || roleNorm === 'super_admin') && allowed.length === 0;
@@ -238,7 +240,9 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(req.url);
   const productId = searchParams.get('id')?.trim();
   const queryWarehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
+  const t0 = Date.now();
   const scope = await getScopeForUser(auth.email);
+  console.log('[products DELETE] getScopeForUser took:', Date.now() - t0, 'ms');
   const allowed = scope.allowedWarehouseIds;
   const roleNorm = (auth.role ?? '').toLowerCase().replace(/\s+/g, '_');
   const isAdminNoScope = (roleNorm === 'admin' || roleNorm === 'super_admin') && allowed.length === 0;

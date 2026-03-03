@@ -1,33 +1,14 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-
-/** Shared options: no Realtime subscriptions used (API-only); pin schema to avoid expensive introspection. */
-const serverClientOptions = {
-  auth: { persistSession: false },
-  realtime: { params: { eventsPerSecond: 0 } },
-  db: { schema: 'public' as const },
-} as const;
-
-let client: SupabaseClient | null = null;
-let serviceClient: SupabaseClient | null = null;
+/**
+ * Server Supabase access. All API routes use the same singleton to avoid connection pool exhaustion.
+ * @see lib/supabase/admin.ts for the single createClient() instantiation.
+ */
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export function getSupabase(): SupabaseClient {
-  if (client) return client;
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key?.trim()) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for the inventory-server.');
-  }
-  client = createClient(url, key, serverClientOptions);
-  return client;
+  return supabaseAdmin;
 }
 
 export function getServiceSupabase(): SupabaseClient {
-  if (serviceClient) return serviceClient;
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
-  }
-  serviceClient = createClient(url, key, serverClientOptions);
-  return serviceClient;
+  return supabaseAdmin;
 }
