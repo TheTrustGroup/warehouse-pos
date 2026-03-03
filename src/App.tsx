@@ -24,6 +24,7 @@ import { DebugPanel } from './components/debug/DebugPanel';
 import { BrowserCheck } from './components/BrowserCheck';
 import { OnboardingModal } from './components/OnboardingModal';
 import { PERMISSIONS } from './types/permissions';
+import { initIdbErrorRecovery } from './lib/idbErrorRecovery';
 
 /** Default landing: Dashboard if user has permission; otherwise redirect to first allowed route (e.g. POS for cashiers). */
 function DefaultRoute() {
@@ -255,6 +256,9 @@ function ProtectedRoutes() {
 }
 
 function App() {
+  useEffect(() => {
+    initIdbErrorRecovery();
+  }, []);
   return (
     <BrowserCheck>
     <ToastProvider>

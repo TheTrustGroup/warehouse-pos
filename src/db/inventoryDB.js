@@ -109,8 +109,8 @@ class ExtremeDeptKidzDexie extends Dexie {
 let dbInstance = null;
 let dbInitPromise = null;
 
-/** True if error looks like Dexie/idb transaction null (e.trans / n.type). */
-function isTransactionError(e) {
+/** True if error looks like Dexie/idb transaction null (e.trans / n.type). Single source of truth for idbErrorRecovery. */
+export function isTransactionError(e) {
   const msg = e && typeof e.message === 'string' ? e.message : String(e);
   return /e\.trans|n\.type|null is not an object.*trans|Transaction.*invalid|Database closed/i.test(msg);
 }

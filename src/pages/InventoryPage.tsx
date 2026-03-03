@@ -88,6 +88,16 @@ function formatGHC(n: number): string {
   return 'GH₵ ' + n.toLocaleString('en-GH', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+/** Human-readable "last updated" for header subtitle. */
+function formatLastUpdated(ms: number): string {
+  const sec = Math.floor((Date.now() - ms) / 1000);
+  if (sec < 5) return 'just now';
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  return `${Math.min(min, 60)}m ago`;
+}
+
 // ── Filter/sort ───────────────────────────────────────────────────────────
 
 function applyFilters(
@@ -360,6 +370,10 @@ export default function InventoryPage(_props: InventoryPageProps) {
   const [modalOpen,      setModalOpen]      = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [confirmDelete,  setConfirmDelete]  = useState<Product | null>(null);
+  /** True while a silent (background) refresh is in progress. */
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
+  /** Timestamp (ms) of last successful load; used for "Updated X ago" when not refreshing. */
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
 
   const modalOpenRef      = useRef(false);
   const pollTimerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -459,6 +473,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
     loadAbortRef.current    = ctrl;
     loadInflightRef.current = true;
     if (!silent) setLoading(true);
+    if (silent) setBackgroundRefreshing(true);
     setError(null);
 
     try {
@@ -498,6 +513,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
       const nextList = pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list;
       setProducts(nextList);
       getApiCircuitBreaker().recordSuccess();
+      setLastRefreshedAt(Date.now());
       try {
         if (typeof localStorage !== 'undefined' && nextList.length > 0) {
           localStorage.setItem(productsCacheKey(warehouseId), JSON.stringify(nextList));
@@ -516,6 +532,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
         loadAbortRef.current    = null;
       }
       if (!silent) setLoading(false);
+      if (silent) setBackgroundRefreshing(false);
     }
   }, [warehouseId, apiFetch]);
 
@@ -544,10 +561,12 @@ export default function InventoryPage(_props: InventoryPageProps) {
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
+  // Restore from cache first when remounting (e.g. returning to Inventory tab) so we don't
+  // flash empty/loading — then refresh in background. Only clear state when there is no cache.
 
   useEffect(() => {
-    setProducts([]); setLoading(true); setError(null);
     setCategory('all');
+    setLastRefreshedAt(null);
     didInitialLoad.current = false;
     loadAbortRef.current?.abort();
 
@@ -562,15 +581,23 @@ export default function InventoryPage(_props: InventoryPageProps) {
           if (arr.length > 0) {
             setProducts(arr);
             setLoading(false);
+            setError(null);
             hadCache = true;
           }
         }
       } catch {
         /* ignore malformed cache */
       }
+      if (!hadCache) {
+        setProducts([]);
+        setLoading(true);
+        setError(null);
+      }
       loadProducts(hadCache);
     } else {
+      setProducts([]);
       setLoading(false);
+      setError(null);
     }
     const pollDelay = isValidWarehouseId(warehouseId) ? setTimeout(() => startPoll(), 5000) : null;
 
@@ -591,6 +618,14 @@ export default function InventoryPage(_props: InventoryPageProps) {
   }, [warehouseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { modalOpenRef.current = modalOpen; }, [modalOpen]);
+
+  // Re-render periodically when we show "Updated X ago" so the label stays accurate.
+  const [, setRefreshLabelTick] = useState(0);
+  useEffect(() => {
+    if (lastRefreshedAt == null) return;
+    const interval = setInterval(() => setRefreshLabelTick((t) => t + 1), 15_000);
+    return () => clearInterval(interval);
+  }, [lastRefreshedAt]);
 
   // ── Modal ─────────────────────────────────────────────────────────────────
 
@@ -755,8 +790,14 @@ export default function InventoryPage(_props: InventoryPageProps) {
           <h1 className="text-[22px] font-extrabold tracking-wide text-[var(--edk-ink)] uppercase" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
             Inventory
           </h1>
-          <p className="text-[12px] text-[var(--edk-ink-3)]">
+          <p className="text-[12px] text-[var(--edk-ink-3)]" aria-live="polite">
             {products.length} product{products.length !== 1 ? 's' : ''} · Page {currentPage} of {totalPages}
+            {backgroundRefreshing && (
+              <span className="text-[var(--edk-ink-3)]"> · Updating…</span>
+            )}
+            {!backgroundRefreshing && lastRefreshedAt != null && products.length > 0 && (
+              <span className="text-[var(--edk-ink-3)]"> · Updated {formatLastUpdated(lastRefreshedAt)}</span>
+            )}
           </p>
         </div>
         <button

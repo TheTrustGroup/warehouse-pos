@@ -16,3 +16,4 @@ export function subscribeToLogs(callback: (entry: LogEntry) => void): () => void
 export function getRecentLogBuffer(): LogEntry[];
 export const logDb: { logs: { count(): Promise<number> } | null; telemetry: unknown };
 export function getLogDb(): Promise<{ logs: { add(entry: unknown): Promise<void>; count(): Promise<number> }; } | null>;
+export function clearLogDbInstance(): void;

@@ -64,6 +64,15 @@ async function getLogDb() {
   return logDbOpenPromise;
 }
 
+/**
+ * Clear cached log DB instance so next getLogDb() will reopen. Call after a transaction/read failure
+ * (e.g. e.trans / Database closed) so we don't keep using a stale connection.
+ */
+export function clearLogDbInstance() {
+  logDbInstance = null;
+  logDbOpenPromise = null;
+}
+
 /** Sync getter for debug panel: may be null if DB not yet opened or failed. Use getLogDb() for safe async access. */
 const logDb = {
   get logs() {
