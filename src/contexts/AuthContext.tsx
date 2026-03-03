@@ -374,6 +374,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           sessionStorage.setItem('user_role', normalizedUser.role ?? DEFAULT_ROLE);
           sessionStorage.setItem('user_email', normalizedUser.email ?? '');
         }
+        // Store token from /me or /api/auth/user so cross-origin API (e.g. inventory-server) receives Authorization: Bearer and avoids 401
+        const rawBody = userData as unknown as Record<string, unknown> | null;
+        const sessionToken =
+          typeof rawBody?.token === 'string'
+            ? rawBody.token
+            : typeof rawBody?.access_token === 'string'
+              ? rawBody.access_token
+              : rawBody?.data != null && typeof rawBody.data === 'object'
+                ? (rawBody.data as Record<string, unknown>).token ?? (rawBody.data as Record<string, unknown>).access_token
+                : undefined;
+        if (typeof sessionToken === 'string' && sessionToken.trim()) {
+          localStorage.setItem('auth_token', sessionToken.startsWith('Bearer ') ? sessionToken : `Bearer ${sessionToken}`);
+        }
       } else {
         setAuthError(null);
         setUser(null);
@@ -618,6 +631,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (typeof sessionStorage !== 'undefined') {
         sessionStorage.setItem('user_role', normalizedUser.role ?? DEFAULT_ROLE);
         sessionStorage.setItem('user_email', normalizedUser.email ?? '');
+      }
+      const rawBody = userData as unknown as Record<string, unknown> | null;
+      const sessionToken =
+        typeof rawBody?.token === 'string'
+          ? rawBody.token
+          : typeof rawBody?.access_token === 'string'
+            ? rawBody.access_token
+            : rawBody?.data != null && typeof rawBody.data === 'object'
+              ? (rawBody.data as Record<string, unknown>).token ?? (rawBody.data as Record<string, unknown>).access_token
+              : undefined;
+      if (typeof sessionToken === 'string' && sessionToken.trim()) {
+        localStorage.setItem('auth_token', sessionToken.startsWith('Bearer ') ? sessionToken : `Bearer ${sessionToken}`);
       }
       return true;
     } catch {

@@ -17,6 +17,7 @@ import {
 import { subscribeToLogs, getRecentLogBuffer, clearLogs } from '../../utils/logger';
 import { syncService } from '../../services/syncService';
 import { getDB } from '../../db/inventoryDB';
+import { getLogDb } from '../../utils/logger';
 
 const PANEL_WIDTH = 420;
 const LOG_HEIGHT = 220;
@@ -65,10 +66,18 @@ export function DebugPanel() {
         setIdbSummary(null);
         return;
       }
-      const [products, syncQueue, logsCount] = await Promise.all([
+      const logDb = await getLogDb();
+      let logsCount = 0;
+      if (logDb?.logs) {
+        try {
+          logsCount = await logDb.logs.count();
+        } catch {
+          // IndexedDB unavailable or e.trans; avoid throwing
+        }
+      }
+      const [products, syncQueue] = await Promise.all([
         d.products.count(),
         d.syncQueue.count(),
-        (await import('../../utils/logger')).logDb.logs.count(),
       ]);
       setIdbSummary({ products, syncQueue, logs: logsCount });
     } catch {

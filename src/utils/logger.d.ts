@@ -14,4 +14,5 @@ export function logSync(message: string, data?: unknown): void;
 export function logError(error: unknown, context?: unknown): void;
 export function subscribeToLogs(callback: (entry: LogEntry) => void): () => void;
 export function getRecentLogBuffer(): LogEntry[];
-export const logDb: { logs: { count(): Promise<number> } };
+export const logDb: { logs: { count(): Promise<number> } | null; telemetry: unknown };
+export function getLogDb(): Promise<{ logs: { add(entry: unknown): Promise<void>; count(): Promise<number> }; } | null>;

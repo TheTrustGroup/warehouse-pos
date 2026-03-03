@@ -36,7 +36,43 @@ class LogsDexie extends Dexie {
   }
 }
 
-const logDb = new LogsDexie();
+let logDbInstance = null;
+let logDbOpenPromise = null;
+
+/**
+ * Lazy-init log DB. Returns null if IndexedDB is unavailable or open fails (e.g. private mode).
+ * Prevents "null is not an object (evaluating 'e.trans')" from Dexie when transaction is null.
+ * @returns {Promise<LogsDexie | null>}
+ */
+async function getLogDb() {
+  if (logDbInstance) return logDbInstance;
+  if (logDbOpenPromise) return logDbOpenPromise;
+  logDbOpenPromise = (async () => {
+    try {
+      if (typeof indexedDB === 'undefined') return null;
+      const db = new LogsDexie();
+      await db.open();
+      logDbInstance = db;
+      return db;
+    } catch (e) {
+      if (import.meta.env?.DEV && typeof console !== 'undefined' && console.warn) {
+        console.warn('[Logger] IndexedDB open failed:', e);
+      }
+      return null;
+    }
+  })();
+  return logDbOpenPromise;
+}
+
+/** Sync getter for debug panel: may be null if DB not yet opened or failed. Use getLogDb() for safe async access. */
+const logDb = {
+  get logs() {
+    return logDbInstance?.logs ?? null;
+  },
+  get telemetry() {
+    return logDbInstance?.telemetry ?? null;
+  },
+};
 
 /** In-memory buffer for real-time subscribers (e.g. debug panel). Last 200 entries. */
 const RECENT_BUFFER_MAX = 200;
@@ -91,11 +127,13 @@ async function writeLog(level, category, message, data) {
   if (typeof indexedDB === 'undefined') return;
 
   try {
-    await logDb.logs.add(entry);
-    const count = await logDb.logs.count();
+    const db = await getLogDb();
+    if (!db?.logs) return;
+    await db.logs.add(entry);
+    const count = await db.logs.count();
     if (count > MAX_LOGS) {
-      const toDelete = await logDb.logs.orderBy('id').limit(count - MAX_LOGS).keys();
-      await logDb.logs.bulkDelete(toDelete);
+      const toDelete = await db.logs.orderBy('id').limit(count - MAX_LOGS).keys();
+      await db.logs.bulkDelete(toDelete);
     }
   } catch (e) {
     if (import.meta.env?.DEV && typeof console !== 'undefined' && console.warn) {
@@ -169,7 +207,9 @@ export function logWarn(message, data) {
  * @returns {Promise<Array<{id: number, level: string, category: string, message: string, data?: *, timestamp: number}>>}
  */
 export async function getLogs(limit = 100, minLevel) {
-  let q = logDb.logs.orderBy('timestamp').reverse();
+  const db = await getLogDb();
+  if (!db?.logs) return [];
+  let q = db.logs.orderBy('timestamp').reverse();
   const all = await q.limit(limit * 2).toArray();
   const filtered = minLevel
     ? all.filter((e) => LEVEL_ORDER[e.level] >= LEVEL_ORDER[minLevel])
@@ -183,7 +223,9 @@ export async function getLogs(limit = 100, minLevel) {
  * @returns {Promise<string>} JSON string
  */
 export async function exportLogs(limit = 1000) {
-  const logs = await logDb.logs.orderBy('timestamp').reverse().limit(limit).toArray();
+  const db = await getLogDb();
+  if (!db?.logs) return JSON.stringify({ exportedAt: new Date().toISOString(), count: 0, logs: [] }, null, 2);
+  const logs = await db.logs.orderBy('timestamp').reverse().limit(limit).toArray();
   return JSON.stringify(
     { exportedAt: new Date().toISOString(), count: logs.length, logs },
     null,
@@ -196,7 +238,8 @@ export async function exportLogs(limit = 1000) {
  * @returns {Promise<void>}
  */
 export async function clearLogs() {
-  await logDb.logs.clear();
+  const db = await getLogDb();
+  if (db?.logs) await db.logs.clear();
   recentBuffer.length = 0;
 }
 
@@ -226,4 +269,4 @@ export function subscribeToLogs(callback) {
   return () => logSubscribers.delete(callback);
 }
 
-export { logDb };
+export { logDb, getLogDb };

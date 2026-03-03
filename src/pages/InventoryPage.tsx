@@ -50,6 +50,11 @@ function isValidWarehouseId(id: string): boolean {
   return t.length > 0 && t !== '00000000-0000-0000-0000-000000000000';
 }
 
+const PRODUCTS_CACHE_KEY_PREFIX = 'warehouse_products_';
+function productsCacheKey(warehouseId: string): string {
+  return `${PRODUCTS_CACHE_KEY_PREFIX}${warehouseId}`;
+}
+
 // ── Stat helpers ──────────────────────────────────────────────────────────
 
 function getProductQty(p: Product): number {
@@ -490,8 +495,16 @@ export default function InventoryPage(_props: InventoryPageProps) {
         }
       }
       const pending = pendingDeletesRef.current;
-      setProducts(pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list);
+      const nextList = pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list;
+      setProducts(nextList);
       getApiCircuitBreaker().recordSuccess();
+      try {
+        if (typeof localStorage !== 'undefined' && nextList.length > 0) {
+          localStorage.setItem(productsCacheKey(warehouseId), JSON.stringify(nextList));
+        }
+      } catch {
+        /* ignore quota / private mode */
+      }
     } catch (e: unknown) {
       const err = e as Error;
       if (err.name === 'AbortError' || ctrl.signal.aborted) return;
@@ -540,7 +553,22 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
     loadSizeCodes();
     if (isValidWarehouseId(warehouseId)) {
-      loadProducts();
+      let hadCache = false;
+      try {
+        const cached = typeof localStorage !== 'undefined' && localStorage.getItem(productsCacheKey(warehouseId));
+        if (cached) {
+          const parsed = JSON.parse(cached) as unknown;
+          const arr = Array.isArray(parsed) ? parsed.filter((p): p is Product => p != null && typeof p === 'object' && 'id' in p) : [];
+          if (arr.length > 0) {
+            setProducts(arr);
+            setLoading(false);
+            hadCache = true;
+          }
+        }
+      } catch {
+        /* ignore malformed cache */
+      }
+      loadProducts(hadCache);
     } else {
       setLoading(false);
     }

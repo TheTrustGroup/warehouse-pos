@@ -88,12 +88,7 @@ export function getApiHeaders(): HeadersInit {
     'Accept': 'application/json',
   };
   
-  // Only add Authorization header if token is available
-  // If using httpOnly cookies, token will be null and cookies will be sent automatically
-  if (token) {
-    headers['Authorization'] = token;
-  }
-  
+  if (token) headers['Authorization'] = token;
   return headers;
 }
 
