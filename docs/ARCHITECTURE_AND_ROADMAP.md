@@ -9,7 +9,7 @@
 
 - **Production-ready:** Auth (login/logout/session), products (CRUD, list with scope), dashboard, size-codes, sales (record, list, void). All in-repo and wired to Supabase. Frontend uses React Query, circuit breaker, and cache; first product page 100 items; scope cached 30s on API.
 - **Docs:** CONNECT (runbook), ENGINEERING_RULES (commit/migrations), SUPABASE_VERCEL_SPEED_AND_RELIABILITY (speed/uptime), this doc (architecture + roadmap).
-- **Next:** Phase 3 extend requestId/error shape to more routes and add logging; Phase 4 offline sync and mobile parity polish.
+- **Next:** Phase 3 health extension optional; Phase 4 offline sync and mobile parity polish.
 
 ---
 
@@ -106,7 +106,7 @@
 ### Phase 3 — Observability and reliability
 
 - [x] **Error shape and requestId:** `lib/apiResponse.ts` provides `getRequestId(req)`, `jsonError(status, message, { code, requestId, headers })`, `jsonErrorBody()`. GET /api/products uses it for 500/503/504; extend to other routes as needed.
-- [ ] **Structured logging:** Log 4xx/5xx and slow requests with requestId (e.g. in middleware or per-route).
+- [x] **Structured logging:** `lib/requestLog.ts` logs 4xx/5xx and slow requests (>2s) with requestId; used in GET/POST /api/products and GET /api/sales. One-line JSON for log aggregators.
 - [ ] **Health:** Keep `/api/health`; extend if needed (e.g. queue depth, Supabase latency).
 
 ### Phase 4 — Product and performance
@@ -142,6 +142,7 @@
 | Env (API) | `inventory-server/ENV_SETUP.md`, `.env.local.example` |
 | Env (frontend) | `.env.example` |
 | API error shape (requestId, code) | `inventory-server/lib/apiResponse.ts` |
+| Request logging (4xx/5xx, slow) | `inventory-server/lib/requestLog.ts` |
 | RBAC permissions | `src/types/permissions.ts` |
 | Nav (desktop + mobile) | `src/config/navigation.tsx` |
 | Inventory lifecycle | `src/contexts/InventoryContext.tsx` (file header) |

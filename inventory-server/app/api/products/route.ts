@@ -5,6 +5,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { corsHeaders } from '@/lib/cors';
+import { getRequestId, jsonError, jsonErrorBody } from '@/lib/apiResponse';
+import { logApiResponse } from '@/lib/requestLog';
 import { requireAuth, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { getScopeForUser } from '@/lib/data/userScopes';
 import {
@@ -38,15 +40,22 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  try {
-    const h = corsHeaders(req);
-    const fail500 = (message: string): NextResponse =>
-      withCors(NextResponse.json({ error: message }, { status: 500, headers: h }), req);
+  const start = Date.now();
+  const requestId = getRequestId(req);
+  const h = corsHeaders(req);
+  const fail = (status: number, message: string, code?: string): NextResponse => {
+    logApiResponse(req, status, Date.now() - start, { message, code });
+    return withCors(jsonError(status, message, { code, requestId, headers: h }), req);
+  };
+  const logAndReturn = (res: NextResponse): NextResponse => {
+    logApiResponse(req, res.status, Date.now() - start);
+    return res;
+  };
 
+  try {
     try {
       if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
-        console.error('[GET /api/products] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
-        return fail500('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Set them in Vercel project environment variables.');
+        return fail(500, 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Set them in Vercel project environment variables.');
       }
 
       const auth = await requireAuth(req);
@@ -54,9 +63,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
       const { searchParams } = new URL(req.url);
       const queryWarehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
-      const t0 = Date.now();
       const scope = await getScopeForUser(auth.email);
-      console.log('[products] getScopeForUser took:', Date.now() - t0, 'ms');
       const allowed = scope.allowedWarehouseIds;
       const roleNorm = (auth.role ?? '').toLowerCase().replace(/\s+/g, '_');
       const isAdminNoScope = (roleNorm === 'admin' || roleNorm === 'super_admin') && allowed.length === 0;
@@ -65,12 +72,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         : (allowed[0] ?? '');
 
       if (!warehouseId) {
-        return withCors(
-          NextResponse.json(
-            { error: allowed.length ? 'warehouse_id required or must be in your scope' : 'No warehouse access' },
-            { status: 400, headers: h }
-          ),
-          req
+        return logAndReturn(
+          withCors(
+            NextResponse.json(
+              { error: allowed.length ? 'warehouse_id required or must be in your scope' : 'No warehouse access' },
+              { status: 400, headers: h }
+            ),
+            req
+          )
         );
       }
 
@@ -78,9 +87,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       if (productId) {
         const product = await getProductById(warehouseId, productId);
         if (!product) {
-          return withCors(NextResponse.json({ error: 'Product not found' }, { status: 404, headers: h }), req);
+          return logAndReturn(
+            withCors(NextResponse.json({ error: 'Product not found' }, { status: 404, headers: h }), req)
+          );
         }
-        return withCors(NextResponse.json(product, { headers: h }), req);
+        const singleRes = NextResponse.json(product, { headers: h });
+        singleRes.headers.set('Cache-Control', 'private, no-store, max-age=0');
+        return logAndReturn(withCors(singleRes, req));
       }
 
       /** Cap at 250 per request to stay under Vercel function timeout (cold start + Supabase). Use offset for pagination. */
@@ -103,15 +116,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           outOfStock: outOfStock || undefined,
           signal: controller.signal,
         });
-        return withCors(NextResponse.json({ data: result.data, total: result.total }, { headers: h }), req);
+        const res = NextResponse.json({ data: result.data, total: result.total }, { headers: h });
+        res.headers.set('Cache-Control', 'private, no-store, max-age=0');
+        res.headers.set('X-Content-Type-Options', 'nosniff');
+        return logAndReturn(withCors(res, req));
       } catch (e) {
         const isAbortOrTimeout =
           (e instanceof Error && e.name === 'AbortError') || isStatementTimeoutError(e);
         if (isAbortOrTimeout) {
-          return withCors(
-            NextResponse.json({ error: 'Query timed out' }, { status: 504, headers: h }),
-            req
-          );
+          return fail(504, 'Query timed out', 'QUERY_TIMEOUT');
         }
         throw e;
       } finally {
@@ -121,27 +134,28 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const message = e instanceof Error ? e.message : 'Failed to load products';
       console.error('[GET /api/products]', message);
       if (isStatementTimeoutError(e)) {
-        const res = withCors(
-          NextResponse.json(
-            { error: 'Query timed out. The request took too long. Please try again or use a smaller limit/offset.' },
-            { status: 503, headers: h }
-          ),
+        logApiResponse(req, 503, Date.now() - start, { message: 'Query timed out', code: 'QUERY_TIMEOUT' });
+        return withCors(
+          jsonError(503, 'Query timed out. The request took too long. Please try again or use a smaller limit/offset.', {
+            code: 'QUERY_TIMEOUT',
+            requestId,
+            headers: { ...h, 'Retry-After': '60' },
+          }),
           req
         );
-        res.headers.set('Retry-After', '60');
-        return res;
       }
-      return fail500(message);
+      return fail(500, message);
     }
   } catch (outer: unknown) {
     const msg = outer instanceof Error ? outer.message : 'Failed to load products';
-    console.error('[GET /api/products] outer', msg);
+    const durationMs = Date.now() - start;
+    logApiResponse(req, 500, durationMs, { message: msg });
     try {
       const h = corsHeaders(req);
-      return withCors(NextResponse.json({ error: msg }, { status: 500, headers: h }), req);
+      return withCors(jsonError(500, msg, { requestId: getRequestId(req), headers: h }), req);
     } catch {
       return NextResponse.json(
-        { error: msg },
+        jsonErrorBody(msg, { requestId: getRequestId(req) }),
         { status: 500, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } }
       );
     }
@@ -240,9 +254,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(req.url);
   const productId = searchParams.get('id')?.trim();
   const queryWarehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
-  const t0 = Date.now();
   const scope = await getScopeForUser(auth.email);
-  console.log('[products DELETE] getScopeForUser took:', Date.now() - t0, 'ms');
   const allowed = scope.allowedWarehouseIds;
   const roleNorm = (auth.role ?? '').toLowerCase().replace(/\s+/g, '_');
   const isAdminNoScope = (roleNorm === 'admin' || roleNorm === 'super_admin') && allowed.length === 0;
