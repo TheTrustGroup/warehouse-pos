@@ -17,8 +17,8 @@ import {
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
 
 export const dynamic = 'force-dynamic';
-/** Allow longer than DB statement_timeout; Vercel project can be higher, but route export can cap. */
-export const maxDuration = 300;
+/** Higher than DB statement_timeout (10s) so we return a clean 504/503 instead of Vercel 504. Requires Vercel Pro for >10s. */
+export const maxDuration = 30;
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   const h = corsHeaders(req);
@@ -26,9 +26,11 @@ function withCors(res: NextResponse, req: NextRequest): NextResponse {
   return res;
 }
 
+const PRODUCTS_QUERY_TIMEOUT_MS = 9000;
+
 function isStatementTimeoutError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
-  return /statement timeout|canceling statement due to statement timeout/i.test(msg);
+  return /statement timeout|canceling statement due to statement timeout|query timeout|abort/i.test(msg);
 }
 
 export async function OPTIONS(req: NextRequest) {
@@ -87,15 +89,32 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const lowStock = searchParams.get('low_stock') === 'true' || searchParams.get('low_stock') === '1';
       const outOfStock = searchParams.get('out_of_stock') === 'true' || searchParams.get('out_of_stock') === '1';
 
-      const { data, total } = await getWarehouseProducts(warehouseId, {
-        limit,
-        offset,
-        q,
-        category,
-        lowStock: lowStock || undefined,
-        outOfStock: outOfStock || undefined,
-      });
-      return withCors(NextResponse.json({ data, total }, { headers: h }), req);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), PRODUCTS_QUERY_TIMEOUT_MS);
+      try {
+        const result = await getWarehouseProducts(warehouseId, {
+          limit,
+          offset,
+          q,
+          category,
+          lowStock: lowStock || undefined,
+          outOfStock: outOfStock || undefined,
+          signal: controller.signal,
+        });
+        return withCors(NextResponse.json({ data: result.data, total: result.total }, { headers: h }), req);
+      } catch (e) {
+        const isAbortOrTimeout =
+          (e instanceof Error && e.name === 'AbortError') || isStatementTimeoutError(e);
+        if (isAbortOrTimeout) {
+          return withCors(
+            NextResponse.json({ error: 'Query timed out' }, { status: 504, headers: h }),
+            req
+          );
+        }
+        throw e;
+      } finally {
+        clearTimeout(timeout);
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load products';
       console.error('[GET /api/products]', message);

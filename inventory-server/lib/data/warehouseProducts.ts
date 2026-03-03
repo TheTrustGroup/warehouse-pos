@@ -1,7 +1,8 @@
 /**
  * Warehouse products list and create. List response includes images for POS/Inventory.
  */
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
 
 export interface ListOptions {
   limit?: number;
@@ -10,6 +11,8 @@ export interface ListOptions {
   category?: string;
   lowStock?: boolean;
   outOfStock?: boolean;
+  /** When set, passed to fetch() for all Supabase queries so the request can be aborted (e.g. timeout). */
+  signal?: AbortSignal;
 }
 
 export interface ListResult {
@@ -62,12 +65,7 @@ export interface PutProductBody {
 }
 
 function getDb(): SupabaseClient {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key?.trim()) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for the inventory-server.');
-  }
-  return createClient(url, key, { auth: { persistSession: false } });
+  return getSupabase();
 }
 
 /** Turn DB constraint errors into clear 400-style messages for the client. */
@@ -112,16 +110,18 @@ export async function getWarehouseProducts(
   const limit = Math.min(Math.max(options.limit ?? 250, 1), 250);
   const offset = Math.max(options.offset ?? 0, 0);
   const effectiveWarehouseId = warehouseId ?? '';
+  const fetchOpts = options.signal ? { fetch: { signal: options.signal } as RequestInit } : undefined;
+  type SelectOpts = { count?: 'exact'; head?: boolean };
+  const selectOpts = (opts: SelectOpts = {}): SelectOpts & typeof fetchOpts =>
+    ({ ...opts, ...fetchOpts } as SelectOpts & typeof fetchOpts);
 
-  function buildBaseQuery(withWarehouseFilter: boolean) {
+  // warehouse_products has no warehouse_id — products are global; inventory is per-warehouse.
+  function buildBaseQuery() {
     let q = db
       .from('warehouse_products')
-      .select(WAREHOUSE_PRODUCTS_SELECT, { count: 'exact' })
+      .select(WAREHOUSE_PRODUCTS_SELECT, selectOpts({ count: 'exact' }))
       .order('name')
       .range(offset, offset + limit - 1);
-    if (withWarehouseFilter && effectiveWarehouseId) {
-      q = q.eq('warehouse_id', effectiveWarehouseId);
-    }
     if (options.q?.trim()) {
       const search = options.q.trim();
       q = q.or(`name.ilike.%${search}%,sku.ilike.%${search}%`);
@@ -132,18 +132,45 @@ export async function getWarehouseProducts(
     return q;
   }
 
-  let query = buildBaseQuery(true);
-  let rows: Record<string, unknown>[] | null = null;
-  let count: number | null = null;
-  let error: { message: string } | null = null;
-  ({ data: rows, error, count } = await query);
+  // Step 1: warehouse_products (no warehouse filter). Steps 2–3: inventory + by_size for warehouse. Step 4: filter in JS.
+  const productsPromise = buildBaseQuery();
+
+  const inventoryPromise = effectiveWarehouseId
+    ? (async () => {
+        const res = await db
+          .from('warehouse_inventory')
+          .select('product_id, quantity', selectOpts())
+          .eq('warehouse_id', effectiveWarehouseId);
+        return res;
+      })()
+    : Promise.resolve({ data: [] as { product_id: string; quantity?: number }[], error: null });
+
+  const sizesPromise = effectiveWarehouseId
+    ? (async () => {
+        const res = await db
+          .from('warehouse_inventory_by_size')
+          .select('product_id, size_code, quantity, size_codes!left(size_label)', selectOpts())
+          .eq('warehouse_id', effectiveWarehouseId);
+        return res;
+      })()
+    : Promise.resolve({ data: [] as Array<{ product_id: string; size_code: string; quantity: number; size_codes?: { size_label?: string } | null }>, error: null });
+
+  const [productsResult, inventoryResult, sizesResult] = await Promise.all([
+    productsPromise,
+    inventoryPromise,
+    sizesPromise,
+  ]);
+
+  let rows: Record<string, unknown>[] | null = (productsResult as { data: Record<string, unknown>[] | null }).data;
+  let count: number | null = (productsResult as { count: number | null }).count ?? null;
+  let error: { message: string } | null = (productsResult as { error: { message: string } | null }).error;
 
   if (error && isStatementTimeoutError(error)) {
     throw new Error(error.message);
   }
 
   if (error && isMissingColumnError(error)) {
-    const retry = await buildBaseQuery(false);
+    const retry = await buildBaseQuery();
     if (!retry.error) {
       rows = retry.data ?? [];
       count = retry.count ?? (rows as unknown[]).length;
@@ -151,7 +178,7 @@ export async function getWarehouseProducts(
     } else if (isMissingColumnError(retry.error)) {
       let fallbackQuery = db
         .from('warehouse_products')
-        .select(WAREHOUSE_PRODUCTS_SELECT_MINIMAL, { count: 'exact' })
+        .select(WAREHOUSE_PRODUCTS_SELECT_MINIMAL, selectOpts({ count: 'exact' }))
         .order('name')
         .range(offset, offset + limit - 1);
       if (options.q?.trim()) {
@@ -177,48 +204,38 @@ export async function getWarehouseProducts(
 
   const list = (rows ?? []) as Record<string, unknown>[];
   const productIds = list.map((r) => r.id as string);
+  const productIdSet = new Set(productIds);
 
   const invMap: Record<string, number> = {};
   const sizeMap: Record<string, Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>> = {};
 
   if (effectiveWarehouseId && productIds.length > 0) {
     type SizeRow = { product_id: string; size_code: string; quantity: number; size_codes?: { size_label?: string } | null };
-    let sizeRows: SizeRow[] = [];
-    const [invRes, withJoin] = await Promise.all([
-      db
-        .from('warehouse_inventory')
-        .select('product_id, quantity')
-        .eq('warehouse_id', effectiveWarehouseId)
-        .in('product_id', productIds),
-      db
-        .from('warehouse_inventory_by_size')
-        .select('product_id, size_code, quantity, size_codes!left(size_label)')
-        .eq('warehouse_id', effectiveWarehouseId)
-        .in('product_id', productIds),
-    ]);
 
-    if (invRes.error) {
-      console.error('[warehouseProducts] warehouse_inventory query failed:', invRes.error.message);
-      // Continue with empty quantities so list and dashboard still load; client sees zeros until DB is healthy.
+    if (inventoryResult.error) {
+      console.error('[warehouseProducts] warehouse_inventory query failed:', inventoryResult.error.message);
     } else {
-      for (const inv of invRes.data ?? []) {
-        const r = inv as { product_id: string; quantity?: number };
-        invMap[r.product_id] = Number(r.quantity ?? 0);
+      const invData = (inventoryResult.data ?? []) as { product_id: string; quantity?: number }[];
+      for (const inv of invData) {
+        if (productIdSet.has(inv.product_id)) {
+          invMap[inv.product_id] = Number(inv.quantity ?? 0);
+        }
       }
     }
 
-    if (withJoin.error && (withJoin.error.message?.includes('relation') || withJoin.error.message?.includes('size_codes'))) {
+    let sizeRows: SizeRow[] = [];
+    if (sizesResult.error && (sizesResult.error.message?.includes('relation') || sizesResult.error.message?.includes('size_codes'))) {
       const withoutJoin = await db
         .from('warehouse_inventory_by_size')
-        .select('product_id, size_code, quantity')
+        .select('product_id, size_code, quantity', selectOpts())
         .eq('warehouse_id', effectiveWarehouseId)
         .in('product_id', productIds);
       if (!withoutJoin.error) sizeRows = (withoutJoin.data ?? []) as SizeRow[];
-    } else if (!withJoin.error) {
-      sizeRows = (withJoin.data ?? []) as SizeRow[];
+    } else if (!sizesResult.error) {
+      const sizeData = (sizesResult.data ?? []) as SizeRow[];
+      sizeRows = sizeData.filter((r) => productIdSet.has(r.product_id));
     }
-    const sizeList = sizeRows;
-    for (const r of sizeList) {
+    for (const r of sizeRows) {
       if (!sizeMap[r.product_id]) sizeMap[r.product_id] = [];
       sizeMap[r.product_id].push({
         sizeCode: String(r.size_code),
@@ -265,7 +282,18 @@ export async function getWarehouseProducts(
     };
   }).filter((p) => p !== null) as ListProduct[];
 
-  return { data, total: count ?? data.length };
+  // When a warehouse is selected, only return products that exist in inventory for that warehouse.
+  const filtered =
+    effectiveWarehouseId === ''
+      ? data
+      : data.filter(
+          (p) => invMap[p.id] !== undefined || (sizeMap[p.id]?.length ?? 0) > 0
+        );
+
+  return {
+    data: filtered,
+    total: effectiveWarehouseId ? filtered.length : (count ?? data.length),
+  };
 }
 
 /** Get one product by id and warehouse (for GET ?id=). Works when warehouse_products has no warehouse_id. */
