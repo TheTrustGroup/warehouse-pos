@@ -156,7 +156,8 @@ function unwrapProduct(raw: unknown): Product | null {
 /** Normalize API list so each product has variants.color from API's top-level color (for color filter). */
 function unwrapProductList(raw: unknown): Product[] {
   if (Array.isArray(raw)) {
-    return raw.map((item: Record<string, unknown>) => ({
+    const safe = raw.filter((item): item is Record<string, unknown> => item != null && typeof item === 'object');
+    return safe.map((item: Record<string, unknown>) => ({
       ...item,
       variants: {
         ...(typeof item.variants === 'object' && item.variants ? item.variants : {}),
@@ -167,8 +168,8 @@ function unwrapProductList(raw: unknown): Product[] {
   if (!raw || typeof raw !== 'object') return [];
   const r = raw as Record<string, unknown>;
   const list = r.data ?? r.products ?? r.items ?? [];
-  if (!Array.isArray(list)) return [];
-  return list.map((item: Record<string, unknown>) => ({
+  const arr = Array.isArray(list) ? list.filter((item): item is Record<string, unknown> => item != null && typeof item === 'object') : [];
+  return arr.map((item: Record<string, unknown>) => ({
     ...item,
     variants: {
       ...(typeof item.variants === 'object' && item.variants ? item.variants : {}),
@@ -198,9 +199,10 @@ function ToastContainer({ toasts }: { toasts: ToastItem[] }) {
     error:   'border-l-red-500',
     info:    'border-l-blue-500',
   };
+  const safeToasts = (toasts ?? []).filter((t): t is ToastItem => t != null && typeof t === 'object' && typeof t.type === 'string');
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
-      {toasts.map(t => (
+      {safeToasts.map(t => (
         <div key={t.id}
           className={`flex items-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 text-white
                       text-[13px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.25)]

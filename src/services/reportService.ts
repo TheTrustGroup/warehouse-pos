@@ -1,4 +1,4 @@
-import { Product, Transaction } from '../types';
+import { Product, Transaction, TransactionItem } from '../types';
 import { formatDate, getCategoryDisplay } from '../lib/utils';
 
 export interface SalesReport {
@@ -76,36 +76,52 @@ function isMockTransaction(transaction: Transaction): boolean {
   return false;
 }
 
+/** Safe list of items for a transaction (guards against null/undefined or malformed stored data). */
+function safeItems(t: Transaction | null | undefined): Transaction['items'] {
+  if (t == null || typeof t !== 'object') return [];
+  const items = t.items;
+  if (!Array.isArray(items)) return [];
+  return items.filter((item): item is TransactionItem => item != null && typeof item === 'object');
+}
+
 export function generateSalesReport(
   transactions: Transaction[],
   products: Product[],
   startDate: Date,
   endDate: Date
 ): SalesReport {
+  const safeTransactions = (transactions ?? []).filter(
+    (t): t is Transaction => t != null && typeof t === 'object' && (t.status != null || t.createdAt != null)
+  );
+  const safeProducts = (products ?? []).filter((p): p is Product => p != null && typeof p === 'object');
+
   // Filter transactions: date range, completed status, and exclude mock data
-  const filteredTransactions = transactions.filter(t => {
-    const tDate = new Date(t.createdAt);
-    const inDateRange = tDate >= startDate && tDate <= endDate;
-    const isCompleted = t.status === 'completed';
-    const isRealData = !isMockTransaction(t);
-    
-    return inDateRange && isCompleted && isRealData;
+  const filteredTransactions = safeTransactions.filter(t => {
+    try {
+      const tDate = new Date(t.createdAt);
+      const inDateRange = tDate >= startDate && tDate <= endDate;
+      const isCompleted = t.status === 'completed';
+      const isRealData = !isMockTransaction(t);
+      return inDateRange && isCompleted && isRealData;
+    } catch {
+      return false;
+    }
   });
 
-  const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.total, 0);
+  const totalRevenue = filteredTransactions.reduce((sum, t) => sum + (Number(t.total) || 0), 0);
   const totalTransactions = filteredTransactions.length;
   const totalItemsSold = filteredTransactions.reduce(
-    (sum, t) => sum + t.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
+    (sum, t) => sum + safeItems(t).reduce((itemSum, item) => itemSum + (Number(item.quantity) || 0), 0),
     0
   );
 
   // Calculate profit
   let totalProfit = 0;
   filteredTransactions.forEach(transaction => {
-    transaction.items.forEach(item => {
-      const product = products.find(p => p.id === item.productId);
+    safeItems(transaction).forEach(item => {
+      const product = safeProducts.find(p => p.id === item.productId);
       if (product) {
-        const profit = (item.unitPrice - product.costPrice) * item.quantity;
+        const profit = ((Number(item.unitPrice) || 0) - (Number(product.costPrice) || 0)) * (Number(item.quantity) || 0);
         totalProfit += profit;
       }
     });
@@ -116,16 +132,18 @@ export function generateSalesReport(
   // Top selling products
   const productSales = new Map<string, { name: string; quantity: number; revenue: number }>();
   filteredTransactions.forEach(t => {
-    t.items.forEach(item => {
+    safeItems(t).forEach(item => {
+      const qty = Number(item.quantity) || 0;
+      const rev = Number(item.subtotal) || 0;
       const existing = productSales.get(item.productId);
       if (existing) {
-        existing.quantity += item.quantity;
-        existing.revenue += item.subtotal;
+        existing.quantity += qty;
+        existing.revenue += rev;
       } else {
         productSales.set(item.productId, {
-          name: item.productName,
-          quantity: item.quantity,
-          revenue: item.subtotal,
+          name: item.productName ?? '',
+          quantity: qty,
+          revenue: rev,
         });
       }
     });
@@ -143,18 +161,18 @@ export function generateSalesReport(
   // Sales by category
   const categorySales = new Map<string, { revenue: number; quantity: number }>();
   filteredTransactions.forEach(t => {
-    t.items.forEach(item => {
-      const product = products.find(p => p.id === item.productId);
+    safeItems(t).forEach(item => {
+      const product = safeProducts.find(p => p.id === item.productId);
       if (product) {
         const catKey = getCategoryDisplay(product.category);
         const existing = categorySales.get(catKey);
         if (existing) {
-          existing.revenue += item.subtotal;
-          existing.quantity += item.quantity;
+          existing.revenue += Number(item.subtotal) || 0;
+          existing.quantity += Number(item.quantity) || 0;
         } else {
           categorySales.set(catKey, {
-            revenue: item.subtotal,
-            quantity: item.quantity,
+            revenue: Number(item.subtotal) || 0,
+            quantity: Number(item.quantity) || 0,
           });
         }
       }
@@ -172,13 +190,18 @@ export function generateSalesReport(
   // Sales by day
   const dailySales = new Map<string, { revenue: number; transactions: number }>();
   filteredTransactions.forEach(t => {
-    const dateKey = formatDate(t.createdAt);
-    const existing = dailySales.get(dateKey);
-    if (existing) {
-      existing.revenue += t.total;
-      existing.transactions += 1;
-    } else {
-      dailySales.set(dateKey, { revenue: t.total, transactions: 1 });
+    try {
+      const dateKey = formatDate(t.createdAt);
+      const total = Number(t.total) || 0;
+      const existing = dailySales.get(dateKey);
+      if (existing) {
+        existing.revenue += total;
+        existing.transactions += 1;
+      } else {
+        dailySales.set(dateKey, { revenue: total, transactions: 1 });
+      }
+    } catch {
+      /* skip malformed date */
     }
   });
 
@@ -238,8 +261,9 @@ function isMockProduct(product: Product): boolean {
 }
 
 export function generateInventoryReport(products: Product[]): InventoryReport {
+  const safeProducts = (products ?? []).filter((p): p is Product => p != null && typeof p === 'object');
   // Filter out mock products
-  const realProducts = products.filter(p => !isMockProduct(p));
+  const realProducts = safeProducts.filter(p => !isMockProduct(p));
   
   const totalProducts = realProducts.length;
   const qty = (p: Product) => Number(p.quantity ?? 0) || 0;

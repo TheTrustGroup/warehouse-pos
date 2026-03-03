@@ -52,11 +52,15 @@ export function Reports() {
 
     const fallbackLocal = () => {
       const stored = getStoredData<Transaction[]>('transactions', []);
-      const withDates = (Array.isArray(stored) ? stored : []).map((t: any) => ({
-        ...t,
-        createdAt: parseDate(t.createdAt) || new Date(),
-        completedAt: t.completedAt ? parseDate(t.completedAt) : null,
-      }));
+      const raw = Array.isArray(stored) ? stored : [];
+      const withDates = raw
+        .filter((t: unknown) => t != null && typeof t === 'object')
+        .map((t: any) => ({
+          ...t,
+          items: Array.isArray(t?.items) ? t.items.filter((i: unknown) => i != null && typeof i === 'object') : [],
+          createdAt: parseDate(t?.createdAt) || new Date(),
+          completedAt: t?.completedAt ? parseDate(t.completedAt) : null,
+        }));
       setTransactions(withDates);
       setTransactionsSource('local');
     };
@@ -69,7 +73,8 @@ export function Reports() {
           to: toIso,
           limit: 2000,
         });
-        setTransactions(data);
+        const safe = (data ?? []).filter((t): t is Transaction => t != null && typeof t === 'object');
+        setTransactions(safe);
         setTransactionsSource('server');
       } catch {
         fallbackLocal();

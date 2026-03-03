@@ -327,7 +327,8 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
         `/api/sales?${params}`,
         { maxRetries: 3, timeoutMs: 20_000 }
       );
-      setSales(Array.isArray(data) ? data : (data as { data?: Sale[] }).data ?? []);
+      const list = Array.isArray(data) ? data : (data as { data?: Sale[] }).data ?? [];
+      setSales(list.filter((s): s is Sale => s != null && typeof s === 'object'));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load sales');
     } finally {
@@ -340,12 +341,14 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
   // ── Filter by search ──────────────────────────────────────────────────────
 
   const displayed = sales.filter(s => {
+    if (s == null || typeof s !== 'object') return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
+    const lines = Array.isArray(s.lines) ? s.lines : [];
     return (
       s.receiptId?.toLowerCase().includes(q) ||
       s.customerName?.toLowerCase().includes(q) ||
-      s.lines.some(l => l.name.toLowerCase().includes(q) || l.sku?.toLowerCase().includes(q))
+      lines.some((l: SaleLine) => l != null && typeof l === 'object' && (l.name?.toLowerCase().includes(q) || l.sku?.toLowerCase().includes(q)))
     );
   });
 

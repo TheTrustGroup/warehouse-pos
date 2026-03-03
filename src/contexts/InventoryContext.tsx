@@ -412,7 +412,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             }
             const parsed = parseProductsResponse(raw);
             if (!parsed.success) throw new Error(parsed.message);
-            let list = parsed.items.map((p) => normalizeProduct(p));
+            let list = parsed.items
+              .filter((p) => p != null && typeof p === 'object')
+              .map((p) => normalizeProduct(p))
+              .filter((p): p is Product => p != null && typeof p === 'object');
             const totalFromApi = raw != null && typeof raw === 'object' && 'total' in raw ? (raw as { total?: number }).total : undefined;
             if (typeof totalFromApi === 'number' && totalFromApi > list.length && list.length === PAGE_LIMIT) {
               const basePath = path.includes('/admin/api/') ? '/admin/api/products' : '/api/products';
@@ -421,7 +424,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
                   const nextRaw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, pathForWid(basePath, { limit: PAGE_LIMIT, offset }), getOpts);
                   const nextParsed = parseProductsResponse(nextRaw);
                   if (!nextParsed.success || nextParsed.items.length === 0) break;
-                  list = list.concat(nextParsed.items.map((p) => normalizeProduct(p)));
+                  const nextItems = nextParsed.items
+                    .filter((p) => p != null && typeof p === 'object')
+                    .map((p) => normalizeProduct(p))
+                    .filter((p): p is Product => p != null && typeof p === 'object');
+                  list = list.concat(nextItems);
                   if (nextParsed.items.length < PAGE_LIMIT) break;
                 } catch {
                   break;
