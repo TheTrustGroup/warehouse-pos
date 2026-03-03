@@ -341,8 +341,6 @@ function App() {
                           path="reports"
                           element={
                             <ProtectedRoute
-                              allowedRoles={['admin', 'super_admin', 'manager']}
-                              redirectPathIfForbidden="/pos"
                               anyPermissions={[
                                 PERMISSIONS.REPORTS.VIEW_SALES,
                                 PERMISSIONS.REPORTS.VIEW_INVENTORY,
