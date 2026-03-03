@@ -1,15 +1,23 @@
 /**
  * Offline-first inventory hook: Dexie live queries + CRUD + sync.
  * Abstracts all offline operations; use this instead of direct API calls for product list and mutations.
+ * All Dexie/idb access is guarded so null transaction (e.g. private mode, quota) never throws "e.trans" / "n.type".
  * @module hooks/useInventory
  */
 
 import { useCallback, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/inventoryDB';
+import { getDB } from '../db/inventoryDB';
 import * as inventoryDb from '../db/inventoryDB';
 import { syncService } from '../services/syncService';
 import { isOfflineEnabled } from '../lib/offlineFeatureFlag';
+
+/** Safe query: run fn(d) only when getDB() resolves to non-null; return [] on any error or null db. */
+function safeQuery(fn) {
+  return getDB()
+    .then((d) => (d ? fn(d) : []))
+    .catch(() => []);
+}
 
 /**
  * Normalize productData (partial) to the shape expected by inventoryDB (name, sku, category, price, quantity, etc.).
@@ -71,9 +79,12 @@ function recordToProduct(record) {
  * }}
  */
 export function useInventory() {
-  const products = useLiveQuery(() => db.products.toArray(), []);
+  const products = useLiveQuery(
+    () => safeQuery((d) => d.products.toArray()),
+    []
+  );
   const unsyncedCount = useLiveQuery(
-    () => db.products.where('syncStatus').notEqual('synced').count(),
+    () => getDB().then((d) => (d ? d.products.where('syncStatus').notEqual('synced').count() : 0)).catch(() => 0),
     []
   );
   const [isSyncing, setIsSyncing] = useState(false);
@@ -112,7 +123,8 @@ export function useInventory() {
   }, []);
 
   const clearFailedSync = useCallback(async (queueItemId) => {
-    await db.syncQueue.delete(queueItemId);
+    const d = await getDB();
+    if (d) await d.syncQueue.delete(queueItemId).catch(() => {});
   }, []);
 
   /** Undo a just-added product (remove from Dexie + sync queue). Call within ~10s of add. */

@@ -9,7 +9,7 @@ import { Check, Loader2, CloudOff, AlertTriangle } from 'lucide-react';
 import { useNetworkStatusContext } from '../contexts/NetworkStatusContext';
 import { syncService } from '../services/syncService';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/inventoryDB';
+import { getDB } from '../db/inventoryDB';
 import { SyncQueueModal } from './SyncQueueModal';
 import { useAnimations } from '../hooks/useAnimations';
 import { syncBarVariants, pulseVariants } from '../animations/liquidGlass';
@@ -20,9 +20,18 @@ export function SyncStatusBar() {
   const { isOnline } = useNetworkStatusContext();
   const [modalOpen, setModalOpen] = useState(false);
 
-  const pending = useLiveQuery(() => db.syncQueue.where('status').equals('pending').count(), []) ?? 0;
-  const syncing = useLiveQuery(() => db.syncQueue.where('status').equals('syncing').count(), []) ?? 0;
-  const failed = useLiveQuery(() => db.syncQueue.where('status').equals('failed').count(), []) ?? 0;
+  const pending = useLiveQuery(
+    () => getDB().then((d) => (d ? d.syncQueue.where('status').equals('pending').count() : 0)).catch(() => 0),
+    []
+  ) ?? 0;
+  const syncing = useLiveQuery(
+    () => getDB().then((d) => (d ? d.syncQueue.where('status').equals('syncing').count() : 0)).catch(() => 0),
+    []
+  ) ?? 0;
+  const failed = useLiveQuery(
+    () => getDB().then((d) => (d ? d.syncQueue.where('status').equals('failed').count() : 0)).catch(() => 0),
+    []
+  ) ?? 0;
 
   const total = pending + syncing + failed;
 

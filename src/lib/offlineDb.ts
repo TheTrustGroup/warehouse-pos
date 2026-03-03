@@ -24,7 +24,14 @@ export function openDb(): Promise<IDBDatabase> {
     }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onerror = () => reject(req.error);
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (db == null) {
+        reject(new Error('IndexedDB open returned no database'));
+        return;
+      }
+      resolve(db);
+    };
     req.onupgradeneeded = (ev) => {
       const db = (ev.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_PRODUCTS)) {

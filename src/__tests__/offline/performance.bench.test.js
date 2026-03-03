@@ -17,16 +17,18 @@ const mockWhere = vi.fn(() => ({
   }),
 }));
 
-vi.mock('../../db/inventoryDB', () => ({
-  db: {
-    syncQueue: {
-      add: (...args) => mockQueueAdd(...args),
-      where: (...args) => mockWhere(...args),
-      update: (...args) => mockQueueUpdate(...args),
-      delete: (...args) => mockQueueDelete(...args),
-    },
-    products: { update: (...args) => mockProductsUpdate(...args) },
+const mockDb = {
+  syncQueue: {
+    add: (...args) => mockQueueAdd(...args),
+    where: (...args) => mockWhere(...args),
+    update: (...args) => mockQueueUpdate(...args),
+    delete: (...args) => mockQueueDelete(...args),
   },
+  products: { update: (...args) => mockProductsUpdate(...args) },
+};
+
+vi.mock('../../db/inventoryDB', () => ({
+  getDB: () => Promise.resolve(mockDb),
   setSyncError: vi.fn(() => Promise.resolve()),
   getConflictPreference: vi.fn(() => Promise.resolve(null)),
   appendConflictAuditLog: vi.fn(() => Promise.resolve()),

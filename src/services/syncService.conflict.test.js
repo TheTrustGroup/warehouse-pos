@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { getDB } from '../db/inventoryDB';
 import { SyncService } from './syncService';
 
 const mockProductsUpdate = vi.fn(() => Promise.resolve());
@@ -10,22 +11,24 @@ const mockProductsDelete = vi.fn(() => Promise.resolve());
 const mockQueueUpdate = vi.fn(() => Promise.resolve());
 const mockQueueDelete = vi.fn(() => Promise.resolve());
 
-vi.mock('../db/inventoryDB', () => ({
-  db: {
-    syncQueue: {
-      where: vi.fn(() => ({
-        equals: vi.fn(() => ({
-          sortBy: vi.fn(() => Promise.resolve([])),
-        })),
+const mockDb = {
+  syncQueue: {
+    where: vi.fn(() => ({
+      equals: vi.fn(() => ({
+        sortBy: vi.fn(() => Promise.resolve([])),
       })),
-      update: (...args) => mockQueueUpdate(...args),
-      delete: (...args) => mockQueueDelete(...args),
-    },
-    products: {
-      update: (...args) => mockProductsUpdate(...args),
-      delete: (...args) => mockProductsDelete(...args),
-    },
+    })),
+    update: (...args) => mockQueueUpdate(...args),
+    delete: (...args) => mockQueueDelete(...args),
   },
+  products: {
+    update: (...args) => mockProductsUpdate(...args),
+    delete: (...args) => mockProductsDelete(...args),
+  },
+};
+
+vi.mock('../db/inventoryDB', () => ({
+  getDB: () => Promise.resolve(mockDb),
   setSyncError: vi.fn(() => Promise.resolve()),
   getConflictPreference: vi.fn(() => Promise.resolve(null)),
   appendConflictAuditLog: vi.fn(() => Promise.resolve()),
@@ -115,7 +118,8 @@ describe('SyncService conflict', () => {
         tableName: 'products',
         data: { id: 'local-1', serverId: 's1', name: 'Local' },
       };
-      const applied = await service._applyConflictResolution(1, item, { strategy: 'keep_server' });
+      const d = await getDB();
+      const applied = await service._applyConflictResolution(1, item, { strategy: 'keep_server' }, d);
       expect(applied).toBe(true);
       expect(mockApiGet).toHaveBeenCalled();
       expect(mockProductsUpdate).toHaveBeenCalledWith(
@@ -131,7 +135,8 @@ describe('SyncService conflict', () => {
         tableName: 'products',
         data: { id: 'local-1', serverId: 's1', name: 'Local', price: 9, quantity: 3, lastModified: 100 },
       };
-      const applied = await service._applyConflictResolution(1, item, { strategy: 'keep_local' });
+      const d = await getDB();
+      const applied = await service._applyConflictResolution(1, item, { strategy: 'keep_local' }, d);
       expect(applied).toBe(true);
       expect(mockApiPut).toHaveBeenCalled();
       expect(mockProductsUpdate).toHaveBeenCalledWith('local-1', expect.objectContaining({ syncStatus: 'synced' }));
@@ -144,10 +149,11 @@ describe('SyncService conflict', () => {
         tableName: 'products',
         data: { id: 'local-1', serverId: 's1' },
       };
+      const d = await getDB();
       const applied = await service._applyConflictResolution(1, item, {
         strategy: 'keep_server',
         serverDeleted: true,
-      });
+      }, d);
       expect(applied).toBe(true);
       expect(mockProductsDelete).toHaveBeenCalledWith('local-1');
       expect(mockQueueDelete).toHaveBeenCalledWith(1);
@@ -159,10 +165,11 @@ describe('SyncService conflict', () => {
         tableName: 'products',
         data: { id: 'local-1', name: 'Local', price: 10, quantity: 1 },
       };
+      const d = await getDB();
       const applied = await service._applyConflictResolution(1, item, {
         strategy: 'keep_local',
         serverDeleted: true,
-      });
+      }, d);
       expect(applied).toBe(true);
       expect(mockApiPost).toHaveBeenCalled();
       expect(mockProductsUpdate).toHaveBeenCalledWith('local-1', expect.objectContaining({ syncStatus: 'synced' }));
@@ -176,10 +183,11 @@ describe('SyncService conflict', () => {
         data: { id: 'local-1', serverId: 's1' },
       };
       const merged = { id: 'local-1', name: 'Merged', sku: 'SKU-M', price: 15, quantity: 10 };
+      const d = await getDB();
       const applied = await service._applyConflictResolution(1, item, {
         strategy: 'merge',
         mergedPayload: merged,
-      });
+      }, d);
       expect(applied).toBe(true);
       expect(mockApiPut).toHaveBeenCalled();
       expect(mockProductsUpdate).toHaveBeenCalledWith('local-1', expect.objectContaining(merged));

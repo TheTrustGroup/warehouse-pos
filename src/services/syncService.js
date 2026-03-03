@@ -12,7 +12,7 @@
  * @see docs/OFFLINE_ARCHITECTURE.md
  */
 
-import { db, setSyncError, getConflictPreference, appendConflictAuditLog } from '../db/inventoryDB';
+import { getDB, setSyncError, getConflictPreference, appendConflictAuditLog } from '../db/inventoryDB';
 import { API_BASE_URL } from '../lib/api';
 import { apiPost, apiPut, apiDelete, apiGet } from '../lib/apiClient';
 import { logSync } from '../utils/logger';
@@ -151,7 +151,9 @@ export class SyncService {
       attempts: 0,
       status: 'pending',
     };
-    const id = await db.syncQueue.add(item);
+    const d = await getDB();
+    if (!d) throw new Error('IndexedDB unavailable');
+    const id = await d.syncQueue.add(item);
     return id;
   }
 
@@ -273,7 +275,8 @@ export class SyncService {
    * @param {ConflictResolution} resolution
    * @returns {Promise<boolean>} true if resolved (queue item removed), false otherwise
    */
-  async _applyConflictResolution(queueId, item, resolution) {
+  async _applyConflictResolution(queueId, item, resolution, d) {
+    if (!d) return false;
     const { strategy, mergedPayload, serverDeleted } = resolution;
     const { operation, tableName, data } = item;
     const basePath = '/api/products';
@@ -286,22 +289,22 @@ export class SyncService {
 
     try {
       if (serverDeleted && strategy === 'keep_server') {
-        await db.products.delete(data.id);
-        await db.syncQueue.delete(queueId);
+        await d.products.delete(data.id);
+        await d.syncQueue.delete(queueId);
         return true;
       }
       if (serverDeleted && strategy === 'keep_local') {
         const payload = toPayload(data);
         const created = await apiPost(API_BASE_URL, basePath, payload, { idempotencyKey: data.id });
         const serverId = created?.id ?? idForApi;
-        await db.products.update(data.id, { serverId, syncStatus: 'synced' });
-        await db.syncQueue.delete(queueId);
+        await d.products.update(data.id, { serverId, syncStatus: 'synced' });
+        await d.syncQueue.delete(queueId);
         return true;
       }
       if (strategy === 'keep_server') {
         const serverData = mergedPayload || (await apiGet(API_BASE_URL, `${basePath}/${idForApi}`));
         const productId = data.id;
-        await db.products.update(productId, {
+        await d.products.update(productId, {
           name: serverData.name,
           sku: serverData.sku,
           category: serverData.category,
@@ -312,25 +315,25 @@ export class SyncService {
           serverId: serverData.id ?? idForApi,
           lastModified: serverData.updatedAt ? new Date(serverData.updatedAt).getTime() : Date.now(),
         });
-        await db.syncQueue.delete(queueId);
+        await d.syncQueue.delete(queueId);
         return true;
       }
       if (strategy === 'merge' && mergedPayload) {
         const payload = toPayload(mergedPayload);
         await apiPut(API_BASE_URL, `${basePath}/${idForApi}`, payload);
-        await db.products.update(data.id, {
+        await d.products.update(data.id, {
           ...mergedPayload,
           syncStatus: 'synced',
           serverId: idForApi,
           lastModified: Date.now(),
         });
-        await db.syncQueue.delete(queueId);
+        await d.syncQueue.delete(queueId);
         return true;
       }
       if (strategy === 'last_write_wins' && item.data) {
         const serverData = await this._fetchServerVersion(idForApi);
         if (!serverData) {
-          await db.syncQueue.update(queueId, { status: 'pending', error: 'Could not fetch server version' });
+          await d.syncQueue.update(queueId, { status: 'pending', error: 'Could not fetch server version' });
           return false;
         }
         const resolved = this.handleConflict(data, serverData);
@@ -339,9 +342,9 @@ export class SyncService {
         if (keepLocal || resolved === data) {
           const payload = toPayload(data);
           await apiPut(API_BASE_URL, `${basePath}/${idForApi}`, payload);
-          await db.products.update(data.id, { syncStatus: 'synced', serverId: idForApi });
+          await d.products.update(data.id, { syncStatus: 'synced', serverId: idForApi });
         } else {
-          await db.products.update(data.id, {
+          await d.products.update(data.id, {
             name: resolved.name,
             sku: resolved.sku,
             category: resolved.category,
@@ -352,19 +355,19 @@ export class SyncService {
             lastModified: resolved.updatedAt ? new Date(resolved.updatedAt).getTime() : Date.now(),
           });
         }
-        await db.syncQueue.delete(queueId);
+        await d.syncQueue.delete(queueId);
         return true;
       }
       if (strategy === 'keep_local') {
         const payload = toPayload(data);
         await apiPut(API_BASE_URL, `${basePath}/${idForApi}`, payload);
-        await db.products.update(data.id, { syncStatus: 'synced', serverId: idForApi });
-        await db.syncQueue.delete(queueId);
+        await d.products.update(data.id, { syncStatus: 'synced', serverId: idForApi });
+        await d.syncQueue.delete(queueId);
         return true;
       }
     } catch (err) {
-      if (import.meta.env?.DEV) console.warn('[SyncService] Apply conflict resolution failed:', err);
-      await db.syncQueue.update(queueId, { status: 'pending', error: err?.message ?? String(err) });
+      if (import.meta.env.DEV) console.warn('[SyncService] Apply conflict resolution failed:', err);
+      if (d) await d.syncQueue.update(queueId, { status: 'pending', error: err?.message ?? String(err) });
       return false;
     }
     return false;
@@ -404,7 +407,14 @@ export class SyncService {
       return summary;
     }
 
-    const items = await db.syncQueue.where('status').equals('pending').sortBy('timestamp');
+    const d = await getDB();
+    if (!d) {
+      logSync('sync skipped', { reason: 'IndexedDB unavailable' });
+      this._emit('sync-failed', { reason: 'IndexedDB unavailable', summary });
+      return summary;
+    }
+
+    const items = await d.syncQueue.where('status').equals('pending').sortBy('timestamp');
     const total = items.length;
     if (total === 0) {
       logSync('sync completed', { reason: 'empty' });
@@ -420,7 +430,7 @@ export class SyncService {
       const queueId = item.id;
 
       // Mark as syncing (optional; we don't have a 'syncing' state in schema but we can update status for UI)
-      await db.syncQueue.update(queueId, { status: 'syncing' });
+      await d.syncQueue.update(queueId, { status: 'syncing' });
 
       const result = await this.syncSingleItem(item);
 
@@ -428,19 +438,19 @@ export class SyncService {
         if (item.tableName === 'products' && item.operation === 'CREATE' && result.data?.id) {
           const serverId = result.data.id;
           const localId = item.data.id;
-          await db.products.update(localId, {
+          await d.products.update(localId, {
             serverId,
             syncStatus: 'synced',
           });
         } else if (item.tableName === 'products' && (item.operation === 'UPDATE' || item.operation === 'CREATE')) {
           const id = item.data.id;
           const serverId = result.data?.id ?? item.data.serverId ?? id;
-          await db.products.update(id, {
+          await d.products.update(id, {
             serverId,
             syncStatus: 'synced',
           });
         }
-        await db.syncQueue.delete(queueId);
+        await d.syncQueue.delete(queueId);
         summary.synced.push(queueId);
       } else if (result.status === 409 && item.tableName === 'products') {
         recordConflict().catch(() => {});
@@ -459,7 +469,7 @@ export class SyncService {
           const applied = await this._applyConflictResolution(queueId, item, {
             strategy: 'last_write_wins',
             mergedPayload: resolved,
-          });
+          }, d);
           if (applied) summary.synced.push(queueId);
           else summary.pending.push(queueId);
         } else if (serverDeleted) {
@@ -470,11 +480,11 @@ export class SyncService {
               serverData: null,
               serverDeleted: true,
             });
-            const applied = await this._applyConflictResolution(queueId, item, resolution);
+            const applied = await this._applyConflictResolution(queueId, item, resolution, d);
             if (applied) summary.synced.push(queueId);
             else summary.pending.push(queueId);
           } catch (err) {
-            await db.syncQueue.update(queueId, { status: 'pending', error: null });
+            await d.syncQueue.update(queueId, { status: 'pending', error: null });
             summary.pending.push(queueId);
           }
         } else {
@@ -484,8 +494,8 @@ export class SyncService {
               (k) => String(localData[k] ?? '') === String(serverData[k] ?? '')
             );
           if (identical) {
-            await db.products.update(localData.id, { syncStatus: 'synced', serverId: idForApi });
-            await db.syncQueue.delete(queueId);
+            await d.products.update(localData.id, { syncStatus: 'synced', serverId: idForApi });
+            await d.syncQueue.delete(queueId);
             summary.synced.push(queueId);
           } else {
             try {
@@ -494,17 +504,17 @@ export class SyncService {
                 localData,
                 serverData,
               });
-              const applied = await this._applyConflictResolution(queueId, item, resolution);
+              const applied = await this._applyConflictResolution(queueId, item, resolution, d);
               if (applied) summary.synced.push(queueId);
               else summary.pending.push(queueId);
             } catch (err) {
-              await db.syncQueue.update(queueId, { status: 'pending', error: null });
+              await d.syncQueue.update(queueId, { status: 'pending', error: null });
               summary.pending.push(queueId);
             }
           }
         }
       } else if (result.status === 404 && item.operation === 'DELETE') {
-        await db.syncQueue.delete(queueId);
+        await d.syncQueue.delete(queueId);
         summary.synced.push(queueId);
       } else {
         const attempts = (item.attempts || 0) + 1;
@@ -520,7 +530,7 @@ export class SyncService {
             await setSyncError(item.data.id, errorMsg);
           } catch (_) {}
         }
-        await db.syncQueue.update(queueId, {
+        await d.syncQueue.update(queueId, {
           attempts,
           error: errorMsg,
           status: isFinalFailure ? 'failed' : 'pending',
@@ -580,10 +590,12 @@ export class SyncService {
    * @returns {Promise<{pending: number, syncing: number, failed: number}>}
    */
   async getQueueStatus() {
+    const d = await getDB();
+    if (!d) return { pending: 0, syncing: 0, failed: 0 };
     const [pending, syncing, failed] = await Promise.all([
-      db.syncQueue.where('status').equals('pending').count(),
-      db.syncQueue.where('status').equals('syncing').count(),
-      db.syncQueue.where('status').equals('failed').count(),
+      d.syncQueue.where('status').equals('pending').count(),
+      d.syncQueue.where('status').equals('syncing').count(),
+      d.syncQueue.where('status').equals('failed').count(),
     ]);
     return { pending, syncing, failed };
   }

@@ -106,8 +106,34 @@ class ExtremeDeptKidzDexie extends Dexie {
   }
 }
 
-/** @type {ExtremeDeptKidzDexie} */
-const db = new ExtremeDeptKidzDexie();
+let dbInstance = null;
+let dbInitPromise = null;
+
+/**
+ * Lazy-init Dexie. Returns Promise<ExtremeDeptKidzDexie | null>. Resolves to null if IndexedDB
+ * is unavailable or open fails (e.g. private mode, quota). Prevents "null is not an object (evaluating 'e.trans'|'n.type')"
+ * from idb/Dexie when transaction is null.
+ * @returns {Promise<ExtremeDeptKidzDexie | null>}
+ */
+export function getDB() {
+  if (dbInstance) return Promise.resolve(dbInstance);
+  if (dbInitPromise) return dbInitPromise;
+  dbInitPromise = (async () => {
+    try {
+      if (typeof indexedDB === 'undefined') return null;
+      const instance = new ExtremeDeptKidzDexie();
+      await instance.open();
+      dbInstance = instance;
+      return instance;
+    } catch (e) {
+      if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
+      if (import.meta.env.DEV) console.warn('[inventoryDB] Dexie init failed:', e);
+      return null;
+    }
+  })();
+  return dbInitPromise;
+}
+
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -136,7 +162,8 @@ function nowTs() {
  * @returns {Promise<ProductRecord[]>}
  */
 export async function getAllProducts() {
-  return db.products.toArray();
+  const d = await getDB();
+  return d ? d.products.toArray() : [];
 }
 
 /**
@@ -145,7 +172,8 @@ export async function getAllProducts() {
  * @returns {Promise<ProductRecord|undefined>}
  */
 export async function getProductById(id) {
-  return db.products.get(id);
+  const d = await getDB();
+  return d ? d.products.get(id) : undefined;
 }
 
 /**
@@ -157,6 +185,8 @@ export async function getProductById(id) {
  * @returns {Promise<string>} The generated product id (UUID)
  */
 export async function addProduct(data) {
+  const d = await getDB();
+  if (!d) throw new Error('IndexedDB unavailable');
   const id = uuidv4();
   const now = nowISO();
   const ts = nowTs();
@@ -176,8 +206,8 @@ export async function addProduct(data) {
     lastModified: ts,
   };
   try {
-    await db.products.add(record);
-    await db.syncQueue.add({
+    await d.products.add(record);
+    await d.syncQueue.add({
       operation: 'CREATE',
       tableName: 'products',
       data: record,
@@ -202,7 +232,9 @@ export async function addProduct(data) {
  * @throws {Error} If product not found
  */
 export async function updateProduct(id, data) {
-  const existing = await db.products.get(id);
+  const d = await getDB();
+  if (!d) throw new Error('IndexedDB unavailable');
+  const existing = await d.products.get(id);
   if (!existing) {
     throw new Error(`Product not found: ${id}`);
   }
@@ -217,8 +249,8 @@ export async function updateProduct(id, data) {
     syncStatus: existing.syncStatus === 'synced' ? 'pending' : existing.syncStatus,
   };
   try {
-    await db.products.put(updated);
-    await db.syncQueue.add({
+    await d.products.put(updated);
+    await d.syncQueue.add({
       operation: 'UPDATE',
       tableName: 'products',
       data: updated,
@@ -242,13 +274,15 @@ export async function updateProduct(id, data) {
  * @throws {Error} If product not found
  */
 export async function deleteProduct(id) {
-  const existing = await db.products.get(id);
+  const d = await getDB();
+  if (!d) throw new Error('IndexedDB unavailable');
+  const existing = await d.products.get(id);
   if (!existing) {
     throw new Error(`Product not found: ${id}`);
   }
   try {
-    await db.products.delete(id);
-    await db.syncQueue.add({
+    await d.products.delete(id);
+    await d.syncQueue.add({
       operation: 'DELETE',
       tableName: 'products',
       data: { id, ...existing },
@@ -272,8 +306,10 @@ export async function deleteProduct(id) {
  */
 export async function mirrorProductsFromApi(apiProducts) {
   if (!Array.isArray(apiProducts) || apiProducts.length === 0) return;
+  const d = await getDB();
+  if (!d) return;
   try {
-    await db.products.clear();
+    await d.products.clear();
     const now = nowISO();
     const ts = nowTs();
     const records = apiProducts.map((p) => {
@@ -297,7 +333,7 @@ export async function mirrorProductsFromApi(apiProducts) {
       };
     }).filter(Boolean);
     if (records.length > 0) {
-      await db.products.bulkAdd(records);
+      await d.products.bulkAdd(records);
     }
   } catch (e) {
     if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
@@ -310,7 +346,8 @@ export async function mirrorProductsFromApi(apiProducts) {
  * @returns {Promise<ProductRecord[]>}
  */
 export async function getUnsyncedItems() {
-  return db.products.where('syncStatus').notEqual('synced').toArray();
+  const d = await getDB();
+  return d ? d.products.where('syncStatus').notEqual('synced').toArray() : [];
 }
 
 /**
@@ -318,7 +355,8 @@ export async function getUnsyncedItems() {
  * @returns {Promise<SyncQueueItem[]>}
  */
 export async function getSyncQueueItems() {
-  return db.syncQueue.where('status').equals('pending').sortBy('timestamp');
+  const d = await getDB();
+  return d ? d.syncQueue.where('status').equals('pending').sortBy('timestamp') : Promise.resolve([]);
 }
 
 /**
@@ -326,7 +364,8 @@ export async function getSyncQueueItems() {
  * @returns {Promise<SyncQueueItem[]>}
  */
 export async function getFailedQueueItems() {
-  return db.syncQueue.where('status').equals('failed').sortBy('timestamp').reverse().toArray();
+  const d = await getDB();
+  return d ? d.syncQueue.where('status').equals('failed').sortBy('timestamp').reverse().toArray() : [];
 }
 
 /**
@@ -334,7 +373,8 @@ export async function getFailedQueueItems() {
  * @returns {Promise<SyncQueueItem[]>}
  */
 export async function getAllSyncQueueItems() {
-  return db.syncQueue.orderBy('timestamp').reverse().toArray();
+  const d = await getDB();
+  return d ? d.syncQueue.orderBy('timestamp').reverse().toArray() : [];
 }
 
 /**
@@ -344,10 +384,12 @@ export async function getAllSyncQueueItems() {
  * @returns {Promise<{ version: number, exportedAt: string, products: ProductRecord[], syncQueue: SyncQueueItem[], metadata: Array<{key: string, value: *, updatedAt: number}> }>}
  */
 export async function exportAllData() {
+  const d = await getDB();
+  if (!d) return { version: 2, exportedAt: new Date().toISOString(), products: [], syncQueue: [], metadata: [] };
   const [products, syncQueue, metadataArr] = await Promise.all([
-    db.products.toArray(),
-    db.syncQueue.toArray(),
-    db.metadata.toArray(),
+    d.products.toArray(),
+    d.syncQueue.toArray(),
+    d.metadata.toArray(),
   ]);
   return {
     version: 2,
@@ -373,20 +415,23 @@ export async function importFromBackup(backup, options = {}) {
   const syncQueue = Array.isArray(backup.syncQueue) ? backup.syncQueue : [];
   const metadata = Array.isArray(backup.metadata) ? backup.metadata : [];
 
+  const d = await getDB();
+  if (!d) return { productsAdded: 0, queueAdded: 0 };
+
   if (replace) {
-    await db.products.clear();
-    await db.syncQueue.clear();
+    await d.products.clear();
+    await d.syncQueue.clear();
   }
 
   let productsAdded = 0;
   if (products.length > 0) {
     if (replace) {
-      await db.products.bulkAdd(products);
+      await d.products.bulkAdd(products);
       productsAdded = products.length;
     } else {
       for (const p of products) {
         if (p && p.id) {
-          await db.products.put(p);
+          await d.products.put(p);
           productsAdded += 1;
         }
       }
@@ -396,13 +441,13 @@ export async function importFromBackup(backup, options = {}) {
   let queueAdded = 0;
   if (syncQueue.length > 0) {
     if (replace) {
-      await db.syncQueue.bulkAdd(syncQueue.map(({ id, ...rest }) => rest));
+      await d.syncQueue.bulkAdd(syncQueue.map(({ id, ...rest }) => rest));
       queueAdded = syncQueue.length;
     } else {
       for (const q of syncQueue) {
         if (q && (q.operation && q.tableName && q.data != null)) {
           const { id, ...rest } = q;
-          await db.syncQueue.add(rest);
+          await d.syncQueue.add(rest);
           queueAdded += 1;
         }
       }
@@ -411,7 +456,7 @@ export async function importFromBackup(backup, options = {}) {
 
   for (const m of metadata) {
     if (m && m.key != null) {
-      await db.metadata.put({ key: m.key, value: m.value, updatedAt: m.updatedAt ?? Date.now() });
+      await d.metadata.put({ key: m.key, value: m.value, updatedAt: m.updatedAt ?? Date.now() });
     }
   }
 
@@ -423,7 +468,8 @@ export async function importFromBackup(backup, options = {}) {
  * @returns {Promise<void>}
  */
 export async function clearSyncQueue() {
-  await db.syncQueue.clear();
+  const d = await getDB();
+  if (d) await d.syncQueue.clear();
 }
 
 /**
@@ -432,8 +478,11 @@ export async function clearSyncQueue() {
  * @returns {Promise<void>}
  */
 export async function clearAllLocalProductData() {
-  await db.products.clear();
-  await db.syncQueue.clear();
+  const d = await getDB();
+  if (d) {
+    await d.products.clear();
+    await d.syncQueue.clear();
+  }
 }
 
 /**
@@ -443,11 +492,13 @@ export async function clearAllLocalProductData() {
  * @returns {Promise<void>}
  */
 export async function undoAddProduct(productId) {
-  const items = await db.syncQueue.where('status').equals('pending').filter((item) => item.data?.id === productId && item.operation === 'CREATE').toArray();
+  const d = await getDB();
+  if (!d) return;
+  const items = await d.syncQueue.where('status').equals('pending').filter((item) => item.data?.id === productId && item.operation === 'CREATE').toArray();
   for (const item of items) {
-    await db.syncQueue.delete(item.id);
+    await d.syncQueue.delete(item.id);
   }
-  await db.products.delete(productId);
+  await d.products.delete(productId);
 }
 
 /**
@@ -457,7 +508,8 @@ export async function undoAddProduct(productId) {
  * @returns {Promise<void>}
  */
 export async function setSyncError(productId, message) {
-  await db.metadata.put({
+  const d = await getDB();
+  if (d) await d.metadata.put({
     key: `sync_error_${productId}`,
     value: { message, timestamp: Date.now() },
     updatedAt: Date.now(),
@@ -470,7 +522,9 @@ export async function setSyncError(productId, message) {
  * @returns {Promise<{message: string, timestamp: number}|null>}
  */
 export async function getSyncError(productId) {
-  const rec = await db.metadata.get(`sync_error_${productId}`);
+  const d = await getDB();
+  if (!d) return null;
+  const rec = await d.metadata.get(`sync_error_${productId}`);
   return rec?.value ?? null;
 }
 
@@ -480,7 +534,8 @@ export async function getSyncError(productId) {
  * @returns {Promise<void>}
  */
 export async function clearSyncError(productId) {
-  await db.metadata.delete(`sync_error_${productId}`);
+  const d = await getDB();
+  if (d) await d.metadata.delete(`sync_error_${productId}`);
 }
 
 /**
@@ -491,7 +546,8 @@ export async function clearSyncError(productId) {
  * @returns {Promise<void>}
  */
 export async function retryQueueItem(queueItemId) {
-  await db.syncQueue.update(queueItemId, {
+  const d = await getDB();
+  if (d) await d.syncQueue.update(queueItemId, {
     status: 'pending',
     attempts: 0,
     error: null,
@@ -503,13 +559,15 @@ export async function retryQueueItem(queueItemId) {
  * @returns {Promise<number>} Number of items reset
  */
 export async function retryAllFailedQueueItems() {
-  const failed = await db.syncQueue.where('status').equals('failed').toArray();
-  const syncing = await db.syncQueue.where('status').equals('syncing').toArray();
+  const d = await getDB();
+  if (!d) return 0;
+  const failed = await d.syncQueue.where('status').equals('failed').toArray();
+  const syncing = await d.syncQueue.where('status').equals('syncing').toArray();
   for (const item of failed) {
-    await db.syncQueue.update(item.id, { status: 'pending', attempts: 0, error: null });
+    await d.syncQueue.update(item.id, { status: 'pending', attempts: 0, error: null });
   }
   for (const item of syncing) {
-    await db.syncQueue.update(item.id, { status: 'pending', error: null });
+    await d.syncQueue.update(item.id, { status: 'pending', error: null });
   }
   return failed.length + syncing.length;
 }
@@ -519,9 +577,11 @@ export async function retryAllFailedQueueItems() {
  * @returns {Promise<number>} Number of items removed
  */
 export async function clearFailedQueueItems() {
-  const failed = await db.syncQueue.where('status').equals('failed').toArray();
+  const d = await getDB();
+  if (!d) return 0;
+  const failed = await d.syncQueue.where('status').equals('failed').toArray();
   for (const item of failed) {
-    await db.syncQueue.delete(item.id);
+    await d.syncQueue.delete(item.id);
   }
   return failed.length;
 }
@@ -538,7 +598,9 @@ const CONFLICT_AUDIT_KEY = 'conflict_audit_log';
  * @returns {Promise<ConflictStrategy|null>}
  */
 export async function getConflictPreference() {
-  const rec = await db.metadata.get(CONFLICT_PREFERENCE_KEY);
+  const d = await getDB();
+  if (!d) return null;
+  const rec = await d.metadata.get(CONFLICT_PREFERENCE_KEY);
   return rec?.value ?? null;
 }
 
@@ -548,7 +610,8 @@ export async function getConflictPreference() {
  * @returns {Promise<void>}
  */
 export async function setConflictPreference(strategy) {
-  await db.metadata.put({
+  const d = await getDB();
+  if (d) await d.metadata.put({
     key: CONFLICT_PREFERENCE_KEY,
     value: strategy,
     updatedAt: Date.now(),
@@ -561,11 +624,13 @@ export async function setConflictPreference(strategy) {
  * @returns {Promise<void>}
  */
 export async function appendConflictAuditLog(entry) {
-  const existing = await db.metadata.get(CONFLICT_AUDIT_KEY);
+  const d = await getDB();
+  if (!d) return;
+  const existing = await d.metadata.get(CONFLICT_AUDIT_KEY);
   const log = Array.isArray(existing?.value) ? existing.value : [];
   log.push(entry);
   if (log.length > 500) log.shift();
-  await db.metadata.put({
+  await d.metadata.put({
     key: CONFLICT_AUDIT_KEY,
     value: log,
     updatedAt: Date.now(),
@@ -577,8 +642,4 @@ export async function appendConflictAuditLog(entry) {
 // ---------------------------------------------------------------------------
 
 // TODO: Consider versioned schema migrations if adding new tables or indexes (Dexie version(2).stores(...)).
-
-/** Singleton Dexie instance for ExtremeDeptKidzDB. */
-export { db };
-
-export default db;
+// All access is via getDB(). No default export to avoid null transaction (e.g. idb "e.trans" / "n.type") when DB init fails.

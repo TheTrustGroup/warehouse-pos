@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, retryQueueItem, retryAllFailedQueueItems, clearFailedQueueItems } from '../db/inventoryDB';
+import { getDB, retryQueueItem, retryAllFailedQueueItems, clearFailedQueueItems } from '../db/inventoryDB';
 import { syncService } from '../services/syncService';
 import { Button } from './ui/Button';
 import { X, RefreshCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
@@ -33,8 +33,14 @@ export function SyncQueueModal({ isOpen, onClose }: SyncQueueModalProps) {
 
   const items = useLiveQuery(
     async () => {
-      const all = await db.syncQueue.orderBy('timestamp').toArray();
-      return all as QueueItem[];
+      const d = await getDB();
+      if (!d) return [];
+      try {
+        const all = await d.syncQueue.orderBy('timestamp').toArray();
+        return all as QueueItem[];
+      } catch {
+        return [];
+      }
     },
     [isOpen]
   ) as QueueItem[] | undefined;
