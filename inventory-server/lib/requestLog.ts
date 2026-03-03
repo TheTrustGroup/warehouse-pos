@@ -3,7 +3,7 @@
  * Logs 4xx/5xx and slow requests with requestId for correlation in Vercel/log aggregators.
  */
 import type { NextRequest } from 'next/server';
-import { getRequestId } from '@/lib/apiResponse';
+import { getRequestId } from './apiResponse';
 
 /** Log only when duration exceeds this (ms). */
 const SLOW_MS = 2000;

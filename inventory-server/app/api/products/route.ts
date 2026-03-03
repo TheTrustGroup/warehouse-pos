@@ -5,8 +5,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { corsHeaders } from '@/lib/cors';
-import { getRequestId, jsonError, jsonErrorBody } from '@/lib/apiResponse';
-import { logApiResponse } from '@/lib/requestLog';
+import { getRequestId, jsonError, jsonErrorBody } from '../../../lib/apiResponse';
+import { logApiResponse } from '../../../lib/requestLog';
 import { requireAuth, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { getScopeForUser } from '@/lib/data/userScopes';
 import {

@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { corsHeaders } from '@/lib/cors';
-import { logApiResponse } from '@/lib/requestLog';
+import { logApiResponse } from '../../../lib/requestLog';
 import { requirePosRole } from '@/lib/auth/session';
 import { getScopeForUser } from '@/lib/data/userScopes';
 import { getSupabase } from '@/lib/supabase';
