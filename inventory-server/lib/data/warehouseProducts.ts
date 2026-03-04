@@ -236,6 +236,36 @@ export async function getWarehouseProducts(
         quantity: Number(r.quantity ?? 0),
       });
     }
+
+    // Fallback: sized products with no by_size rows in this warehouse may have sizes in another warehouse — show those size codes with 0 so we don't show "No sizes recorded".
+    const sizedProductIdsWithNoSizes = productIds.filter(
+      (id) => (list.find((r) => r.id === id) as Record<string, unknown>)?.size_kind === 'sized' && (sizeMap[id]?.length ?? 0) === 0
+    );
+    if (sizedProductIdsWithNoSizes.length > 0) {
+      const { data: fallbackRows } = await db
+        .from('warehouse_inventory_by_size')
+        .select('product_id, size_code, size_codes!left(size_label)', selectOpts())
+        .in('product_id', sizedProductIdsWithNoSizes);
+      const fallbackList = (fallbackRows ?? []) as Array<{ product_id: string; size_code: string; size_codes?: { size_label?: string } | null }>;
+      const seenPerProduct = new Map<string, Set<string>>();
+      for (const r of fallbackList) {
+        if (!productIdSet.has(r.product_id)) continue;
+        let set = seenPerProduct.get(r.product_id);
+        if (!set) {
+          set = new Set<string>();
+          seenPerProduct.set(r.product_id, set);
+        }
+        const code = String(r.size_code);
+        if (set.has(code)) continue;
+        set.add(code);
+        if (!sizeMap[r.product_id]) sizeMap[r.product_id] = [];
+        sizeMap[r.product_id].push({
+          sizeCode: code,
+          sizeLabel: r.size_codes?.size_label ?? code,
+          quantity: 0,
+        });
+      }
+    }
   }
 
   const data = list.map((row) => {
@@ -523,7 +553,12 @@ export async function updateWarehouseProduct(
   }
 
   const sizeKind = String(body.sizeKind ?? existing.sizeKind ?? 'na').toLowerCase();
-  const quantityBySize = Array.isArray(body.quantityBySize) ? body.quantityBySize as Array<{ sizeCode: string; quantity: number }> : [];
+  const bodySizes = Array.isArray(body.quantityBySize) ? (body.quantityBySize as Array<{ sizeCode: string; quantity: number }>) : null;
+  // Preserve existing sizes when product is sized but request omits or sends empty quantityBySize (prevents "No sizes recorded" after partial updates).
+  const quantityBySize =
+    sizeKind === 'sized' && (bodySizes === null || bodySizes.length === 0) && (existing.quantityBySize?.length ?? 0) > 0
+      ? existing.quantityBySize.map((s) => ({ sizeCode: s.sizeCode, quantity: s.quantity }))
+      : bodySizes ?? [];
   const isSized = sizeKind === 'sized' && quantityBySize.length > 0;
   const totalQty = isSized
     ? quantityBySize.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
