@@ -10,9 +10,10 @@ const LOW_STOCK_ALERTS_LIMIT = 10;
 /** Cap aligned with getWarehouseProducts (250) to avoid timeouts; stats are over this sample. */
 const PRODUCTS_LIMIT = 250;
 
+/** Derive quantity from actual data: sum of quantityBySize when present, else quantity. */
 function getProductQty(p: ProductRecord): number {
   const qtyBySize = Array.isArray(p.quantityBySize) ? p.quantityBySize : [];
-  if (p.sizeKind === 'sized' && qtyBySize.length > 0) {
+  if (qtyBySize.length > 0) {
     return qtyBySize.reduce((s, r) => s + (r.quantity ?? 0), 0);
   }
   return p.quantity ?? 0;

@@ -10,6 +10,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type { Product } from '../../types';
 import type { QuantityBySizeItem } from '../../types';
+import { LOW_STOCK_THRESHOLD } from '../../lib/stockConstants';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -35,8 +36,9 @@ interface ProductCardProps {
 
 type StockStatus = 'in' | 'low' | 'out';
 
+/** Derive quantity from actual data: sum of quantityBySize when present, else product.quantity. */
 function getTotalQuantity(product: Product): number {
-  if (product.sizeKind === 'sized' && (product.quantityBySize?.length ?? 0) > 0) {
+  if ((product.quantityBySize?.length ?? 0) > 0) {
     return (product.quantityBySize ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
   }
   return product.quantity ?? 0;
@@ -45,8 +47,8 @@ function getTotalQuantity(product: Product): number {
 function getStockStatus(product: Product): StockStatus {
   const qty = getTotalQuantity(product);
   if (qty === 0) return 'out';
-  if (product.reorderLevel != null && qty <= product.reorderLevel) return 'low';
-  if (qty <= 3) return 'low';
+  const threshold = product.reorderLevel ?? LOW_STOCK_THRESHOLD;
+  if (qty <= threshold) return 'low';
   return 'in';
 }
 
@@ -136,7 +138,7 @@ function SizePills({ product }: { product: Product }) {
     );
   }
 
-  const reorder = product.reorderLevel ?? 3;
+  const reorder = product.reorderLevel ?? LOW_STOCK_THRESHOLD;
 
   return (
     <div className="flex flex-wrap gap-1 overflow-x-auto pb-2 scrollbar-none">

@@ -10,6 +10,7 @@
 
 import { safeProductImageUrl, EMPTY_IMAGE_DATA_URL } from '../../lib/imageUpload';
 import { type POSProduct } from './SizePickerSheet';
+import { LOW_STOCK_THRESHOLD } from '../../lib/stockConstants';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -22,9 +23,18 @@ interface POSProductCardProps {
 
 type StockStatus = 'in' | 'low' | 'out';
 
+/** Single derived quantity: sum of quantityBySize when present, else product.quantity. Use for both status and display. */
+function getTotalQuantity(product: POSProduct): number {
+  if ((product.quantityBySize?.length ?? 0) > 0) {
+    return (product.quantityBySize ?? []).reduce((s, r) => s + r.quantity, 0);
+  }
+  return product.quantity ?? 0;
+}
+
 function getStockStatus(product: POSProduct): StockStatus {
-  if (product.quantity === 0) return 'out';
-  if (product.quantity <= 3) return 'low';
+  const qty = getTotalQuantity(product);
+  if (qty === 0) return 'out';
+  if (qty <= LOW_STOCK_THRESHOLD) return 'low';
   return 'in';
 }
 
@@ -76,15 +86,13 @@ function ImagePlaceholder() {
 // ── Main Component ─────────────────────────────────────────────────────────
 
 export default function POSProductCard({ product, onSelect }: POSProductCardProps) {
+  const qty = getTotalQuantity(product);
   const status = getStockStatus(product);
   const isOut = status === 'out';
   const firstImage = (product.images ?? [])[0];
   const safeSrc = firstImage ? safeProductImageUrl(firstImage) : '';
   const hasImage = safeSrc && safeSrc !== EMPTY_IMAGE_DATA_URL;
 
-  const qty = product.sizeKind === 'sized'
-    ? (product.quantityBySize ?? []).reduce((s, r) => s + r.quantity, 0)
-    : product.quantity;
   const stockLabel = isOut ? 'Out of stock' : qty <= 5 ? `${qty} left` : `${qty} in stock`;
 
   return (

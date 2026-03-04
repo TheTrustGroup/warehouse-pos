@@ -272,8 +272,8 @@ export async function getWarehouseProducts(
     const sizes = (sizeMap[row.id as string] ?? []).sort((a, b) =>
       a.sizeCode.localeCompare(b.sizeCode)
     );
-    const isSized = (row.size_kind as string) === 'sized' && sizes.length > 0;
-    const quantity = isSized
+    const hasSizeRows = sizes.length > 0;
+    const quantity = hasSizeRows
       ? sizes.reduce((s, r) => s + r.quantity, 0)
       : invMap[row.id as string] ?? 0;
 
@@ -357,8 +357,8 @@ export async function getProductById(
       quantity: Number(s.quantity ?? 0),
     }))
     .sort((a, b) => a.sizeCode.localeCompare(b.sizeCode));
-  const isSized = (r.size_kind as string) === 'sized' && sizes.length > 0;
-  quantity = isSized ? sizes.reduce((s, x) => s + x.quantity, 0) : Number((invRow as { quantity?: number } | null)?.quantity ?? 0);
+  const hasSizeRows = sizes.length > 0;
+  quantity = hasSizeRows ? sizes.reduce((s, x) => s + x.quantity, 0) : Number((invRow as { quantity?: number } | null)?.quantity ?? 0);
 
   return {
     id: String(r.id ?? ''),
