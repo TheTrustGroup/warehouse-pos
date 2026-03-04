@@ -57,6 +57,7 @@ A script runs `git status --porcelain` and **exits 1** if there are uncommitted 
 
 - **Screenshots / designs are reference.** If a UI (e.g. filters by size and color as pills) exists in a design or another deployment, implement it in this repo and **commit** it. Do not assume "it’s somewhere else."
 - **One codebase.** Avoid maintaining the same feature in multiple clones or brands without merging back here. Prefer feature flags or env-based branding if you need variants.
+- **Client clones and this repo:** When syncing *from* a client-tuned clone *into* this (source) repo, **do not overwrite this repo’s branding**. App name, receipt title, and shell copy live in `src/config/branding.ts`, `index.html`, and `public/manifest.json`. See `docs/BRANDING.md` for the checklist.
 
 ---
 

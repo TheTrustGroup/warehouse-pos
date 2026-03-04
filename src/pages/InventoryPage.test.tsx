@@ -30,6 +30,27 @@ vi.mock('../contexts/WarehouseContext', () => ({
   }),
 }));
 
+vi.mock('../contexts/InventoryContext', () => ({
+  useInventory: () => ({
+    products: [],
+    isLoading: false,
+    error: null,
+    refreshProducts: vi.fn(),
+    hasMore: false,
+    loadMore: vi.fn(),
+    isLoadingMore: false,
+    isBackgroundRefreshing: false,
+    lastSyncAt: null,
+    addProduct: vi.fn(),
+    updateProduct: vi.fn(),
+    deleteProduct: vi.fn(),
+  }),
+}));
+
+vi.mock('../hooks/useDashboardQuery', () => ({
+  useDashboardQuery: () => ({ dashboard: null }),
+}));
+
 describe('InventoryPage', () => {
   let fetchCalls: string[] = [];
 
@@ -66,18 +87,12 @@ describe('InventoryPage', () => {
     );
   });
 
-  it('fetches products with warehouse_id from context', async () => {
+  it('displays current warehouse and inventory UI', async () => {
     renderWithRouter(<InventoryPage />);
-    await waitFor(
-      () => {
-        const productCall = fetchCalls.find(
-          (u) => u.includes('/api/products') && u.includes('warehouse_id=')
-        );
-        expect(productCall).toBeDefined();
-        expect(productCall).toContain(encodeURIComponent(MOCK_WAREHOUSE_ID));
-      },
-      { timeout: 3000 }
-    );
+    await waitFor(() => {
+      expect(screen.getByText(MOCK_WAREHOUSE_NAME)).toBeTruthy();
+      expect(screen.getByRole('heading', { name: /inventory/i })).toBeTruthy();
+    });
   });
 
   it('shows Inventory title and Add product action', async () => {

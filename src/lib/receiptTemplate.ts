@@ -3,8 +3,10 @@
  * Ghana: GH₵, Africa/Accra. Clear hierarchy: brand → receipt # & date → cashier → items → totals → payment → footer.
  */
 
+import { BRAND } from '../config/branding';
+
 const GHANA_TZ = 'Africa/Accra';
-const BUSINESS_NAME = 'Extreme Dept Kidz';
+const BUSINESS_NAME = BRAND.receiptTitle;
 const STORE_TAGLINE = 'Your trusted kids fashion store';
 const STORE_ADDRESS = 'Accra, Ghana';
 const STORE_PHONE = '+233 XX XXX XXXX';

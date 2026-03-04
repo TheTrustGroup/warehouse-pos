@@ -47,6 +47,7 @@ import CartSheet, {
 } from '../components/pos/CartSheet';
 import SaleSuccessScreen, { type CompletedSale as SaleSuccessCompletedSale } from '../components/pos/SaleSuccessScreen';
 import { enqueueSaleEvent, getPendingSaleEventsCount } from '../lib/offlineDb';
+import { BRAND } from '../config/branding';
 
 interface POSPageProps {
   apiBaseUrl?: string;
@@ -633,7 +634,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       .join('\n');
 
     const text = [
-      '🧾 Receipt — Extreme Dept Kidz',
+      `🧾 Receipt — ${BRAND.receiptTitle}`,
       sale.receiptId ? sale.receiptId : '',
       '─────────────────────',
       lines,
