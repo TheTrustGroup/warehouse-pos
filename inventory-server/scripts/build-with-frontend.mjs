@@ -22,7 +22,8 @@ if (!fs.existsSync(path.join(repoRoot, 'package.json'))) {
 
 console.log('[build-with-frontend] Building Vite app at', repoRoot, 'with VITE_API_BASE_URL=""');
 execSync('npm ci', { cwd: repoRoot, stdio: 'inherit' });
-execSync('npm run build', {
+// Use build:bundler-only to skip tsc (avoids vitest/import.meta.env types in Vercel; type-check in CI via npm run build)
+execSync('npm run build:bundler-only', {
   cwd: repoRoot,
   stdio: 'inherit',
   env: { ...process.env, VITE_API_BASE_URL: '' },
