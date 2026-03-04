@@ -11,8 +11,9 @@ const LOW_STOCK_ALERTS_LIMIT = 10;
 const PRODUCTS_LIMIT = 250;
 
 function getProductQty(p: ProductRecord): number {
-  if (p.sizeKind === 'sized' && p.quantityBySize?.length > 0) {
-    return p.quantityBySize.reduce((s, r) => s + (r.quantity ?? 0), 0);
+  const qtyBySize = Array.isArray(p.quantityBySize) ? p.quantityBySize : [];
+  if (p.sizeKind === 'sized' && qtyBySize.length > 0) {
+    return qtyBySize.reduce((s, r) => s + (r.quantity ?? 0), 0);
   }
   return p.quantity ?? 0;
 }

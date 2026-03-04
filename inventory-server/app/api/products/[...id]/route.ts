@@ -212,7 +212,8 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     if (!updated)
       return withCors(NextResponse.json({ error: 'Product not found after update' }, { status: 404 }), req);
 
-    if (sizesToWrite && sizesToWrite.length > 0 && updated.quantityBySize.length === 0) {
+    const qtyBySize = Array.isArray(updated.quantityBySize) ? updated.quantityBySize : [];
+    if (sizesToWrite && sizesToWrite.length > 0 && qtyBySize.length === 0) {
       updated.quantityBySize = sizesToWrite.map(r => ({
         sizeCode: r.sizeCode, sizeLabel: r.sizeCode, quantity: r.quantity,
       }));
