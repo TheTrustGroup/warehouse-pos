@@ -132,34 +132,8 @@ export async function getWarehouseProducts(
     return q;
   }
 
-  // Step 1: warehouse_products (no warehouse filter). Steps 2–3: inventory + by_size for warehouse. Step 4: filter in JS.
-  const productsPromise = buildBaseQuery();
-
-  const inventoryPromise = effectiveWarehouseId
-    ? (async () => {
-        const res = await db
-          .from('warehouse_inventory')
-          .select('product_id, quantity', selectOpts())
-          .eq('warehouse_id', effectiveWarehouseId);
-        return res;
-      })()
-    : Promise.resolve({ data: [] as { product_id: string; quantity?: number }[], error: null });
-
-  const sizesPromise = effectiveWarehouseId
-    ? (async () => {
-        const res = await db
-          .from('warehouse_inventory_by_size')
-          .select('product_id, size_code, quantity, size_codes!left(size_label)', selectOpts())
-          .eq('warehouse_id', effectiveWarehouseId);
-        return res;
-      })()
-    : Promise.resolve({ data: [] as Array<{ product_id: string; size_code: string; quantity: number; size_codes?: { size_label?: string } | null }>, error: null });
-
-  const [productsResult, inventoryResult, sizesResult] = await Promise.all([
-    productsPromise,
-    inventoryPromise,
-    sizesPromise,
-  ]);
+  // Step 1: warehouse_products (bounded by limit/offset). Steps 2–3: inventory + by_size only for this page's product IDs (bounded).
+  const productsResult = await buildBaseQuery();
 
   let rows: Record<string, unknown>[] | null = (productsResult as { data: Record<string, unknown>[] | null }).data;
   let count: number | null = (productsResult as { count: number | null }).count ?? null;
@@ -209,9 +183,28 @@ export async function getWarehouseProducts(
   const invMap: Record<string, number> = {};
   const sizeMap: Record<string, Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>> = {};
 
+  // Fetch inventory and by_size only for this page's product IDs (bounded; no unbounded full-warehouse read).
+  type SizeRow = { product_id: string; size_code: string; quantity: number; size_codes?: { size_label?: string } | null };
+  let inventoryResult: { data: { product_id: string; quantity?: number }[] | null; error: { message: string } | null } = { data: [], error: null };
+  let sizesResult: { data: SizeRow[] | null; error: { message: string } | null } = { data: [], error: null };
   if (effectiveWarehouseId && productIds.length > 0) {
-    type SizeRow = { product_id: string; size_code: string; quantity: number; size_codes?: { size_label?: string } | null };
+    const [invRes, sizeRes] = await Promise.all([
+      db
+        .from('warehouse_inventory')
+        .select('product_id, quantity', selectOpts())
+        .eq('warehouse_id', effectiveWarehouseId)
+        .in('product_id', productIds),
+      db
+        .from('warehouse_inventory_by_size')
+        .select('product_id, size_code, quantity, size_codes!left(size_label)', selectOpts())
+        .eq('warehouse_id', effectiveWarehouseId)
+        .in('product_id', productIds),
+    ]);
+    inventoryResult = invRes as typeof inventoryResult;
+    sizesResult = { data: (sizeRes.data ?? []) as SizeRow[], error: sizeRes.error };
+  }
 
+  if (effectiveWarehouseId && productIds.length > 0) {
     if (inventoryResult.error) {
       console.error('[warehouseProducts] warehouse_inventory query failed:', inventoryResult.error.message);
     } else {
