@@ -57,7 +57,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const { data: salesRows, error: salesError } = await query;
     if (salesError) {
       logApiResponse(req, 500, Date.now() - start, { message: salesError.message });
-      return withCors(NextResponse.json({ error: salesError.message }, { status: 500, headers: h }), req);
+      return withCors(NextResponse.json({ error: 'Failed to load sales. Please try again.' }, { status: 500, headers: h }), req);
     }
     const sales = (salesRows ?? []) as Array<{
       id: string;
@@ -116,7 +116,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const msg = e instanceof Error ? e.message : 'Failed to load sales';
     logApiResponse(req, 500, Date.now() - start, { message: msg });
     return withCors(
-      NextResponse.json({ error: msg }, { status: 500, headers: h }),
+      NextResponse.json({ error: 'Failed to load sales. Please try again.' }, { status: 500, headers: h }),
       req
     );
   }
@@ -203,9 +203,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (error) {
       const msg = error.message ?? 'Failed to record sale';
       const isStock = /INSUFFICIENT_STOCK|insufficient stock/i.test(msg);
+      console.error('[POST /api/sales] RPC error:', msg);
       return withCors(
         NextResponse.json(
-          { error: msg, code: isStock ? 'INSUFFICIENT_STOCK' : undefined },
+          {
+            error: isStock
+              ? 'Insufficient stock for one or more items. Adjust the cart and try again.'
+              : 'Failed to record sale. Please try again.',
+            code: isStock ? 'INSUFFICIENT_STOCK' : undefined,
+          },
           { status: isStock ? 422 : 500, headers: h }
         ),
         req
@@ -230,7 +236,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     console.error('[POST /api/sales]', e);
     return withCors(
       NextResponse.json(
-        { error: e instanceof Error ? e.message : 'Failed to record sale' },
+        { error: 'Failed to record sale. Please try again.' },
         { status: 500, headers: h }
       ),
       req

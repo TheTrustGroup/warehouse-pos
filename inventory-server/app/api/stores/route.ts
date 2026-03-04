@@ -34,7 +34,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const h = corsHeaders(request);
     return withCors(
       NextResponse.json(
-        { message: e instanceof Error ? e.message : 'Failed to load stores' },
+        { message: 'Failed to load stores. Please try again.' },
         { status: 500, headers: h }
       ),
       request

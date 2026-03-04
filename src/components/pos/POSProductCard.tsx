@@ -110,8 +110,11 @@ export default function POSProductCard({ product, onSelect }: POSProductCardProp
           <img
             src={safeSrc}
             alt={product.name}
-            loading="lazy"
+            width={256}
+            height={256}
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            loading="lazy"
+            decoding="async"
           />
         ) : (
           <ImagePlaceholder />

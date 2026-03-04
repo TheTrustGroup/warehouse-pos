@@ -12,6 +12,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import type { Product } from '../../types';
 import SizesSection, {
   type SizesSectionValue,
   type SizeCode,
@@ -49,27 +50,6 @@ function compressImage(file: File, maxPx = 900, quality = 0.82): Promise<string>
 
 /** Color options for the product form (matches inventory filter pills). */
 const FORM_COLOR_OPTIONS = ['', 'Black', 'White', 'Red', 'Blue', 'Brown', 'Green', 'Grey', 'Navy', 'Beige', 'Multi'];
-
-export interface Product {
-  id?: string;
-  name: string;
-  sku: string;
-  barcode?: string;
-  category: string;
-  description?: string;
-  sellingPrice: number;
-  costPrice: number;
-  reorderLevel?: number;
-  sizeKind: 'na' | 'one_size' | 'sized';
-  quantity: number;
-  quantityBySize: Array<{ sizeCode: string; quantity: number }>;
-  location?: { warehouse?: string; aisle?: string; rack?: string; bin?: string };
-  supplier?: { name?: string; contact?: string; email?: string };
-  tags?: string[];
-  images?: string[];
-  color?: string | null;
-  warehouseId?: string;
-}
 
 interface FormState {
   name: string;
@@ -595,13 +575,12 @@ export default function ProductModal({
 
     setIsSubmitting(true);
     try {
-      const payload: Omit<Product, 'id'> & { id?: string } = {
+      const payload = {
         ...(product?.id ? { id: product.id } : {}),
         name: form.name.trim(),
         sku: form.sku.trim(),
         barcode: form.barcode.trim(),
         category: form.category.trim(),
-        color: form.color.trim() || undefined,
         description: form.description.trim(),
         sellingPrice: Number(form.sellingPrice) || 0,
         costPrice: Number(form.costPrice) || 0,
@@ -609,12 +588,12 @@ export default function ProductModal({
         sizeKind: form.sizes.sizeKind,
         quantity: form.sizes.quantity,
         quantityBySize: form.sizes.quantityBySize,
-        location: form.location,
+        location: { warehouse: defaultWarehouseId ?? '', ...form.location },
         supplier: form.supplier,
         images: form.images,
-        warehouseId: defaultWarehouseId,
+        variants: { ...product?.variants, color: form.color.trim() || undefined },
       };
-      await onSubmit(payload, isEdit);
+      await onSubmit(payload as Omit<Product, 'id'> & { id?: string }, isEdit);
       onClose();
     } catch {
       // Parent shows toast — keep modal open

@@ -25,6 +25,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
+import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { onUnauthorized } from '../lib/onUnauthorized';
 import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
@@ -311,7 +312,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         }
       } catch (e: unknown) {
         if (signal?.aborted) return;
-        const message = e instanceof Error ? e.message : 'Failed to load products';
+        const message = getUserFriendlyMessage(e);
         if (!silent && isMounted.current) {
           setProductsLoadError(message);
           showToast(message, 'err');

@@ -8,31 +8,13 @@
 // ============================================================
 
 import { useState, useRef, useCallback } from 'react';
+import type { Product } from '../../types';
+import type { QuantityBySizeItem } from '../../types';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export interface SizeRow {
-  sizeCode: string;
-  quantity: number;
-  sizeLabel?: string;
-}
-
-export interface Product {
-  id: string;
-  name: string;
-  sku: string;
-  barcode?: string;
-  category: string;
-  sellingPrice: number;
-  costPrice: number;
-  quantity: number;
-  sizeKind: 'na' | 'one_size' | 'sized';
-  quantityBySize: SizeRow[];
-  location?: { aisle?: string; rack?: string; bin?: string; warehouse?: string };
-  images?: string[];
-  reorderLevel?: number;
-  variants?: { size?: string; color?: string; unit?: string };
-}
+export type { Product };
+export type SizeRow = QuantityBySizeItem;
 
 interface ProductCardProps {
   product: Product;
@@ -43,7 +25,7 @@ interface ProductCardProps {
   onSaveStock?: (id: string, update: {
     quantity: number;
     quantityBySize: SizeRow[];
-    sizeKind: string;
+    sizeKind: 'na' | 'one_size' | 'sized';
   }) => Promise<void>;
   onEditFull: (product: Product) => void;
   onDelete?: (product: Product) => void;
@@ -146,7 +128,7 @@ function SizePills({ product }: { product: Product }) {
     );
   }
 
-  if (product.quantityBySize.length === 0) {
+  if ((product.quantityBySize ?? []).length === 0) {
     return (
       <div className="mb-2">
         <span className="text-[11px] text-[var(--edk-ink-3)] italic">No sizes recorded</span>
@@ -158,7 +140,7 @@ function SizePills({ product }: { product: Product }) {
 
   return (
     <div className="flex flex-wrap gap-1 overflow-x-auto pb-2 scrollbar-none">
-      {product.quantityBySize.map((row) => {
+      {(product.quantityBySize ?? []).map((row) => {
         const isLow = row.quantity > 0 && row.quantity <= reorder;
         return (
           <span
@@ -182,15 +164,15 @@ function SizePills({ product }: { product: Product }) {
 
 interface StockEditorProps {
   product: Product;
-  onSave: (update: { quantity: number; quantityBySize: SizeRow[]; sizeKind: string }) => Promise<void>;
+  onSave: (update: { quantity: number; quantityBySize: SizeRow[]; sizeKind: 'na' | 'one_size' | 'sized' }) => Promise<void>;
   onCancel: () => void;
 }
 
 function StockEditor({ product, onSave, onCancel }: StockEditorProps) {
   // Initialize local rows from product
   const [rows, setRows] = useState<SizeRow[]>(() => {
-    if (product.sizeKind === 'sized' && product.quantityBySize.length > 0) {
-      return product.quantityBySize.map(r => ({ ...r }));
+    if (product.sizeKind === 'sized' && (product.quantityBySize ?? []).length > 0) {
+      return (product.quantityBySize ?? []).map(r => ({ ...r }));
     }
     return [{ sizeCode: product.sizeKind === 'one_size' ? 'ONE_SIZE' : 'QTY', quantity: product.quantity }];
   });
@@ -208,7 +190,7 @@ function StockEditor({ product, onSave, onCancel }: StockEditorProps) {
       const isSized = product.sizeKind === 'sized';
       const total = rows.reduce((s, r) => s + r.quantity, 0);
       await onSave({
-        sizeKind: product.sizeKind,
+        sizeKind: (product.sizeKind ?? 'na') as 'na' | 'one_size' | 'sized',
         quantity: total,
         quantityBySize: isSized ? rows : [],
       });
@@ -233,7 +215,7 @@ function StockEditor({ product, onSave, onCancel }: StockEditorProps) {
                 {product.sizeKind === 'sized' ? row.sizeCode : product.sizeKind === 'one_size' ? 'One size' : 'Quantity'}
               </p>
               <p className="text-[11px] text-slate-400">Was: {product.sizeKind === 'sized'
-                ? (product.quantityBySize.find(r => r.sizeCode === row.sizeCode)?.quantity ?? 0)
+                ? ((product.quantityBySize ?? []).find(r => r.sizeCode === row.sizeCode)?.quantity ?? 0)
                 : product.quantity
               }</p>
             </div>
@@ -339,8 +321,11 @@ export default function ProductCard({
           <img
             src={product.images![0]}
             alt={product.name}
+            width={320}
+            height={240}
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[var(--edk-ink-3)]">

@@ -13,14 +13,16 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import ProductCard, { ProductCardSkeleton, type Product } from '../components/inventory/ProductCard';
+import ProductCard, { ProductCardSkeleton } from '../components/inventory/ProductCard';
 import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
+import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { onUnauthorized } from '../lib/onUnauthorized';
 import { useWarehouse } from '../contexts/WarehouseContext';
-import type { Warehouse } from '../types';
+import { useInventory } from '../contexts/InventoryContext';
+import type { Warehouse, Product } from '../types';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -35,9 +37,6 @@ const POLL_MS    = 30_000;
 /** Desktop: show 50 per page. Mobile: smaller for faster paint and less scroll. */
 const PAGE_SIZE_DESKTOP = 50;
 const PAGE_SIZE_MOBILE  = 20;
-/** First request size: mobile gets small payload for fast first paint; desktop gets more. */
-const INITIAL_LIMIT_MOBILE  = 30;
-const INITIAL_LIMIT_DESKTOP = 100;
 const CATEGORIES = ['Sneakers', 'Slippers', 'Boots', 'Sandals', 'Accessories'];
 
 /** Color filter options (pills). "All" and "Uncategorized" plus standard palette. */
@@ -55,16 +54,12 @@ function isValidWarehouseId(id: string): boolean {
   return t.length > 0 && t !== '00000000-0000-0000-0000-000000000000';
 }
 
-const PRODUCTS_CACHE_KEY_PREFIX = 'warehouse_products_';
-function productsCacheKey(warehouseId: string): string {
-  return `${PRODUCTS_CACHE_KEY_PREFIX}${warehouseId}`;
-}
-
 // ── Stat helpers ──────────────────────────────────────────────────────────
 
 function getProductQty(p: Product): number {
-  if (p.sizeKind === 'sized' && p.quantityBySize?.length > 0) {
-    return p.quantityBySize.reduce((s, r) => s + (r.quantity ?? 0), 0);
+  const qbs = p.quantityBySize ?? [];
+  if (p.sizeKind === 'sized' && qbs.length > 0) {
+    return qbs.reduce((s, r) => s + (r.quantity ?? 0), 0);
   }
   return p.quantity ?? 0;
 }
@@ -156,44 +151,6 @@ function applyFilters(
     }
   });
   return r;
-}
-
-/** Ensure quantityBySize is always an array (API/view may return scalar). */
-function normalizeQuantityBySize(p: Record<string, unknown>): Product {
-  const qbs = p['quantityBySize'] ?? p['quantity_by_size'];
-  const arr = Array.isArray(qbs) ? qbs : [];
-  return { ...p, quantityBySize: arr } as Product;
-}
-
-function unwrapProduct(raw: unknown): Product | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const r = raw as Record<string, unknown>;
-  const inner = r.data ?? r.product ?? r;
-  if (!inner || typeof inner !== 'object' || !('id' in inner)) return null;
-  return normalizeQuantityBySize(inner as Record<string, unknown>);
-}
-
-/** Normalize API list: variants.color + quantityBySize (from API or quantity_by_size) so sizes/quantity never vanish. */
-function unwrapProductList(raw: unknown): Product[] {
-  function withVariantsAndQty(item: Record<string, unknown>): Product {
-    const withVariants = {
-      ...item,
-      variants: {
-        ...(typeof item.variants === 'object' && item.variants ? item.variants : {}),
-        color: (item.color != null ? String(item.color).trim() : '') || (item.variants as { color?: string } | undefined)?.color,
-      },
-    };
-    return normalizeQuantityBySize(withVariants as Record<string, unknown>) as Product;
-  }
-  if (Array.isArray(raw)) {
-    const safe = raw.filter((item): item is Record<string, unknown> => item != null && typeof item === 'object');
-    return safe.map((item) => withVariantsAndQty(item));
-  }
-  if (!raw || typeof raw !== 'object') return [];
-  const r = raw as Record<string, unknown>;
-  const list = r.data ?? r.products ?? r.items ?? [];
-  const arr = Array.isArray(list) ? list.filter((item): item is Record<string, unknown> => item != null && typeof item === 'object') : [];
-  return arr.map((item) => withVariantsAndQty(item));
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────
@@ -358,34 +315,39 @@ export default function InventoryPage(_props: InventoryPageProps) {
   const warehouseList = contextWarehouses?.length ? contextWarehouses : FALLBACK_WAREHOUSES;
   const warehouse = currentWarehouse ?? warehouseList.find(w => w.id === warehouseId) ?? warehouseList[0];
 
-  // ── State ─────────────────────────────────────────────────────────────────
-  const [products,       setProducts]       = useState<Product[]>([]);
-  const [sizeCodes,      setSizeCodes]      = useState<SizeCode[]>([]);
-  const [loading,        setLoading]        = useState(true);
-  const [error,          setError]          = useState<string | null>(null);
-  const search = searchFromUrl;
-  const [category,       setCategory]       = useState<FilterKey>('all');
-  const [sizeFilter,     setSizeFilter]     = useState('');
-  const [colorFilter,    setColorFilter]   = useState('');
-  const [currentPage,    setCurrentPage]    = useState(1);
-  const [sort,           setSort]           = useState<SortKey>('name_asc');
-  const [sortOpen,       setSortOpen]       = useState(false);
-  const [modalOpen,      setModalOpen]      = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [confirmDelete,  setConfirmDelete]  = useState<Product | null>(null);
-  /** True while a silent (background) refresh is in progress. */
-  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
-  /** Timestamp (ms) of last successful load; used for "Updated X ago" when not refreshing. */
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
+  const {
+    products,
+    isLoading: loading,
+    error,
+    refreshProducts,
+    hasMore,
+    loadMore,
+    isLoadingMore,
+    isBackgroundRefreshing: backgroundRefreshing,
+    lastSyncAt,
+    addProduct: contextAddProduct,
+    updateProduct: contextUpdateProduct,
+    deleteProduct: contextDeleteProduct,
+  } = useInventory();
+  const lastRefreshedAt = lastSyncAt ? lastSyncAt.getTime() : null;
 
-  const modalOpenRef      = useRef(false);
-  const pollTimerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pendingDeletesRef = useRef<Set<string>>(new Set());
-  const loadInflightRef   = useRef(false);
-  const lastSaveTimeRef   = useRef<number>(0);
-  const loadAbortRef      = useRef<AbortController | null>(null);
-  const loadRestAbortRef  = useRef<AbortController | null>(null);
-  const didInitialLoad    = useRef(false);
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [sizeCodes, setSizeCodes] = useState<SizeCode[]>([]);
+  const search = searchFromUrl;
+  const [category, setCategory] = useState<FilterKey>('all');
+  const [sizeFilter, setSizeFilter] = useState('');
+  const [colorFilter, setColorFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sort, setSort] = useState<SortKey>('name_asc');
+  const [sortOpen, setSortOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
+
+  const modalOpenRef = useRef(false);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastSaveTimeRef = useRef<number>(0);
+  const didInitialLoad = useRef(false);
 
   /** Mobile-first: smaller first request and page size on narrow viewports. */
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
@@ -399,8 +361,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
     return () => mq.removeEventListener('change', update);
   }, []);
 
-  const pageSize   = isMobileViewport ? PAGE_SIZE_MOBILE : PAGE_SIZE_DESKTOP;
-  const initialLimit = isMobileViewport ? INITIAL_LIMIT_MOBILE : INITIAL_LIMIT_DESKTOP;
+  const pageSize = isMobileViewport ? PAGE_SIZE_MOBILE : PAGE_SIZE_DESKTOP;
 
   const { toasts, show: showToast } = useToast();
 
@@ -479,118 +440,6 @@ export default function InventoryPage(_props: InventoryPageProps) {
     }
   }, []);
 
-  // ── Load products ─────────────────────────────────────────────────────────
-
-  const loadProducts = useCallback(async (silent = false) => {
-    if (modalOpenRef.current) return;
-    loadRestAbortRef.current?.abort();
-    if (loadInflightRef.current) {
-      if (silent) return;
-      loadAbortRef.current?.abort();
-    }
-
-    const ctrl = new AbortController();
-    loadAbortRef.current    = ctrl;
-    loadInflightRef.current = true;
-    if (!silent) setLoading(true);
-    if (silent) setBackgroundRefreshing(true);
-    setError(null);
-
-    try {
-      const PAGE = 100;
-      const MAX = 500;
-      const firstLimit = initialLimit;
-      const raw = await apiFetch<unknown>(
-        `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=${firstLimit}&offset=0`,
-        { signal: ctrl.signal }
-      );
-      if (ctrl.signal.aborted) return;
-      let list = unwrapProductList(raw);
-      const total = (raw != null && typeof raw === 'object' && 'total' in raw) ? (raw as { total?: number }).total : undefined;
-      const pending = pendingDeletesRef.current;
-      const firstList = pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list;
-      setProducts((prev) => {
-        const nextAllZero = firstList.length > 0 && firstList.every((p) => getProductQty(p) === 0);
-        const prevHadQty = prev.length > 0 && prev.some((p) => getProductQty(p) > 0);
-        if (nextAllZero && prevHadQty) {
-          if (silent) showToast('Could not refresh; showing last saved data', 'info');
-          return prev;
-        }
-        return firstList;
-      });
-      getApiCircuitBreaker().recordSuccess();
-      setLastRefreshedAt(Date.now());
-      if (!silent) setLoading(false);
-      if (silent) setBackgroundRefreshing(false);
-      try {
-        if (typeof localStorage !== 'undefined' && firstList.length > 0) {
-          localStorage.setItem(productsCacheKey(warehouseId), JSON.stringify(firstList));
-        }
-      } catch {
-        /* ignore quota / private mode */
-      }
-      if (typeof total === 'number' && total > list.length && list.length === firstLimit) {
-        loadRestAbortRef.current?.abort();
-        const restCtrl = new AbortController();
-        loadRestAbortRef.current = restCtrl;
-        const schedule = typeof requestIdleCallback !== 'undefined'
-          ? (fn: () => void) => requestIdleCallback(fn, { timeout: 300 })
-          : (fn: () => void) => setTimeout(fn, 100);
-        schedule(() => {
-          if (restCtrl.signal.aborted) return;
-          setBackgroundRefreshing(true);
-          (async () => {
-            let acc = list;
-            for (let offset = firstLimit; offset < Math.min(total, MAX) && !restCtrl.signal.aborted; offset += PAGE) {
-              try {
-                const next = await apiFetch<unknown>(
-                  `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=${PAGE}&offset=${offset}`,
-                  { signal: restCtrl.signal }
-                );
-                if (restCtrl.signal.aborted) return;
-                const nextList = unwrapProductList(next);
-                acc = acc.concat(nextList);
-                const pendingNow = pendingDeletesRef.current;
-                const merged = pendingNow.size > 0 ? acc.filter(p => !pendingNow.has(p.id)) : acc;
-                setProducts((prev) => {
-                  const mergedAllZero = merged.length > 0 && merged.every((p) => getProductQty(p) === 0);
-                  const prevHadQty = prev.length > 0 && prev.some((p) => getProductQty(p) > 0);
-                  if (mergedAllZero && prevHadQty) return prev;
-                  return merged;
-                });
-                if (nextList.length < PAGE) break;
-              } catch {
-                if (restCtrl.signal.aborted) return;
-                break;
-              }
-            }
-            try {
-              const final = pendingDeletesRef.current.size > 0 ? acc.filter(p => !pendingDeletesRef.current.has(p.id)) : acc;
-              if (typeof localStorage !== 'undefined' && final.length > 0) {
-                localStorage.setItem(productsCacheKey(warehouseId), JSON.stringify(final));
-              }
-            } catch { /* ignore */ }
-            if (loadRestAbortRef.current === restCtrl) loadRestAbortRef.current = null;
-            setBackgroundRefreshing(false);
-          })();
-        });
-        return;
-      }
-    } catch (e: unknown) {
-      const err = e as Error;
-      if (err.name === 'AbortError' || ctrl.signal.aborted) return;
-      getApiCircuitBreaker().recordFailure();
-      if (!silent) setError(err.message ?? 'Failed to load products');
-    } finally {
-      if (loadAbortRef.current === ctrl) {
-        loadInflightRef.current = false;
-        loadAbortRef.current    = null;
-      }
-      if (!silent) setLoading(false);
-      if (silent) setBackgroundRefreshing(false);
-    }
-  }, [warehouseId, apiFetch, initialLimit, showToast]);
-
   // ── Load size codes ───────────────────────────────────────────────────────
 
   const loadSizeCodes = useCallback(async () => {
@@ -608,7 +457,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
     const interval = isMobileViewport ? Math.max(POLL_MS, 60_000) : POLL_MS;
     pollTimerRef.current = setInterval(() => {
       if (!modalOpenRef.current && document.visibilityState === 'visible') {
-        loadProducts(true);
+        refreshProducts({ silent: true });
       }
     }, interval);
   }
@@ -617,60 +466,26 @@ export default function InventoryPage(_props: InventoryPageProps) {
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
-  // Restore from cache first when remounting (e.g. returning to Inventory tab) so we don't
-  // flash empty/loading — then refresh in background. Only clear state when there is no cache.
+  // Context loads products on warehouse change. We only load size codes and start poll.
 
   useEffect(() => {
     setCategory('all');
-    setLastRefreshedAt(null);
     didInitialLoad.current = false;
-    loadAbortRef.current?.abort();
-
     loadSizeCodes();
-    if (isValidWarehouseId(warehouseId)) {
-      let hadCache = false;
-      try {
-        const cached = typeof localStorage !== 'undefined' && localStorage.getItem(productsCacheKey(warehouseId));
-        if (cached) {
-          const parsed = JSON.parse(cached) as unknown;
-          const arr = Array.isArray(parsed) ? parsed.filter((p): p is Record<string, unknown> => p != null && typeof p === 'object' && 'id' in p) : [];
-          if (arr.length > 0) {
-            const normalized = arr.map((p) => normalizeQuantityBySize(p) as Product);
-            setProducts(normalized);
-            setLoading(false);
-            setError(null);
-            hadCache = true;
-          }
-        }
-      } catch {
-        /* ignore malformed cache */
-      }
-      if (!hadCache) {
-        setProducts([]);
-        setLoading(true);
-        setError(null);
-      }
-      loadProducts(hadCache);
-    } else {
-      setProducts([]);
-      setLoading(false);
-      setError(null);
-    }
     const pollDelay = isValidWarehouseId(warehouseId) ? setTimeout(() => startPoll(), 5000) : null;
-
     const onVisible = () => {
       if (!didInitialLoad.current) return;
-      if (document.visibilityState === 'visible' && !modalOpenRef.current && isValidWarehouseId(warehouseId)) loadProducts(true);
+      if (document.visibilityState === 'visible' && !modalOpenRef.current && isValidWarehouseId(warehouseId)) {
+        refreshProducts({ silent: true });
+      }
     };
     document.addEventListener('visibilitychange', onVisible);
     const initGate = setTimeout(() => { didInitialLoad.current = true; }, 500);
-
     return () => {
       if (pollDelay != null) clearTimeout(pollDelay);
       clearTimeout(initGate);
       stopPoll();
       document.removeEventListener('visibilitychange', onVisible);
-      loadAbortRef.current?.abort();
     };
   }, [warehouseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -693,30 +508,18 @@ export default function InventoryPage(_props: InventoryPageProps) {
     setModalOpen(false);
     setEditingProduct(null);
     const msSinceSave = Date.now() - lastSaveTimeRef.current;
-    if (msSinceSave > 5000) setTimeout(() => loadProducts(true), 500);
+    if (msSinceSave > 5000) setTimeout(() => refreshProducts({ silent: true }), 500);
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────
 
   async function executeDelete(product: Product) {
     setConfirmDelete(null);
-    pendingDeletesRef.current.add(product.id);
-    setProducts(prev => prev.filter(p => p.id !== product.id));
-
     try {
-      await apiFetch(`/api/products?id=${encodeURIComponent(product.id)}&warehouse_id=${encodeURIComponent(warehouseId)}`, {
-        method: 'DELETE',
-      });
-      pendingDeletesRef.current.delete(product.id);
+      await contextDeleteProduct(product.id);
       showToast(`"${product.name}" deleted`, 'success');
     } catch (e: unknown) {
-      pendingDeletesRef.current.delete(product.id);
-      const err = e as Error;
-      setProducts(prev => {
-        if (prev.find(p => p.id === product.id)) return prev;
-        return [...prev, product].sort((a, b) => a.name.localeCompare(b.name));
-      });
-      showToast(err.message ?? 'Failed to delete', 'error');
+      showToast(getUserFriendlyMessage(e), 'error');
     }
   }
 
@@ -724,77 +527,51 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
   async function handleSubmit(
     payload: Omit<Product, 'id'> & { id?: string },
-    isEdit:  boolean
+    isEdit: boolean
   ) {
+    const description = (payload as { description?: string }).description ?? '';
+    const quantityBySize = Array.isArray(payload.quantityBySize) ? payload.quantityBySize : [];
+    const quantity = payload.quantity ?? 0;
+
     if (isEdit && payload.id) {
-      const original  = products.find(p => p.id === payload.id);
-      const optimistic = { ...original, ...payload } as Product;
-      setProducts(prev => prev.map(p => p.id === payload.id ? optimistic : p));
-
       try {
-        const raw = await apiFetch<unknown>(`/api/products`, {
-          method: 'PUT',
-          body:   JSON.stringify({
-            ...payload,
-            id: payload.id,
-            warehouseId,
-            barcode: payload.barcode ?? '',
-            description: (payload as { description?: string }).description ?? '',
-            sizeKind:       payload.sizeKind,
-            quantityBySize: Array.isArray(payload.quantityBySize) ? payload.quantityBySize : [],
-            quantity:       payload.quantity,
-          }),
-        });
-
-        const updated = unwrapProduct(raw);
-        if (updated) {
-          const serverHasSizes  = (updated.quantityBySize?.length ?? 0) > 0;
-          const payloadHasSizes = (payload.quantityBySize?.length  ?? 0) > 0;
-          if (payloadHasSizes && !serverHasSizes) {
-            console.warn('[handleSubmit] Server wiped sizes — keeping optimistic state');
-          } else {
-            setProducts(prev => prev.map(p => p.id === payload.id ? updated : p));
-          }
-        }
-
+        await contextUpdateProduct(payload.id, {
+          ...payload,
+          warehouseId,
+          barcode: payload.barcode ?? '',
+          description,
+          sizeKind: payload.sizeKind,
+          quantityBySize,
+          quantity,
+        } as Parameters<typeof contextUpdateProduct>[1]);
         lastSaveTimeRef.current = Date.now();
         showToast(`${payload.name} updated`, 'success');
       } catch (e: unknown) {
-        const err = e as Error;
-        if (original) setProducts(prev => prev.map(p => p.id === payload.id ? original : p));
-        showToast(err.message ?? 'Failed to update', 'error');
+        showToast(getUserFriendlyMessage(e), 'error');
         throw e;
       }
-
     } else {
       try {
-        const raw = await apiFetch<unknown>('/api/products', {
-          method: 'POST',
-          body:   JSON.stringify({
-            ...payload,
-            warehouseId,
-            barcode: payload.barcode ?? '',
-            description: (payload as { description?: string }).description ?? '',
-            sizeKind:       payload.sizeKind,
-            quantityBySize: Array.isArray(payload.quantityBySize) ? payload.quantityBySize : [],
-            quantity:       payload.quantity,
-          }),
-        });
-
-        let created = unwrapProduct(raw);
-        if (created && (payload.quantityBySize?.length ?? 0) > 0
-            && (created.quantityBySize?.length ?? 0) === 0) {
-          created = { ...created, quantityBySize: payload.quantityBySize, quantity: payload.quantity };
-        }
-
-        if (created?.id) setProducts(prev => [created!, ...prev]);
-        else setTimeout(() => loadProducts(true), 300);
-
+        const { id: _omit, ...rest } = payload;
+        await contextAddProduct({
+          ...rest,
+          warehouseId,
+          barcode: payload.barcode ?? '',
+          description,
+          sizeKind: payload.sizeKind ?? 'na',
+          quantityBySize,
+          quantity,
+          tags: rest.tags ?? [],
+          supplier: rest.supplier ?? { name: '', contact: '', email: '' },
+          expiryDate: rest.expiryDate ?? null,
+          createdBy: rest.createdBy ?? '',
+          location: rest.location ?? { warehouse: '', aisle: '', rack: '', bin: '' },
+          images: rest.images ?? [],
+        } as Parameters<typeof contextAddProduct>[0]);
         lastSaveTimeRef.current = Date.now();
         showToast(`${payload.name} added`, 'success');
       } catch (e: unknown) {
-        const err = e as Error;
-        showToast(err.message ?? 'Failed to add product', 'error');
+        showToast(getUserFriendlyMessage(e), 'error');
         throw e;
       }
     }
@@ -990,7 +767,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
                 {error || (getApiCircuitBreaker().isDegraded() ? 'Server temporarily unavailable (too many failed requests). Click Retry to try again.' : null)}
               </p>
             </div>
-            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); setError(null); loadProducts(); }}
+            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true }); }}
                     className="h-10 px-6 rounded-xl bg-red-500 text-white text-[13px] font-bold
                                hover:bg-red-600 transition-colors shadow-[0_4px_12px_rgba(239,68,68,0.25)]">
               Retry
@@ -1071,6 +848,19 @@ export default function InventoryPage(_props: InventoryPageProps) {
                   className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
                 >
                   Next
+                </button>
+              </div>
+            )}
+            {/* Load more (fetch next page from API) */}
+            {hasMore && (
+              <div className="flex justify-center py-4">
+                <button
+                  type="button"
+                  onClick={() => loadMore()}
+                  disabled={isLoadingMore}
+                  className="h-10 px-6 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                  {isLoadingMore ? 'Loading…' : 'Load more'}
                 </button>
               </div>
             )}

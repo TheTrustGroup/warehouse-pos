@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { ProductCardSkeleton } from '../inventory/ProductCard';
 import POSProductCard from './POSProductCard';
 import type { POSProduct } from './SizePickerSheet';
 
@@ -106,8 +107,12 @@ export default function ProductGrid({
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center p-8">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+      <div className="p-4 flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <ProductCardSkeleton key={i} />
+          ))}
+        </div>
       </div>
     );
   }

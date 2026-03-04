@@ -96,6 +96,12 @@ interface InventoryContextType {
   searchProducts: (query: string) => Product[];
   filterProducts: (filters: ProductFilters) => Product[];
   refreshProducts: (options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => Promise<void>;
+  /** True when more products are available from the server (pagination). */
+  hasMore: boolean;
+  /** Load next page of products (50 per page). No-op when !hasMore or when already loading more. */
+  loadMore: () => Promise<void>;
+  /** True while the next page is being fetched (Load more in progress). */
+  isLoadingMore: boolean;
   /** True when a background (silent) refresh is in progress — show "Updating..." indicator. */
   isBackgroundRefreshing: boolean;
   /** Push products that exist only in this browser's storage to the API so they appear everywhere. */
@@ -219,6 +225,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [savePhase, setSavePhase] = useState<'idle' | 'saving' | 'verifying'>('idle');
   /** True while a silent (background) refresh is in progress — for "Updating..." indicator. */
   const [isBackgroundRefreshing, setBackgroundRefreshing] = useState(false);
+  /** Total product count from API (for pagination). null until first response. */
+  const [productsTotal, setProductsTotal] = useState<number | null>(null);
+  /** True while fetching the next page (Load more). */
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const syncRef = useRef<(() => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>) | null>(null);
 
   // Persist current products to localStorage for legacy/fallback (products now from Dexie via hook)
@@ -392,14 +402,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           const qs = params.toString();
           return `${base}${base.includes('?') ? '&' : '?'}${qs}`;
         };
-        // First page 100 = one round-trip for typical warehouses; keeps TTFB good and reduces total requests
-        const PAGE_LIMIT = 100;
-        const MAX_PRODUCTS = 500;
+        // First page only: 50 products per page (pagination; Load more fetches next pages).
+        const PAGE_LIMIT = 50;
         const PRODUCTS_REQUEST_TIMEOUT_MS = 25_000;
         const getOpts = { signal, timeoutMs: timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 2 };
-        let apiProducts = await queryClient.fetchQuery({
+        const result = await queryClient.fetchQuery({
           queryKey: queryKeys.products(wid),
-          queryFn: async (): Promise<Product[]> => {
+          queryFn: async (): Promise<{ list: Product[]; total?: number }> => {
             const path = pathForWid('/api/products', { limit: PAGE_LIMIT, offset: 0 });
             let raw: { data?: Product[]; total?: number } | Product[] | null = null;
             try {
@@ -414,34 +423,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             }
             const parsed = parseProductsResponse(raw);
             if (!parsed.success) throw new Error(parsed.message);
-            let list = parsed.items
+            const list = parsed.items
               .filter((p) => p != null && typeof p === 'object')
               .map((p) => normalizeProduct(p))
               .filter((p): p is Product => p != null && typeof p === 'object');
             const totalFromApi = raw != null && typeof raw === 'object' && 'total' in raw ? (raw as { total?: number }).total : undefined;
-            if (typeof totalFromApi === 'number' && totalFromApi > list.length && list.length === PAGE_LIMIT) {
-              const basePath = path.includes('/admin/api/') ? '/admin/api/products' : '/api/products';
-              for (let offset = PAGE_LIMIT; offset < Math.min(totalFromApi, MAX_PRODUCTS) && !signal?.aborted; offset += PAGE_LIMIT) {
-                try {
-                  const nextRaw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, pathForWid(basePath, { limit: PAGE_LIMIT, offset }), getOpts);
-                  const nextParsed = parseProductsResponse(nextRaw);
-                  if (!nextParsed.success || nextParsed.items.length === 0) break;
-                  const nextItems = nextParsed.items
-                    .filter((p) => p != null && typeof p === 'object')
-                    .map((p) => normalizeProduct(p))
-                    .filter((p): p is Product => p != null && typeof p === 'object');
-                  list = list.concat(nextItems);
-                  if (nextParsed.items.length < PAGE_LIMIT) break;
-                } catch {
-                  break;
-                }
-              }
-            }
-            return list;
+            return { list, total: totalFromApi };
           },
           staleTime: PRODUCTS_STALE_MS,
           gcTime: PRODUCTS_GC_MS,
         });
+        const apiProducts = result.list;
+        if (typeof result.total === 'number') setProductsTotal(result.total);
+        else setProductsTotal(null);
         const apiIds = new Set(apiProducts.map((p) => p.id));
         // Keep products that exist only locally (e.g. added while offline or when API failed) so inventory never vanishes
         const localOnly: Product[] = [];
@@ -633,6 +627,49 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
   loadProductsRef.current = loadProducts;
 
+  /** Load next page (50 items). No-op when offline, when no more data, or when already loading. */
+  const loadMore = useCallback(async () => {
+    if (offlineEnabled || isLoadingMore) return;
+    const current = productsRef.current;
+    const total = productsTotal;
+    const hasMore = total === null || current.length < total;
+    if (!hasMore) return;
+    setIsLoadingMore(true);
+    try {
+      const offset = current.length;
+      const path = productsPath('/api/products', { limit: 50, offset });
+      let raw: { data?: Product[]; total?: number } | Product[] | null = null;
+      try {
+        raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, { maxRetries: 2 });
+      } catch (e) {
+        const status = (e as { status?: number })?.status;
+        if (status === 404) {
+          raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: 50, offset }), { maxRetries: 2 });
+        } else {
+          throw e;
+        }
+      }
+      const parsed = parseProductsResponse(raw);
+      if (!parsed.success || parsed.items.length === 0) {
+        if (typeof (raw as { total?: number } | null)?.total === 'number') setProductsTotal((raw as { total: number }).total);
+        return;
+      }
+      const nextItems = parsed.items
+        .filter((p) => p != null && typeof p === 'object')
+        .map((p) => normalizeProduct(p))
+        .filter((p): p is Product => p != null && typeof p === 'object');
+      setProducts((prev) => [...prev, ...nextItems]);
+      const totalFromApi = raw != null && typeof raw === 'object' && 'total' in raw ? (raw as { total?: number }).total : undefined;
+      if (typeof totalFromApi === 'number') setProductsTotal(totalFromApi);
+    } catch {
+      // Leave hasMore as-is; user can retry
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [offlineEnabled, isLoadingMore, productsTotal, productsPath]);
+
+  const hasMore = !offlineEnabled && (productsTotal === null || products.length < productsTotal);
+
   // On mount: first paint from cache when available (no empty flash), then refresh from API. Never clear to [] when we have cache for this warehouse.
   useEffect(() => {
     clearMockData();
@@ -645,10 +682,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setProducts(productsFromCache);
       setError(null);
       setIsLoading(false);
+      setProductsTotal(null);
     } else {
       setProducts([]);
       setError(null);
       setIsLoading(true);
+      setProductsTotal(null);
     }
 
     (async () => {
@@ -1256,6 +1295,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       searchProducts,
       filterProducts,
       refreshProducts,
+      hasMore,
+      loadMore,
+      isLoadingMore,
       isBackgroundRefreshing: offlineEnabled ? offline.isSyncing : isBackgroundRefreshing,
       syncLocalInventoryToApi,
       unsyncedCount: offlineEnabled ? unsyncedCountFromHook + localOnlyIds.size : 0,
