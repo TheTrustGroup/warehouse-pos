@@ -32,7 +32,12 @@ interface InventoryPageProps {}
 // ── Constants ─────────────────────────────────────────────────────────────
 
 const POLL_MS    = 30_000;
-const PAGE_SIZE  = 50;
+/** Desktop: show 50 per page. Mobile: smaller for faster paint and less scroll. */
+const PAGE_SIZE_DESKTOP = 50;
+const PAGE_SIZE_MOBILE  = 20;
+/** First request size: mobile gets small payload for fast first paint; desktop gets more. */
+const INITIAL_LIMIT_MOBILE  = 30;
+const INITIAL_LIMIT_DESKTOP = 100;
 const CATEGORIES = ['Sneakers', 'Slippers', 'Boots', 'Sandals', 'Accessories'];
 
 /** Color filter options (pills). "All" and "Uncategorized" plus standard palette. */
@@ -381,7 +386,23 @@ export default function InventoryPage(_props: InventoryPageProps) {
   const loadInflightRef   = useRef(false);
   const lastSaveTimeRef   = useRef<number>(0);
   const loadAbortRef      = useRef<AbortController | null>(null);
+  const loadRestAbortRef  = useRef<AbortController | null>(null);
   const didInitialLoad    = useRef(false);
+
+  /** Mobile-first: smaller first request and page size on narrow viewports. */
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobileViewport(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  const pageSize   = isMobileViewport ? PAGE_SIZE_MOBILE : PAGE_SIZE_DESKTOP;
+  const initialLimit = isMobileViewport ? INITIAL_LIMIT_MOBILE : INITIAL_LIMIT_DESKTOP;
 
   const { toasts, show: showToast } = useToast();
 
@@ -464,6 +485,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
   const loadProducts = useCallback(async (silent = false) => {
     if (modalOpenRef.current) return;
+    loadRestAbortRef.current?.abort();
     if (loadInflightRef.current) {
       if (silent) return;
       loadAbortRef.current?.abort();
@@ -479,47 +501,69 @@ export default function InventoryPage(_props: InventoryPageProps) {
     try {
       const PAGE = 100;
       const MAX = 500;
+      const firstLimit = initialLimit;
       const raw = await apiFetch<unknown>(
-        `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=${PAGE}&offset=0`,
+        `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=${firstLimit}&offset=0`,
         { signal: ctrl.signal }
       );
       if (ctrl.signal.aborted) return;
       let list = unwrapProductList(raw);
       const total = (raw != null && typeof raw === 'object' && 'total' in raw) ? (raw as { total?: number }).total : undefined;
-      if (typeof total === 'number' && total > list.length && list.length === PAGE) {
-        for (let offset = PAGE; offset < Math.min(total, MAX) && !ctrl.signal.aborted; offset += PAGE) {
-          try {
-            const next = await apiFetch<unknown>(
-              `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=${PAGE}&offset=${offset}`,
-              { signal: ctrl.signal }
-            );
-            if (ctrl.signal.aborted) return;
-            const nextList = unwrapProductList(next);
-            list = list.concat(nextList);
-            if (nextList.length < PAGE) break;
-          } catch (pageErr) {
-            if (ctrl.signal.aborted) return;
-            const pending = pendingDeletesRef.current;
-            setProducts(pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list);
-            getApiCircuitBreaker().recordFailure();
-            if (!silent) setError(list.length > 0
-              ? `Loaded ${list.length} products; could not load the rest. Try again or continue with the current list.`
-              : (pageErr instanceof Error ? pageErr.message : 'Failed to load products'));
-            return;
-          }
-        }
-      }
       const pending = pendingDeletesRef.current;
-      const nextList = pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list;
-      setProducts(nextList);
+      const firstList = pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list;
+      setProducts(firstList);
       getApiCircuitBreaker().recordSuccess();
       setLastRefreshedAt(Date.now());
+      if (!silent) setLoading(false);
+      if (silent) setBackgroundRefreshing(false);
       try {
-        if (typeof localStorage !== 'undefined' && nextList.length > 0) {
-          localStorage.setItem(productsCacheKey(warehouseId), JSON.stringify(nextList));
+        if (typeof localStorage !== 'undefined' && firstList.length > 0) {
+          localStorage.setItem(productsCacheKey(warehouseId), JSON.stringify(firstList));
         }
       } catch {
         /* ignore quota / private mode */
+      }
+      if (typeof total === 'number' && total > list.length && list.length === firstLimit) {
+        loadRestAbortRef.current?.abort();
+        const restCtrl = new AbortController();
+        loadRestAbortRef.current = restCtrl;
+        const schedule = typeof requestIdleCallback !== 'undefined'
+          ? (fn: () => void) => requestIdleCallback(fn, { timeout: 300 })
+          : (fn: () => void) => setTimeout(fn, 100);
+        schedule(() => {
+          if (restCtrl.signal.aborted) return;
+          setBackgroundRefreshing(true);
+          (async () => {
+            let acc = list;
+            for (let offset = firstLimit; offset < Math.min(total, MAX) && !restCtrl.signal.aborted; offset += PAGE) {
+              try {
+                const next = await apiFetch<unknown>(
+                  `/api/products?warehouse_id=${encodeURIComponent(warehouseId)}&limit=${PAGE}&offset=${offset}`,
+                  { signal: restCtrl.signal }
+                );
+                if (restCtrl.signal.aborted) return;
+                const nextList = unwrapProductList(next);
+                acc = acc.concat(nextList);
+                const pendingNow = pendingDeletesRef.current;
+                const merged = pendingNow.size > 0 ? acc.filter(p => !pendingNow.has(p.id)) : acc;
+                setProducts(merged);
+                if (nextList.length < PAGE) break;
+              } catch {
+                if (restCtrl.signal.aborted) return;
+                break;
+              }
+            }
+            try {
+              const final = pendingDeletesRef.current.size > 0 ? acc.filter(p => !pendingDeletesRef.current.has(p.id)) : acc;
+              if (typeof localStorage !== 'undefined' && final.length > 0) {
+                localStorage.setItem(productsCacheKey(warehouseId), JSON.stringify(final));
+              }
+            } catch { /* ignore */ }
+            if (loadRestAbortRef.current === restCtrl) loadRestAbortRef.current = null;
+            setBackgroundRefreshing(false);
+          })();
+        });
+        return;
       }
     } catch (e: unknown) {
       const err = e as Error;
@@ -534,7 +578,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
       if (!silent) setLoading(false);
       if (silent) setBackgroundRefreshing(false);
     }
-  }, [warehouseId, apiFetch]);
+  }, [warehouseId, apiFetch, initialLimit]);
 
   // ── Load size codes ───────────────────────────────────────────────────────
 
@@ -550,11 +594,12 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
   function startPoll() {
     stopPoll();
+    const interval = isMobileViewport ? Math.max(POLL_MS, 60_000) : POLL_MS;
     pollTimerRef.current = setInterval(() => {
       if (!modalOpenRef.current && document.visibilityState === 'visible') {
         loadProducts(true);
       }
-    }, POLL_MS);
+    }, interval);
   }
   function stopPoll() {
     if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
@@ -755,11 +800,11 @@ export default function InventoryPage(_props: InventoryPageProps) {
     [products, search, category, sort, sizeFilter, colorFilter]
   );
   const totalFiltered = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE));
-  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const pageStart = (currentPage - 1) * pageSize;
   const displayed = useMemo(
-    () => filtered.slice(pageStart, pageStart + PAGE_SIZE),
-    [filtered, pageStart]
+    () => filtered.slice(pageStart, pageStart + pageSize),
+    [filtered, pageStart, pageSize]
   );
   const SORT_OPTIONS: { key: SortKey; label: string }[] = [
     { key: 'name_asc',   label: 'Name A–Z'       },
@@ -815,7 +860,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
           <StatCard
             label="SKUs"
             value={products.length}
-            sub={totalPages > 1 ? `Showing ${pageStart + 1}–${Math.min(pageStart + PAGE_SIZE, totalFiltered)} of ${totalFiltered}` : `${totalFiltered} shown`}
+            sub={totalPages > 1 ? `Showing ${pageStart + 1}–${Math.min(pageStart + pageSize, totalFiltered)} of ${totalFiltered}` : `${totalFiltered} shown`}
           />
           {alertCount > 0 && (
             <StatCard
@@ -914,7 +959,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
           </div>
         </div>
         <span className="text-[11px] text-[var(--edk-ink-3)] whitespace-nowrap">
-          Showing <strong className="text-[var(--edk-ink-2)] font-semibold">{pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, totalFiltered)}</strong> of {totalFiltered}
+          Showing <strong className="text-[var(--edk-ink-2)] font-semibold">{pageStart + 1}–{Math.min(pageStart + pageSize, totalFiltered)}</strong> of {totalFiltered}
         </span>
       </div>
 
@@ -944,7 +989,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
         {/* Skeletons */}
         {loading && !error && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Array.from({ length: 6 }).map((_, i) => <ProductCardSkeleton key={i}/>)}
+            {Array.from({ length: isMobileViewport ? 4 : 6 }).map((_, i) => <ProductCardSkeleton key={i}/>)}
           </div>
         )}
 

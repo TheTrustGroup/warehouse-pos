@@ -42,9 +42,17 @@
 
 ---
 
-## Phase 3 — Not yet done
+## Phase 3 — Mobile-first Inventory (done)
 
-- Pagination / infinite scroll on Inventory (first page 50, load more on scroll).
+- **Small first request:** Viewport &lt; 768px → first request 30 products; desktop → 100. First paint after one round-trip.
+- **Deferred rest:** Remaining products (up to 500) loaded in background via `requestIdleCallback`; list and stats update as chunks arrive; "Updating…" in header.
+- **Responsive page size:** Mobile 20 per page, desktop 50 (`matchMedia('(max-width: 767px)')`).
+- **Fewer skeletons on mobile:** 4 cards vs 6 on desktop.
+- **Polling:** 60s on mobile, 30s on desktop to reduce background requests.
+- **File:** `src/pages/InventoryPage.tsx`.
+
+## Phase 4 — Not yet done
+
 - Dashboard stats view in DB (single roundtrip for all stats).
 - Lazy load non-critical pages (Reports, Deliveries) with `dynamic()` and `PageSkeleton`.
 - Image optimization audit (Next.js `Image`, WebP, lazy load).
@@ -60,6 +68,7 @@
 | Inventory cache | `src/contexts/InventoryContext.tsx` |
 | POS | `src/pages/POSPage.tsx` (invalidation, barcode Map) |
 | DB | `inventory-server/supabase/migrations/20260302170000_sales_orders_indexes_idle_timeout.sql` |
+| Inventory mobile | `src/pages/InventoryPage.tsx` (initial limit, deferred rest, page size, polling) |
 
 ---
 
