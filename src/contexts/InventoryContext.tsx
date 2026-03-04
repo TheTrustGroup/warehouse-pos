@@ -392,8 +392,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           const qs = params.toString();
           return `${base}${base.includes('?') ? '&' : '?'}${qs}`;
         };
-        // Smaller first page = faster TTFB and less chance of "network connection was lost" on slow links
-        const PAGE_LIMIT = 50;
+        // First page 100 = one round-trip for typical warehouses; keeps TTFB good and reduces total requests
+        const PAGE_LIMIT = 100;
         const MAX_PRODUCTS = 500;
         const PRODUCTS_REQUEST_TIMEOUT_MS = 25_000;
         const getOpts = { signal, timeoutMs: timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 2 };

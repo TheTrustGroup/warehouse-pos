@@ -80,7 +80,7 @@ export async function createSessionToken(email: string, role: string, binding?: 
     .sign(new TextEncoder().encode(secret));
 }
 
-/** Set session cookie on login response. */
+/** Set session cookie on login response (creates a new token). */
 export async function setSessionCookie(
   response: NextResponse,
   _email: string,
@@ -88,6 +88,11 @@ export async function setSessionCookie(
   _binding?: SessionBinding | undefined
 ): Promise<void> {
   const token = await createSessionToken(_email, _role, _binding);
+  setSessionCookieWithToken(response, token);
+}
+
+/** Set session cookie using an existing token (e.g. same token returned in JSON body). */
+export function setSessionCookieWithToken(response: NextResponse, token: string): void {
   response.headers.append(
     'Set-Cookie',
     `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}; Secure`

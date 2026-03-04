@@ -24,3 +24,6 @@ coverage
 
 # Deploy
 .vercel
+
+# Supabase CLI temp
+supabase/.temp

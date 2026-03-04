@@ -76,8 +76,8 @@ export function DebugPanel() {
         }
       }
       const [products, syncQueue] = await Promise.all([
-        d.products.count(),
-        d.syncQueue.count(),
+        d.products.count().catch(() => 0),
+        d.syncQueue.count().catch(() => 0),
       ]);
       setIdbSummary({ products, syncQueue, logs: logsCount });
     } catch {

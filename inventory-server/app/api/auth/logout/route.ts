@@ -1,16 +1,24 @@
+/**
+ * POST /api/auth/logout — clear session; client should clear token/cookie.
+ */
 import { NextRequest, NextResponse } from 'next/server';
-import { clearSessionCookie } from '@/lib/auth/session';
 import { corsHeaders } from '@/lib/cors';
+import { clearSessionCookie } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
-export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
-  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
+function withCors(res: NextResponse, req: NextRequest): NextResponse {
+  Object.entries(corsHeaders(req)).forEach(([k, v]) => res.headers.set(k, v));
+  return res;
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  const res = new NextResponse(null, { status: 204 });
-  Object.entries(corsHeaders(request)).forEach(([k, v]) => res.headers.set(k, v));
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
+}
+
+export async function POST(_req: NextRequest): Promise<NextResponse> {
+  const h = corsHeaders(_req);
+  const res = NextResponse.json({ ok: true }, { status: 200, headers: h });
   clearSessionCookie(res);
-  return res;
+  return withCors(res, _req);
 }

@@ -1,5 +1,9 @@
 # CORS "access control checks" — products don't load, zeros / out of stock
 
+**Single Vercel project (frontend + API)?** See [VERCEL_SINGLE_PROJECT.md](./VERCEL_SINGLE_PROJECT.md) instead. Same-origin deployment avoids CORS.
+
+---
+
 When the console shows:
 **"Fetch API cannot load https://warehouse-pos-api-v2.vercel.app/api/products?... due to access control checks"**
 

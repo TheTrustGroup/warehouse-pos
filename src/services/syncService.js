@@ -12,7 +12,7 @@
  * @see docs/OFFLINE_ARCHITECTURE.md
  */
 
-import { getDB, setSyncError, getConflictPreference, appendConflictAuditLog } from '../db/inventoryDB';
+import { getDB, clearDbInstance, isTransactionError, setSyncError, getConflictPreference, appendConflictAuditLog } from '../db/inventoryDB';
 import { API_BASE_URL } from '../lib/api';
 import { apiPost, apiPut, apiDelete, apiGet } from '../lib/apiClient';
 import { logSync } from '../utils/logger';
@@ -414,6 +414,25 @@ export class SyncService {
       return summary;
     }
 
+    try {
+      return await this._processSyncQueueWithDb(d, startMs, summary);
+    } catch (e) {
+      if (isTransactionError(e)) {
+        clearDbInstance();
+        if (import.meta.env?.DEV) console.warn('[SyncService] Cleared DB after transaction error');
+      }
+      this._emit('sync-failed', { reason: 'idb_error', error: e?.message ?? String(e), summary });
+      return summary;
+    }
+  }
+
+  /**
+   * @param {Awaited<ReturnType<typeof getDB>>} d
+   * @param {number} startMs
+   * @param {{ synced: number[], failed: number[], pending: number[] }} summary
+   * @returns {Promise<typeof summary>}
+   */
+  async _processSyncQueueWithDb(d, startMs, summary) {
     const items = await d.syncQueue.where('status').equals('pending').sortBy('timestamp');
     const total = items.length;
     if (total === 0) {
@@ -592,12 +611,17 @@ export class SyncService {
   async getQueueStatus() {
     const d = await getDB();
     if (!d) return { pending: 0, syncing: 0, failed: 0 };
-    const [pending, syncing, failed] = await Promise.all([
-      d.syncQueue.where('status').equals('pending').count(),
-      d.syncQueue.where('status').equals('syncing').count(),
-      d.syncQueue.where('status').equals('failed').count(),
-    ]);
-    return { pending, syncing, failed };
+    try {
+      const [pending, syncing, failed] = await Promise.all([
+        d.syncQueue.where('status').equals('pending').count(),
+        d.syncQueue.where('status').equals('syncing').count(),
+        d.syncQueue.where('status').equals('failed').count(),
+      ]);
+      return { pending, syncing, failed };
+    } catch (e) {
+      if (isTransactionError(e)) clearDbInstance();
+      return { pending: 0, syncing: 0, failed: 0 };
+    }
   }
 }
 

@@ -48,10 +48,14 @@ npm run dev
 | `npm run test:e2e`| Run Playwright E2E (smoke)     |
 | `npm run lint`    | Run ESLint                     |
 
+## Architecture and roadmap
+
+See **docs/ARCHITECTURE_AND_ROADMAP.md** for system design, API surface, and priorities. **docs/CONNECT.md** is the runbook for connecting to the project. **docs/SUPABASE_VERCEL_SPEED_AND_RELIABILITY.md** is the runbook for keeping the app fast and reliable on Supabase + Vercel. **docs/CURSOR_SUPABASE_VERCEL_MCP.md** documents how Cursor, Supabase, and Vercel are linked via MCP and plugins. **docs/ANALYZE_SUPABASE_AND_VERCEL.md** explains how to analyze both (plugins/MCP + `npm run analyze`). **docs/SHIP_CHECKLIST.md** is the one-page checklist before release or handoff.
+
 ## Deploy checklist (inventory-server)
 
 1. **Env:** Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (and optional `SESSION_SECRET` / `JWT_SECRET` for auth) in Vercel (or host).
-2. **DB:** Run migrations (e.g. `supabase/migrations/20250222130000_master_sql_v2.sql`) so `warehouse_products.images` and product-images bucket exist.
+2. **DB:** Run migrations in `inventory-server/supabase/migrations/` so schema matches code (products, sales_orders, user_scopes, etc.). See docs/ARCHITECTURE_AND_ROADMAP.md for base schema notes.
 3. **Health:** After deploy, `GET /api/health` should return `200` and `"status":"ok"` (and `"db":"ok"` when Supabase is reachable).
 4. **Smoke:** Open frontend → log in → open Inventory or POS → confirm product list loads and at least one card shows an image or placeholder.
 

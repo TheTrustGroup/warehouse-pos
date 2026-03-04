@@ -6,18 +6,41 @@ export interface UserScope {
   allowedPosIds: string[];
 }
 
+const EMPTY_SCOPE: UserScope = { allowedWarehouseIds: [], allowedStoreIds: [], allowedPosIds: [] };
+
+/** In-memory cache for scope by email (TTL 30s) so product-list and other routes avoid repeated Supabase round-trips. */
+const SCOPE_CACHE_TTL_MS = 30_000;
+const scopeCache = new Map<string, { scope: UserScope; ts: number }>();
+
+function getScopeFromCache(email: string): UserScope | null {
+  const entry = scopeCache.get(email);
+  if (!entry || Date.now() - entry.ts > SCOPE_CACHE_TTL_MS) return null;
+  return entry.scope;
+}
+
+function setScopeCache(email: string, scope: UserScope): void {
+  scopeCache.set(email, { scope, ts: Date.now() });
+  if (scopeCache.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of scopeCache.entries()) {
+      if (now - v.ts > SCOPE_CACHE_TTL_MS) scopeCache.delete(k);
+    }
+  }
+}
+
 /**
  * Resolve allowed warehouse IDs for a user. Reads user_scopes table when present; else env ALLOWED_WAREHOUSE_IDS.
  * When user has exactly one warehouse in user_scopes, that single ID is returned (used to bind cashier to POS location).
+ * Results are cached per email for 30s to keep product fetch fast (Vercel serverless + Supabase).
  *
  * IMPORTANT: Uses getSupabase() which is the service-role client (supabaseAdmin). Service role bypasses RLS.
- * If user_scopes has a deny_all_select RLS policy (qual: false), anon/authenticated would get 0 rows or hang;
- * with service role the query succeeds. If you see getScopeForUser taking ~10s, the client may not be using
- * SUPABASE_SERVICE_ROLE_KEY — verify lib/supabase/admin.ts is used and env is set.
  */
 export async function getScopeForUser(email: string): Promise<UserScope> {
   const trimmed = email?.trim().toLowerCase();
   if (!trimmed) return EMPTY_SCOPE;
+
+  const cached = getScopeFromCache(trimmed);
+  if (cached) return cached;
 
   try {
     const db = getSupabase();
@@ -30,7 +53,9 @@ export async function getScopeForUser(email: string): Promise<UserScope> {
     if (!error && Array.isArray(rows) && rows.length > 0) {
       const warehouseIds = [...new Set((rows as { warehouse_id: string }[]).map((r) => String(r.warehouse_id)).filter(Boolean))];
       const storeIds = [...new Set((rows as { store_id?: string }[]).map((r) => r.store_id).filter(Boolean))] as string[];
-      return { allowedWarehouseIds: warehouseIds, allowedStoreIds: storeIds, allowedPosIds: [] };
+      const scope = { allowedWarehouseIds: warehouseIds, allowedStoreIds: storeIds, allowedPosIds: [] };
+      setScopeCache(trimmed, scope);
+      return scope;
     }
   } catch {
     /* table missing or query failed; fallback to env */
@@ -39,7 +64,9 @@ export async function getScopeForUser(email: string): Promise<UserScope> {
   const raw = process.env.ALLOWED_WAREHOUSE_IDS?.trim();
   if (!raw) return EMPTY_SCOPE;
   const allowedWarehouseIds = raw.split(',').map((id) => id.trim()).filter(Boolean);
-  return { ...EMPTY_SCOPE, allowedWarehouseIds };
+  const scope = { ...EMPTY_SCOPE, allowedWarehouseIds };
+  setScopeCache(trimmed, scope);
+  return scope;
 }
 
 /**
@@ -50,8 +77,6 @@ export async function getSingleWarehouseIdForUser(email: string): Promise<string
   if (scope.allowedWarehouseIds.length !== 1) return undefined;
   return scope.allowedWarehouseIds[0];
 }
-
-const EMPTY_SCOPE: UserScope = { allowedWarehouseIds: [], allowedStoreIds: [], allowedPosIds: [] };
 
 /** Stub: POS assignment for user. Implement when needed. */
 export async function getAssignedPosForUser(_email: string): Promise<{ posId?: string }> {

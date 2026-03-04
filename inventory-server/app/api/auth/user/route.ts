@@ -1,11 +1,11 @@
 /**
- * GET /api/auth/user — session user with warehouse_id for POS.
- * Used by frontend to enrich cashier session so POS can send correct warehouse_id to /api/products.
+ * GET /api/auth/user — return current user from Bearer or session cookie.
+ * Frontend uses this for session check and to enrich warehouse_id for cashiers.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, sessionUserToJson } from '@/lib/auth/session';
-import { getSingleWarehouseIdForUser, getScopeForUser } from '@/lib/data/userScopes';
 import { corsHeaders } from '@/lib/cors';
+import { requireAuth, sessionUserToJson } from '@/lib/auth/session';
+import { getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,32 +14,20 @@ function withCors(res: NextResponse, req: NextRequest): NextResponse {
   return res;
 }
 
-export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const session = await getSession(request);
-  if (!session) {
-    return withCors(
-      NextResponse.json({ error: 'Unauthorized', message: 'Missing or invalid session' }, { status: 401 }),
-      request
-    );
-  }
-
-  let enriched = session;
-  const role = (session.role ?? '').toLowerCase();
-  const isAdminOrSuperAdmin = role === 'admin' || role === 'super_admin';
-  if (!session.warehouse_id && !isAdminOrSuperAdmin) {
-    const single = await getSingleWarehouseIdForUser(session.email);
-    const warehouseId = single ?? (await getScopeForUser(session.email)).allowedWarehouseIds[0];
-    if (warehouseId) {
-      enriched = { ...session, warehouse_id: warehouseId };
-    }
-  }
-
-  const body = sessionUserToJson(enriched);
-  const res = withCors(NextResponse.json(body), request);
-  res.headers.set('Cache-Control', 'private, max-age=0');
-  return res;
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const h = corsHeaders(req);
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return withCors(auth, req);
+  const warehouseId = auth.warehouse_id ?? await getSingleWarehouseIdForUser(auth.email);
+  const userPayload = {
+    ...sessionUserToJson(auth),
+    id: 'api-session-user',
+    username: auth.email.split('@')[0] ?? 'user',
+    ...(warehouseId ? { warehouse_id: warehouseId } : {}),
+  };
+  return withCors(NextResponse.json(userPayload, { status: 200, headers: h }), req);
 }

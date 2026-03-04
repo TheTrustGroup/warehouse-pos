@@ -80,4 +80,5 @@ See **docs/ENGINEERING_RULES.md** for commit discipline; **docs/MIGRATIONS.md** 
 
 - **Frontend:** From `warehouse-pos/` run `vercel` (or use Cursor’s `/vercel-deploy`). Set `VITE_API_BASE_URL` to the deployed API URL.
 - **API:** From `warehouse-pos/inventory-server` run `vercel`. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, and POS/auth vars in the Vercel project env.
+- **API build failing or want api.customdomain.com?** Create a **new** Vercel project for the API with **Root Directory = `inventory-server`**, then point the frontend to the new API URL. See **`docs/VERCEL_API_NEW_PROJECT_AND_DOMAIN.md`** for step-by-step and custom domain (e.g. api.yourdomain.com).
 - **DB:** Run migrations in Supabase in **timestamp order**; see **`docs/MIGRATIONS.md`** for the full list and descriptions.

@@ -3,12 +3,12 @@
  * @see lib/supabase/admin.ts for the single createClient() instantiation.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { getSupabaseAdmin } from '@/lib/supabase/admin';
 
 export function getSupabase(): SupabaseClient {
-  return supabaseAdmin;
+  return getSupabaseAdmin();
 }
 
 export function getServiceSupabase(): SupabaseClient {
-  return supabaseAdmin;
+  return getSupabaseAdmin();
 }

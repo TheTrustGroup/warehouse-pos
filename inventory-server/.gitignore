@@ -3,3 +3,5 @@ node_modules
 .env.local
 .env*.local
 tsconfig.tsbuildinfo
+# Vite build output (copied by build:vercel); generated on deploy
+/public/

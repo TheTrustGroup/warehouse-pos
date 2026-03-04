@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "ci:inventory": "node scripts/ci-inventory-invariants.mjs",
     "ci": "npm run ci:inventory && npm run test && npm run build",
-    "guard:uncommitted": "node scripts/guard-uncommitted.mjs"
+    "guard:uncommitted": "node scripts/guard-uncommitted.mjs",
+    "analyze": "node scripts/analyze-supabase-vercel.mjs"
   },
   "dependencies": {
     "@ericblade/quagga2": "^1.8.1",

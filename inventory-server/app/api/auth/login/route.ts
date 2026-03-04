@@ -1,15 +1,12 @@
+/**
+ * POST /api/auth/login — validate email/password, return { user, token }.
+ * Frontend also tries /admin/api/login first; both use same credential validation.
+ */
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  getRoleFromEmail,
-  setSessionCookie,
-  sessionUserToJson,
-  createSessionToken,
-  type SessionBinding,
-} from '@/lib/auth/session';
-import { isPosRestrictedEmail, verifyPosPassword } from '@/lib/auth/posPasswords';
-import { getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
 import { corsHeaders } from '@/lib/cors';
-import { loginBodySchema } from '@/lib/schemas/requestBodies';
+import { validateCredentials } from '@/lib/auth/credentials';
+import { createSessionToken, setSessionCookieWithToken } from '@/lib/auth/session';
+import { getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,80 +15,43 @@ function withCors(res: NextResponse, req: NextRequest): NextResponse {
   return res;
 }
 
-export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
 
-/** Login: validate email (and POS password when applicable). Derive role from email (server-side). */
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const h = corsHeaders(req);
   try {
-    const raw = await request.json().catch(() => ({}));
-    const parsed = loginBodySchema.safeParse(raw);
-    if (!parsed.success) {
-      const msg = parsed.error.issues[0]?.message ?? 'Invalid request body';
-      return withCors(NextResponse.json({ error: msg }, { status: 400 }), request);
-    }
-    const d = parsed.data;
-    const email = (d.email ?? d.username ?? '').trim().toLowerCase();
-    const password = typeof d.password === 'string' ? d.password : '';
-    if (!email) {
+    const body = await req.json().catch(() => ({}));
+    const email = typeof body.email === 'string' ? body.email.trim() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (!email || !password) {
       return withCors(
-        NextResponse.json({ error: 'Email is required' }, { status: 400 }),
-        request
+        NextResponse.json({ error: 'Invalid email or password', message: 'Email and password required' }, { status: 401, headers: h }),
+        req
       );
     }
-
-    if (isPosRestrictedEmail(email)) {
-      if (!verifyPosPassword(email, password)) {
-        return withCors(
-          NextResponse.json({ error: 'Invalid email or password' }, { status: 401 }),
-          request
-        );
-      }
-    }
-
-    const role = getRoleFromEmail(email);
-    let binding: SessionBinding | undefined =
-      d.warehouse_id != null || d.store_id !== undefined || d.device_id != null
-        ? {
-            warehouse_id: d.warehouse_id != null ? String(d.warehouse_id).trim() : undefined,
-            store_id: d.store_id !== undefined ? String(d.store_id) : undefined,
-            device_id: d.device_id != null ? String(d.device_id).trim() : undefined,
-          }
-        : undefined;
-
-    if (!binding?.warehouse_id) {
-      const singleWarehouseId = await getSingleWarehouseIdForUser(email);
-      if (singleWarehouseId) {
-        binding = binding ?? {};
-        binding.warehouse_id = singleWarehouseId;
-      }
-    }
-
-    const sessionPayload = { email, role, exp: 0, ...binding };
-    const sessionToken = await createSessionToken(email, role, binding);
-    const response = NextResponse.json({
-      user: sessionUserToJson(sessionPayload as import('@/lib/auth/session').Session),
-      token: sessionToken,
-    });
-    await setSessionCookie(response, email, role, binding);
-    return withCors(response, request);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : '';
-    if (process.env.NODE_ENV === 'production' && msg.includes('SESSION_SECRET')) {
-      console.error('[auth] Login failed: SESSION_SECRET not set in production.');
-      return withCors(
-        NextResponse.json(
-          { error: 'Server configuration error. Please contact the administrator.' },
-          { status: 503 }
-        ),
-        request
-      );
-    }
-    console.error('[auth] Login failed:', err);
+    const user = validateCredentials(email, password);
+    const warehouseId = await getSingleWarehouseIdForUser(user.email);
+    const token = await createSessionToken(user.email, user.role, warehouseId ? { warehouse_id: warehouseId } : undefined);
+    const userPayload = {
+      id: 'api-session-user',
+      email: user.email,
+      username: user.email.split('@')[0] ?? 'user',
+      role: user.role,
+      warehouse_id: warehouseId ?? undefined,
+    };
+    const response = NextResponse.json(
+      { user: userPayload, token },
+      { status: 200, headers: h }
+    );
+    setSessionCookieWithToken(response, token);
+    return withCors(response, req);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Invalid email or password';
     return withCors(
-      NextResponse.json({ error: 'Login failed' }, { status: 400 }),
-      request
+      NextResponse.json({ error: message, message }, { status: 401, headers: h }),
+      req
     );
   }
 }

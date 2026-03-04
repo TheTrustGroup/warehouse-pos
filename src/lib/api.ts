@@ -1,23 +1,29 @@
 /**
  * API configuration (Phase 5 stability — single source of truth for base URL).
  * All API calls must use API_BASE_URL from this module. No hardcoded domains in production.
- * Production build fails if VITE_API_BASE_URL is unset. Never show "Saved" without confirmed 2xx.
+ * - Same-origin (one Vercel project): set VITE_API_BASE_URL="" so fetch('/api/...') is used.
+ * - Cross-origin: set VITE_API_BASE_URL to the API origin (e.g. https://api.example.com).
  */
 
-/** Dev-only fallback when VITE_API_BASE_URL is unset. Production must never use fallback. */
+/** Dev-only fallback when VITE_API_BASE_URL is unset. */
 const DEFAULT_API_BASE = import.meta.env.PROD ? '' : 'https://extremedeptkidz.com';
 const _rawApiBase = import.meta.env.VITE_API_BASE_URL;
-const _hasProdUrl = _rawApiBase != null && String(_rawApiBase).trim().length > 0;
-if (import.meta.env.PROD && !_hasProdUrl) {
+const _isSet = _rawApiBase !== undefined && _rawApiBase !== null;
+if (import.meta.env.PROD && !_isSet) {
   throw new Error(
-    '[API] VITE_API_BASE_URL is required in production. Set it in your hosting env (e.g. Vercel).'
+    '[API] VITE_API_BASE_URL is required in production. Use "" for same-origin or the API URL for cross-origin (e.g. in Vercel env).'
   );
 }
-const _trimmed = (_hasProdUrl ? _rawApiBase : DEFAULT_API_BASE).replace(/\/$/, '');
-// Must be a full URL (https://...) so fetch() hits the API host. If set without protocol, prepend https://.
-const _resolved = _trimmed.startsWith('http://') || _trimmed.startsWith('https://') ? _trimmed : `https://${_trimmed}`;
+const _trimmed = (_isSet ? String(_rawApiBase).replace(/\/$/, '') : DEFAULT_API_BASE).trim();
+// Empty string = same-origin (relative URLs). Otherwise full URL; if no protocol, prepend https.
+const _resolved =
+  _trimmed === ''
+    ? ''
+    : _trimmed.startsWith('http://') || _trimmed.startsWith('https://')
+      ? _trimmed
+      : `https://${_trimmed}`;
 
-/** Single source of truth for API base URL. All client requests must use this. */
+/** Single source of truth for API base URL. "" = same-origin (relative /api/...). */
 export const API_BASE_URL = _resolved;
 if (import.meta.env.DEV && _resolved === DEFAULT_API_BASE) {
   console.warn(
