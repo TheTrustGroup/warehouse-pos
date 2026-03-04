@@ -173,29 +173,27 @@ function unwrapProduct(raw: unknown): Product | null {
   return normalizeQuantityBySize(inner as Record<string, unknown>);
 }
 
-/** Normalize API list so each product has variants.color from API's top-level color (for color filter). */
+/** Normalize API list: variants.color + quantityBySize (from API or quantity_by_size) so sizes/quantity never vanish. */
 function unwrapProductList(raw: unknown): Product[] {
-  if (Array.isArray(raw)) {
-    const safe = raw.filter((item): item is Record<string, unknown> => item != null && typeof item === 'object');
-    return safe.map((item: Record<string, unknown>) => ({
+  function withVariantsAndQty(item: Record<string, unknown>): Product {
+    const withVariants = {
       ...item,
       variants: {
         ...(typeof item.variants === 'object' && item.variants ? item.variants : {}),
         color: (item.color != null ? String(item.color).trim() : '') || (item.variants as { color?: string } | undefined)?.color,
       },
-    })) as Product[];
+    };
+    return normalizeQuantityBySize(withVariants as Record<string, unknown>) as Product;
+  }
+  if (Array.isArray(raw)) {
+    const safe = raw.filter((item): item is Record<string, unknown> => item != null && typeof item === 'object');
+    return safe.map((item) => withVariantsAndQty(item));
   }
   if (!raw || typeof raw !== 'object') return [];
   const r = raw as Record<string, unknown>;
   const list = r.data ?? r.products ?? r.items ?? [];
   const arr = Array.isArray(list) ? list.filter((item): item is Record<string, unknown> => item != null && typeof item === 'object') : [];
-  return arr.map((item: Record<string, unknown>) => ({
-    ...item,
-    variants: {
-      ...(typeof item.variants === 'object' && item.variants ? item.variants : {}),
-      color: (item.color != null ? String(item.color).trim() : '') || (item.variants as { color?: string } | undefined)?.color,
-    },
-  })) as Product[];
+  return arr.map((item) => withVariantsAndQty(item));
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────
@@ -511,7 +509,15 @@ export default function InventoryPage(_props: InventoryPageProps) {
       const total = (raw != null && typeof raw === 'object' && 'total' in raw) ? (raw as { total?: number }).total : undefined;
       const pending = pendingDeletesRef.current;
       const firstList = pending.size > 0 ? list.filter(p => !pending.has(p.id)) : list;
-      setProducts(firstList);
+      setProducts((prev) => {
+        const nextAllZero = firstList.length > 0 && firstList.every((p) => getProductQty(p) === 0);
+        const prevHadQty = prev.length > 0 && prev.some((p) => getProductQty(p) > 0);
+        if (nextAllZero && prevHadQty) {
+          if (silent) showToast('Could not refresh; showing last saved data', 'info');
+          return prev;
+        }
+        return firstList;
+      });
       getApiCircuitBreaker().recordSuccess();
       setLastRefreshedAt(Date.now());
       if (!silent) setLoading(false);
@@ -546,7 +552,12 @@ export default function InventoryPage(_props: InventoryPageProps) {
                 acc = acc.concat(nextList);
                 const pendingNow = pendingDeletesRef.current;
                 const merged = pendingNow.size > 0 ? acc.filter(p => !pendingNow.has(p.id)) : acc;
-                setProducts(merged);
+                setProducts((prev) => {
+                  const mergedAllZero = merged.length > 0 && merged.every((p) => getProductQty(p) === 0);
+                  const prevHadQty = prev.length > 0 && prev.some((p) => getProductQty(p) > 0);
+                  if (mergedAllZero && prevHadQty) return prev;
+                  return merged;
+                });
                 if (nextList.length < PAGE) break;
               } catch {
                 if (restCtrl.signal.aborted) return;
@@ -578,7 +589,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
       if (!silent) setLoading(false);
       if (silent) setBackgroundRefreshing(false);
     }
-  }, [warehouseId, apiFetch, initialLimit]);
+  }, [warehouseId, apiFetch, initialLimit, showToast]);
 
   // ── Load size codes ───────────────────────────────────────────────────────
 
@@ -622,9 +633,10 @@ export default function InventoryPage(_props: InventoryPageProps) {
         const cached = typeof localStorage !== 'undefined' && localStorage.getItem(productsCacheKey(warehouseId));
         if (cached) {
           const parsed = JSON.parse(cached) as unknown;
-          const arr = Array.isArray(parsed) ? parsed.filter((p): p is Product => p != null && typeof p === 'object' && 'id' in p) : [];
+          const arr = Array.isArray(parsed) ? parsed.filter((p): p is Record<string, unknown> => p != null && typeof p === 'object' && 'id' in p) : [];
           if (arr.length > 0) {
-            setProducts(arr);
+            const normalized = arr.map((p) => normalizeQuantityBySize(p) as Product);
+            setProducts(normalized);
             setLoading(false);
             setError(null);
             hadCache = true;
