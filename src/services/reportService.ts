@@ -260,25 +260,35 @@ function isMockProduct(product: Product): boolean {
   return false;
 }
 
+/** Quantity for stats: use sum of quantityBySize when sized, else quantity. */
+function getProductQty(p: Product): number {
+  if (p.sizeKind === 'sized' && (p.quantityBySize?.length ?? 0) > 0) {
+    return (p.quantityBySize ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
+  }
+  return Number(p.quantity ?? 0) || 0;
+}
+
+/** Inventory report uses cost price (value at cost) for accounting. Dashboard/UI use selling price. */
 export function generateInventoryReport(products: Product[]): InventoryReport {
   const safeProducts = (products ?? []).filter((p): p is Product => p != null && typeof p === 'object');
-  // Filter out mock products
   const realProducts = safeProducts.filter(p => !isMockProduct(p));
-  
+
   const totalProducts = realProducts.length;
-  const qty = (p: Product) => Number(p.quantity ?? 0) || 0;
   const cost = (p: Product) => Number(p.costPrice ?? 0) || 0;
   const reorder = (p: Product) => Number(p.reorderLevel ?? 0) || 0;
-  const totalStockValue = realProducts.reduce((sum, p) => sum + qty(p) * cost(p), 0);
-  const lowStockItems = realProducts.filter(p => qty(p) > 0 && qty(p) <= reorder(p)).length;
-  const outOfStockItems = realProducts.filter(p => qty(p) === 0).length;
+  const totalStockValue = realProducts.reduce((sum, p) => sum + getProductQty(p) * cost(p), 0);
+  const lowStockItems = realProducts.filter(p => {
+    const q = getProductQty(p);
+    return q > 0 && q <= reorder(p);
+  }).length;
+  const outOfStockItems = realProducts.filter(p => getProductQty(p) === 0).length;
 
   // Products by category (using real products only)
   const categoryStats = new Map<string, { count: number; value: number }>();
   realProducts.forEach(p => {
     const catKey = getCategoryDisplay(p.category);
     const existing = categoryStats.get(catKey);
-    const value = qty(p) * cost(p);
+    const value = getProductQty(p) * cost(p);
     if (existing) {
       existing.count += 1;
       existing.value += value;
@@ -299,8 +309,8 @@ export function generateInventoryReport(products: Product[]): InventoryReport {
   const topValueProducts = [...realProducts]
     .map(p => ({
       name: p.name,
-      quantity: qty(p),
-      value: qty(p) * cost(p),
+      quantity: getProductQty(p),
+      value: getProductQty(p) * cost(p),
     }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);

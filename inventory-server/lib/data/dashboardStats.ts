@@ -33,11 +33,45 @@ export interface DashboardCategorySummary {
 export interface DashboardStatsResult {
   totalStockValue: number;
   totalProducts: number;
+  totalUnits: number;
   lowStockCount: number;
   outOfStockCount: number;
   todaySales: number;
   lowStockItems: DashboardLowStockItem[];
   categorySummary: DashboardCategorySummary;
+}
+
+/** Row returned by get_warehouse_inventory_stats RPC. */
+interface WarehouseStatsRow {
+  total_stock_value: number;
+  total_products: number;
+  total_units: number;
+  low_stock_count: number;
+  out_of_stock_count: number;
+}
+
+/**
+ * Fetch accurate warehouse-level stats from DB (all products, no limit).
+ * Returns null if RPC is unavailable (e.g. migration not applied).
+ */
+async function getWarehouseStatsFromRpc(warehouseId: string): Promise<WarehouseStatsRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('get_warehouse_inventory_stats', {
+    p_warehouse_id: warehouseId,
+  });
+  if (error) {
+    console.warn('[dashboardStats] get_warehouse_inventory_stats RPC failed, using product sample:', error.message);
+    return null;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== 'object') return null;
+  return {
+    total_stock_value: Number((row as Record<string, unknown>).total_stock_value ?? 0),
+    total_products: Number((row as Record<string, unknown>).total_products ?? 0),
+    total_units: Number((row as Record<string, unknown>).total_units ?? 0),
+    low_stock_count: Number((row as Record<string, unknown>).low_stock_count ?? 0),
+    out_of_stock_count: Number((row as Record<string, unknown>).out_of_stock_count ?? 0),
+  };
 }
 
 /**
@@ -88,33 +122,62 @@ export async function getTodaySalesByWarehouse(date: string): Promise<Record<str
 }
 
 /**
- * Compute dashboard stats, low-stock list, and category summary for a warehouse.
- * Single products fetch on the server; response is small (no full product list to client).
+ * Compute dashboard stats for a warehouse.
+ * Totals (stock value, product count, units, low/out counts) come from DB RPC over all products.
+ * Low-stock list and category summary use a capped product fetch (250) for response size.
  */
 export async function getDashboardStats(
   warehouseId: string,
   options: { date?: string } = {}
 ): Promise<DashboardStatsResult> {
   const date = options.date ?? new Date().toISOString().split('T')[0];
-  const [productsResult, todaySales] = await Promise.all([
+  const [rpcStats, productsResult, todaySales] = await Promise.all([
+    getWarehouseStatsFromRpc(warehouseId),
     getWarehouseProducts(warehouseId, { limit: PRODUCTS_LIMIT }),
     getTodaySalesTotal(warehouseId, date),
   ]);
   const products = productsResult.data;
 
-  let totalStockValue = 0;
-  let lowStockCount = 0;
-  let outOfStockCount = 0;
+  let totalStockValue: number;
+  let totalProducts: number;
+  let totalUnits: number;
+  let lowStockCount: number;
+  let outOfStockCount: number;
+
+  if (rpcStats) {
+    totalStockValue = rpcStats.total_stock_value;
+    totalProducts = rpcStats.total_products;
+    totalUnits = rpcStats.total_units;
+    lowStockCount = rpcStats.low_stock_count;
+    outOfStockCount = rpcStats.out_of_stock_count;
+  } else {
+    // Fallback when RPC not available: compute from product sample (first PRODUCTS_LIMIT)
+    let value = 0;
+    let low = 0;
+    let out = 0;
+    let units = 0;
+    for (const p of products) {
+      const qty = getProductQty(p);
+      const reorder = p.reorderLevel ?? 0;
+      const price = p.sellingPrice ?? 0;
+      units += qty;
+      value += qty * price;
+      if (qty === 0) out++;
+      else if (qty <= reorder) low++;
+    }
+    totalStockValue = value;
+    totalProducts = products.length;
+    totalUnits = units;
+    lowStockCount = low;
+    outOfStockCount = out;
+  }
+
   const categorySummary: DashboardCategorySummary = {};
   const lowStockCandidates: ProductRecord[] = [];
-
   for (const p of products) {
     const qty = getProductQty(p);
     const reorder = p.reorderLevel ?? 0;
     const price = p.sellingPrice ?? 0;
-    totalStockValue += qty * price;
-    if (qty === 0) outOfStockCount++;
-    else if (qty <= reorder) lowStockCount++;
     if (qty <= reorder) lowStockCandidates.push(p);
     const cat = p.category?.trim() || 'Uncategorised';
     if (!categorySummary[cat]) categorySummary[cat] = { count: 0, value: 0 };
@@ -136,7 +199,8 @@ export async function getDashboardStats(
 
   return {
     totalStockValue,
-    totalProducts: products.length,
+    totalProducts,
+    totalUnits,
     lowStockCount,
     outOfStockCount,
     todaySales,

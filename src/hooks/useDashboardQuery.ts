@@ -26,6 +26,7 @@ export interface DashboardCategorySummary {
 export interface DashboardData {
   totalStockValue: number;
   totalProducts: number;
+  totalUnits: number;
   lowStockCount: number;
   outOfStockCount: number;
   todaySales: number;

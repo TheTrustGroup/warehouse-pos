@@ -22,6 +22,7 @@ import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { onUnauthorized } from '../lib/onUnauthorized';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { useInventory } from '../contexts/InventoryContext';
+import { useDashboardQuery } from '../hooks/useDashboardQuery';
 import type { Warehouse, Product } from '../types';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -365,8 +366,21 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
   const { toasts, show: showToast } = useToast();
 
-  // Derived stats (memoised — recompute only when products change)
-  const stats = useMemo(() => computeStats(products), [products]);
+  // Prefer dashboard API stats (accurate over all products); fallback to computed from loaded list
+  const { dashboard } = useDashboardQuery(warehouseId ?? '');
+  const statsFromProducts = useMemo(() => computeStats(products), [products]);
+  const stats = useMemo(() => {
+    if (dashboard) {
+      return {
+        totalValue: Number(dashboard.totalStockValue) || 0,
+        totalUnits: typeof dashboard.totalUnits === 'number' ? dashboard.totalUnits : statsFromProducts.totalUnits,
+        lowCount: Number(dashboard.lowStockCount) || 0,
+        outCount: Number(dashboard.outOfStockCount) || 0,
+      };
+    }
+    return statsFromProducts;
+  }, [dashboard, statsFromProducts]);
+  const skuCount = dashboard != null ? (Number(dashboard.totalProducts) || 0) : products.length;
 
   // Unique size codes from products (for size filter dropdown; color uses COLOR_OPTIONS pills)
   const uniqueSizes = useMemo(() => {
@@ -643,12 +657,12 @@ export default function InventoryPage(_props: InventoryPageProps) {
         </button>
       </div>
 
-      {/* Stats: on mobile 2-col with stock value full width; on desktop 3-col */}
-      {!loading && !error && products.length > 0 && (
+      {/* Stats: from dashboard API when available (all products); otherwise from loaded list */}
+      {!loading && !error && (products.length > 0 || (dashboard && skuCount >= 0)) && (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
           <StatCard
             label="SKUs"
-            value={products.length}
+            value={skuCount}
             sub={totalPages > 1 ? `Showing ${pageStart + 1}–${Math.min(pageStart + pageSize, totalFiltered)} of ${totalFiltered}` : `${totalFiltered} shown`}
           />
           {alertCount > 0 && (
