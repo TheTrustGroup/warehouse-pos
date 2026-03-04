@@ -376,6 +376,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           warehouseId: payload.warehouseId,
           customerName: payload.customerName || null,
           paymentMethod: payload.paymentMethod,
+          payments: payload.payments ?? null,
           subtotal: payload.subtotal,
           discountPct: payload.discountPct,
           discountAmt: payload.discountAmt,
@@ -536,6 +537,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         warehouseId: payload.warehouseId,
         customerName: payload.customerName || null,
         paymentMethod: payload.paymentMethod,
+        payments: payload.payments ?? null,
         subtotal: payload.subtotal,
         discountPct: payload.discountPct,
         discountAmt: payload.discountAmt,
@@ -669,6 +671,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       discountAmt: sale.discountAmt,
       total: sale.total,
       paymentMethod: sale.paymentMethod,
+      payments: sale.payments,
       customerName: sale.customerName,
       completedAt: sale.completedAt,
     });

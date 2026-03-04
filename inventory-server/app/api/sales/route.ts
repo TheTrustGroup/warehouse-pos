@@ -149,6 +149,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const total = Number(body.total) ?? 0;
   const paymentMethod = typeof body.paymentMethod === 'string' ? body.paymentMethod : 'Cash';
   const customerName = typeof body.customerName === 'string' ? body.customerName : null;
+  const rawPayments = Array.isArray(body.payments) ? body.payments : null;
+  const paymentsBreakdown =
+    rawPayments &&
+    rawPayments
+      .filter(
+        (p: unknown): p is { method: string; amount: number } =>
+          typeof p === 'object' && p !== null && typeof (p as { method?: unknown }).method === 'string' && typeof (p as { amount?: unknown }).amount === 'number'
+      )
+      .map((p: { method: string; amount: number }) => ({ method: p.method, amount: Number(p.amount) }))
+      .filter((p) => ['cash', 'card', 'mobile_money'].includes(p.method) && p.amount > 0);
+  if (paymentMethod.toLowerCase() === 'mixed') {
+    const sum = (paymentsBreakdown ?? []).reduce((s, p) => s + p.amount, 0);
+    const ok = sum > 0 && Math.abs(sum - total) < 0.01;
+    if (!ok || !paymentsBreakdown?.length) {
+      return withCors(
+        NextResponse.json(
+          {
+            error:
+              'Mixed payment requires a payments array (method + amount) that sums to the sale total.',
+          },
+          { status: 400, headers: h }
+        ),
+        req
+      );
+    }
+  }
   const pLines = lines.map((l: Record<string, unknown>) => ({
     productId: l.productId,
     sizeCode: l.sizeCode ?? null,
@@ -172,6 +198,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       p_customer_name: customerName,
       p_sold_by: null,
       p_sold_by_email: auth.email,
+      p_payments_breakdown: paymentsBreakdown ?? null,
     });
     if (error) {
       const msg = error.message ?? 'Failed to record sale';

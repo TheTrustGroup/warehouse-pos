@@ -17,6 +17,8 @@ export interface PrintReceiptPayload {
   discountAmt?: number;
   total: number;
   paymentMethod: string;
+  /** When paymentMethod === 'mixed', breakdown for receipt. */
+  payments?: Array<{ method: string; amount: number }>;
   customerName?: string | null;
   completedAt?: string | null;
   /** Cashier email for audit (optional). */
@@ -41,6 +43,7 @@ export function printReceipt(sale: PrintReceiptPayload): void {
     discountAmt: sale.discountAmt,
     total: sale.total,
     paymentMethod: sale.paymentMethod,
+    payments: sale.payments ?? undefined,
     customerName: sale.customerName ?? null,
     soldBy: sale.soldBy ?? null,
   };

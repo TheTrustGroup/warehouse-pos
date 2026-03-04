@@ -22,10 +22,15 @@ export interface DeliverySchedule {
   deliveryNotes?: string | null;
 }
 
+/** Single payment leg for mixed payments. */
+export type PaymentMethodType = 'cash' | 'card' | 'mobile_money';
+
 export interface SalePayload {
   warehouseId: string;
   customerName?: string | null;
   paymentMethod: string;
+  /** When paymentMethod === 'mixed', required: amounts per method that sum to total. */
+  payments?: Array<{ method: PaymentMethodType; amount: number }>;
   subtotal: number;
   discountPct: number;
   discountAmt: number;
@@ -57,6 +62,12 @@ interface CartSheetProps {
 
 const PAYMENT_OPTIONS = ['cash', 'card', 'mobile_money', 'mixed'] as const;
 
+const MIX_LABELS: Record<PaymentMethodType, string> = {
+  cash: 'Cash (GH₵)',
+  card: 'Card (GH₵)',
+  mobile_money: 'Mobile Money (GH₵)',
+};
+
 export default function CartSheet({
   isOpen,
   lines,
@@ -68,6 +79,12 @@ export default function CartSheet({
   onClose,
 }: CartSheetProps) {
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  /** When paymentMethod === 'mixed', amount per method. Must sum to total to allow charge. */
+  const [mixedAmounts, setMixedAmounts] = useState<Record<PaymentMethodType, string>>({
+    cash: '',
+    card: '',
+    mobile_money: '',
+  });
   const [customerName, setCustomerName] = useState('');
   const [discountPct, setDiscountPct] = useState(0);
   const [charging, setCharging] = useState(false);
@@ -85,8 +102,25 @@ export default function CartSheet({
   const discountAmt = (subtotal * discountPct) / 100;
   const total = Math.max(0, subtotal - discountAmt);
 
+  const mixedSum = (() => {
+    const c = parseFloat(mixedAmounts.cash) || 0;
+    const d = parseFloat(mixedAmounts.card) || 0;
+    const m = parseFloat(mixedAmounts.mobile_money) || 0;
+    return Math.round((c + d + m) * 100) / 100;
+  })();
+  const isMixedValid = paymentMethod !== 'mixed' || (mixedSum > 0 && Math.abs(mixedSum - total) < 0.01);
+  const mixedPaymentsArray: Array<{ method: PaymentMethodType; amount: number }> =
+    paymentMethod === 'mixed'
+      ? ([
+          { method: 'cash' as const, amount: parseFloat(mixedAmounts.cash) || 0 },
+          { method: 'card' as const, amount: parseFloat(mixedAmounts.card) || 0 },
+          { method: 'mobile_money' as const, amount: parseFloat(mixedAmounts.mobile_money) || 0 },
+        ].filter((p) => p.amount > 0) as Array<{ method: PaymentMethodType; amount: number }>)
+      : [];
+
   const handleCharge = async () => {
     if (!warehouseId || lines.length === 0 || charging) return;
+    if (paymentMethod === 'mixed' && !isMixedValid) return;
     setCharging(true);
     try {
       const deliverySchedule: DeliverySchedule | null = deliveryRequested
@@ -103,6 +137,7 @@ export default function CartSheet({
         warehouseId,
         customerName: customerName.trim() || null,
         paymentMethod,
+        payments: paymentMethod === 'mixed' ? mixedPaymentsArray : undefined,
         subtotal,
         discountPct,
         discountAmt,
@@ -294,6 +329,31 @@ export default function CartSheet({
                 </button>
               ))}
             </div>
+            {paymentMethod === 'mixed' && (
+              <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                <p className="text-xs font-medium text-slate-600">Payment mix — amounts must equal total (GH₵{total.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</p>
+                {(['cash', 'card', 'mobile_money'] as const).map((method) => (
+                  <div key={method}>
+                    <label className="block text-xs text-slate-500">{MIX_LABELS[method]}</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={0.01}
+                      value={mixedAmounts[method]}
+                      onChange={(e) =>
+                        setMixedAmounts((prev) => ({ ...prev, [method]: e.target.value }))
+                      }
+                      placeholder="0.00"
+                      className="mt-0.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </div>
+                ))}
+                <p className={`text-xs font-medium ${isMixedValid ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  Sum: GH₵{mixedSum.toLocaleString('en-GH', { minimumFractionDigits: 2 })} {isMixedValid ? '✓' : '(must equal total)'}
+                </p>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700">Discount %</label>
@@ -321,7 +381,7 @@ export default function CartSheet({
             <button
               type="button"
               onClick={handleCharge}
-              disabled={charging || lines.length === 0 || !warehouseId}
+              disabled={charging || lines.length === 0 || !warehouseId || !isMixedValid}
               className="min-h-[44px] w-full rounded-[var(--edk-radius-sm)] bg-[var(--edk-red)] hover:bg-[var(--edk-red-hover)] px-6 py-3 font-bold text-white disabled:opacity-50 touch-manipulation"
             >
               {charging ? '…' : `Charge GH₵${total.toLocaleString('en-GH', { minimumFractionDigits: 2 })}`}

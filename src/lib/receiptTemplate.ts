@@ -25,6 +25,8 @@ export interface ReceiptPayload {
   discountAmt?: number;
   total: number;
   paymentMethod: string;
+  /** When paymentMethod === 'mixed', breakdown for receipt. */
+  payments?: Array<{ method: string; amount: number }>;
   customerName?: string | null;
   /** Cashier / sold_by email for audit trail */
   soldBy?: string | null;
@@ -105,6 +107,14 @@ export function buildReceiptHtml(
   const discountAmt = payload.discountAmt ?? 0;
   const hasDiscount = (payload.discountPct ?? 0) > 0 || discountAmt > 0;
   const payLabel = paymentLabel(payload.paymentMethod);
+  const mixedPayments = payload.paymentMethod?.toLowerCase() === 'mixed' && (payload.payments?.length ?? 0) > 0
+    ? payload.payments!
+    : null;
+  const paymentLinesHtml = mixedPayments
+    ? mixedPayments
+        .map((p) => `<p class="meta">${escapeHtml(paymentLabel(p.method))}: ${formatMoney(p.amount)}</p>`)
+        .join('')
+    : '';
 
   const linesHtml = payload.lines
     .map(
@@ -163,6 +173,7 @@ export function buildReceiptHtml(
       <div class="row total-row"><span>TOTAL</span><span>${formatMoney(payload.total)}</span></div>
     </div>
     <p class="meta">Payment: ${escapeHtml(payLabel)}</p>
+    ${paymentLinesHtml}
     ${payload.customerName ? `<p class="meta">Customer: ${escapeHtml(payload.customerName)}</p>` : ''}
     ${isLocalOnly ? '<p class="warn">⚠ Not synced — reprint after sync</p>' : ''}
     <div class="div"></div>
@@ -326,6 +337,7 @@ export function buildReceiptHtml(
       <span class="label">Payment</span>
       <span class="value">${escapeHtml(payLabel)}</span>
     </div>
+    ${mixedPayments ? `<div class="payment-breakdown" style="margin-top: 6px; padding-left: 12px; font-size: 0.9em; color: #374151;">${mixedPayments.map((p) => `${escapeHtml(paymentLabel(p.method))}: ${formatMoney(p.amount)}`).join(' · ')}</div>` : ''}
     <div class="footer">
       <div class="footer-msg">Thank you for shopping with us</div>
       <div class="footer-id">${escapeHtml(receiptNo)} · GH₵ Ghana Cedi</div>
