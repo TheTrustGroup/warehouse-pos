@@ -300,8 +300,9 @@ const WAREHOUSES = [
 
 export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPageProps) {
 
-  const { hasPermission } = useAuth();
+  const { hasPermission, hasRole } = useAuth();
   const canVoid = hasPermission(PERMISSIONS.POS.VOID_TRANSACTION);
+  const canClearHistory = hasRole(['admin', 'super_admin']);
 
   const [sales, setSales]           = useState<Sale[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -311,6 +312,7 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
   const [search, setSearch]         = useState('');
   const [whDropdown, setWhDropdown] = useState(false);
   const [voidingId, setVoidingId]    = useState<string | null>(null);
+  const [clearHistoryLoading, setClearHistoryLoading] = useState(false);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
@@ -414,6 +416,32 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
     });
   }
 
+  // ── Clear sales & delivery history (admin) ──────────────────────────────────
+
+  async function handleClearHistory() {
+    if (!apiBaseUrl || !canClearHistory) return;
+    if (!window.confirm('Permanently delete ALL sales and delivery history? This cannot be undone.')) return;
+    setClearHistoryLoading(true);
+    setError(null);
+    try {
+      const base = apiBaseUrl.replace(/\/$/, '');
+      const res = await fetch(`${base}/api/admin/clear-sales-history`, {
+        method: 'POST',
+        headers: getApiHeaders() as Record<string, string>,
+        credentials: 'include',
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError((json as { error?: string }).error ?? `Clear failed (${res.status})`);
+        return;
+      }
+      setSales([]);
+      fetchSales();
+    } finally {
+      setClearHistoryLoading(false);
+    }
+  }
+
   // ── CSV Export ────────────────────────────────────────────────────────────
 
   function handleExport() {
@@ -487,6 +515,12 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {canClearHistory && (
+              <button type="button" onClick={handleClearHistory} disabled={clearHistoryLoading}
+                      className="h-9 px-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-[13px] font-semibold flex items-center gap-1.5 hover:bg-red-100 disabled:opacity-50 transition-colors">
+                {clearHistoryLoading ? 'Clearing…' : 'Clear history'}
+              </button>
+            )}
             <button type="button" onClick={fetchSales}
                     className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-500 flex items-center justify-center hover:bg-slate-50 transition-colors">
               <IconRefresh/>
