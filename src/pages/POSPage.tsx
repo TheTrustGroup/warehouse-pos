@@ -230,12 +230,11 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         if (!res.ok) {
           if (res.status === 401) onUnauthorized();
           const body = await res.json().catch(() => ({}));
-          const msg =
-            (body as { message?: string; error?: string }).message ??
-            (body as { message?: string; error?: string }).error ??
-            `HTTP ${res.status}`;
-          const err = new Error(msg) as Error & { status?: number };
+          const b = body as { message?: string; error?: string; detail?: string };
+          const msg = b.message ?? b.error ?? `HTTP ${res.status}`;
+          const err = new Error(msg) as Error & { status?: number; detail?: string };
           err.status = res.status;
+          err.detail = b.detail;
           throw err;
         }
         const text = await res.text();
@@ -422,6 +421,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     onError: (err: unknown, _vars: SaleMutationVars, context: { previousCart: CartLine[]; previousProducts: POSProduct[] } | undefined) => {
       const status = (err as { status?: number })?.status;
       const message = (err as Error)?.message ?? '';
+      const detail = (err as { detail?: string })?.detail;
       if (context) {
         setProducts(context.previousProducts);
         setCart(context.previousCart);
@@ -435,6 +435,8 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         showToast('Sales API not found. Ensure the backend is deployed and VITE_API_BASE_URL points to it.', 'warn');
       } else if (message.includes('timed out') || /fetch|network|load failed/i.test(message)) {
         showToast("Can't reach the server. Check your connection and tap Charge again.", 'warn');
+      } else if (status === 500 && (detail || message) && message !== `HTTP ${status}`) {
+        showToast(detail ? `Sale failed: ${detail}` : message, 'err');
       } else {
         console.error('[POS] /api/sales failed — rolled back optimistic sale:', err);
         showToast(

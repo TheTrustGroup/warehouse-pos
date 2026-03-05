@@ -311,17 +311,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (error) {
       const msg = error.message ?? 'Failed to record sale';
       const isStock = /INSUFFICIENT_STOCK|insufficient stock/i.test(msg);
+      const isConstraint = /check constraint|violates|payment_method|candidate function/i.test(msg);
       console.error('[POST /api/sales] RPC error:', msg);
+      const errorPayload: Record<string, unknown> = {
+        error: isStock
+          ? 'Insufficient stock for one or more items. Adjust the cart and try again.'
+          : isConstraint
+            ? msg
+            : 'Failed to record sale. Please try again.',
+        code: isStock ? 'INSUFFICIENT_STOCK' : undefined,
+      };
+      if (!isStock && msg) errorPayload.detail = msg;
       return withCors(
-        NextResponse.json(
-          {
-            error: isStock
-              ? 'Insufficient stock for one or more items. Adjust the cart and try again.'
-              : 'Failed to record sale. Please try again.',
-            code: isStock ? 'INSUFFICIENT_STOCK' : undefined,
-          },
-          { status: isStock ? 422 : 500, headers: h }
-        ),
+        NextResponse.json(errorPayload, { status: isStock ? 422 : 500, headers: h }),
         req
       );
     }

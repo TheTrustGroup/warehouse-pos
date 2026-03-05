@@ -64,7 +64,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const { error: rpcError } = await supabase.rpc('void_sale', { p_sale_id: saleId });
     if (rpcError) {
       console.error('[POST /api/sales/void] RPC', rpcError);
-      return withCors(NextResponse.json({ error: rpcError.message }, { status: 500, headers: h }), req);
+      const msg = rpcError.message ?? 'Failed to void sale';
+      return withCors(
+        NextResponse.json({ error: msg, detail: msg }, { status: 500, headers: h }),
+        req
+      );
     }
     if (saleWarehouseId) await notifyInventoryUpdated(saleWarehouseId);
     return withCors(

@@ -367,6 +367,7 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
   async function handleVoid(sale: Sale) {
     if (!apiBaseUrl || !canVoid) return;
     setVoidingId(sale.id);
+    setError(null);
     try {
       const base = apiBaseUrl.replace(/\/$/, '');
       const res = await fetch(`${base}/api/sales/void`, {
@@ -376,8 +377,10 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
         body: JSON.stringify({ saleId: sale.id, warehouseId: sale.warehouseId }),
       });
       const json = await res.json().catch(() => ({}));
+      const errBody = json as { error?: string; detail?: string };
       if (!res.ok) {
-        setError((json as { error?: string }).error ?? `Void failed (${res.status})`);
+        const msg = errBody.detail ?? errBody.error ?? `Void failed (${res.status})`;
+        setError(msg);
         return;
       }
       setSales(prev =>
