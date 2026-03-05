@@ -25,6 +25,7 @@ import { BrowserCheck } from './components/BrowserCheck';
 import { OnboardingModal } from './components/OnboardingModal';
 import { PERMISSIONS } from './types/permissions';
 import { initIdbErrorRecovery } from './lib/idbErrorRecovery';
+import { syncService } from './services/syncService';
 
 /** Default landing: Dashboard if user has permission; otherwise redirect to first allowed route (e.g. POS for cashiers). */
 function DefaultRoute() {
@@ -197,6 +198,33 @@ function OfflineQuotaToastListener() {
   return null;
 }
 
+/** Listens for sync failures and shows a toast so the user is not left with "Syncing..." and no feedback. */
+function SyncFailureToastListener() {
+  const { showToast } = useToast();
+  useEffect(() => {
+    const emitter = syncService.getEmitter();
+    const handler = (e: CustomEvent<{ reason?: string; error?: string; summary?: { failed: number[] } }>) => {
+      const detail = e.detail ?? {};
+      const reason = detail.reason ?? '';
+      const error = detail.error ?? '';
+      const failedCount = detail.summary?.failed?.length ?? 0;
+      const message =
+        error ||
+        (reason === 'offline'
+          ? 'Sync paused (offline).'
+          : reason === 'IndexedDB unavailable'
+            ? 'Sync unavailable (storage).'
+            : failedCount > 0
+              ? `Sync failed for ${failedCount} item(s). Check sync queue in Settings or retry later.`
+              : 'Sync failed.');
+      showToast('error', message);
+    };
+    emitter.addEventListener('sync-failed', handler as EventListener);
+    return () => emitter.removeEventListener('sync-failed', handler as EventListener);
+  }, [showToast]);
+  return null;
+}
+
 /**
  * Protected Routes: block dashboard until role confirmed from server (Phase 1 stability).
  * No role fallback; invalid role → authError → redirect to login.
@@ -265,6 +293,7 @@ function App() {
       <ServiceWorkerUpdateListener />
       <VersionCheckListener />
       <OfflineQuotaToastListener />
+      <SyncFailureToastListener />
       <NetworkStatusProvider>
         <SettingsProvider>
           <AuthProvider>

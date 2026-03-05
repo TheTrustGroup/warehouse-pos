@@ -535,6 +535,34 @@ export class SyncService {
       } else if (result.status === 404 && item.operation === 'DELETE') {
         await d.syncQueue.delete(queueId);
         summary.synced.push(queueId);
+      } else if (result.status === 404 && (item.operation === 'UPDATE' || item.operation === 'CREATE')) {
+        const friendlyMsg =
+          item.operation === 'CREATE'
+            ? 'Product not found on server (create may have failed).'
+            : 'Product not found on server (it may have been deleted elsewhere).';
+        const errorMsg = `[404] ${friendlyMsg}`;
+        const attempts = (item.attempts || 0) + 1;
+        const isFinalFailure = attempts > MAX_ATTEMPTS;
+        await d.syncQueue.update(queueId, {
+          attempts,
+          error: errorMsg,
+          status: isFinalFailure ? 'failed' : 'pending',
+        });
+        if (item.data?.id) {
+          try {
+            await setSyncError(item.data.id, errorMsg);
+          } catch (_) {}
+        }
+        if (isFinalFailure) {
+          summary.failed.push(queueId);
+          recordSyncFailure().catch(() => {});
+          this._emit('sync-failed', { queueId, error: errorMsg, item });
+        } else {
+          summary.pending.push(queueId);
+          this._emit('sync-failed', { queueId, error: errorMsg, item, finalFailure: false });
+          const backoffSeconds = Math.pow(2, attempts);
+          await delay(backoffSeconds * 1000);
+        }
       } else {
         const attempts = (item.attempts || 0) + 1;
         const status = result.status;
