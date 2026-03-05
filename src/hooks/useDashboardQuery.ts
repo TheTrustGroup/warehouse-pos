@@ -1,13 +1,15 @@
 /**
  * React Query hooks for dashboard data.
- * Cache: staleTime 1 min, gcTime 5 min. Parallel fetch for dashboard + today-by-warehouse.
+ * Dashboard query: staleTime 0 so Stock Alerts refetch when Dashboard is shown/focused.
+ * Server always returns fresh lowStockItems (merged on cache hit); client refetch ensures UI updates.
  */
 import { useQueries } from '@tanstack/react-query';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { queryKeys } from '../lib/queryKeys';
 
 const FETCH_TIMEOUT_MS = 35_000;
-const STALE_MS = 60 * 1000;   // 1 minute
+const STALE_MS_DASHBOARD = 0;        // Always refetch when Dashboard is used (alerts must be current)
+const STALE_MS_TODAY_BY_WAREHOUSE = 60 * 1000;
 const GC_MS = 5 * 60 * 1000;  // 5 minutes
 
 export interface DashboardLowStockItem {
@@ -91,14 +93,15 @@ export function useDashboardQuery(warehouseId: string) {
       {
         queryKey: queryKeys.dashboard(warehouseId, today),
         queryFn: () => fetchDashboard(warehouseId, today),
-        staleTime: STALE_MS,
+        staleTime: STALE_MS_DASHBOARD,
         gcTime: GC_MS,
+        refetchOnWindowFocus: true,
         enabled: Boolean(warehouseId?.trim()),
       },
       {
         queryKey: queryKeys.todayByWarehouse(today),
         queryFn: () => fetchTodayByWarehouse(today),
-        staleTime: STALE_MS,
+        staleTime: STALE_MS_TODAY_BY_WAREHOUSE,
         gcTime: GC_MS,
         enabled: true,
       },

@@ -145,6 +145,32 @@ function isDashboardStatsResult(v: unknown): v is DashboardStatsResult {
 }
 
 /**
+ * Compute only the low-stock alerts list from a fresh product fetch.
+ * Used when serving from cache so Stock Alerts always reflect current inventory (data integrity).
+ */
+async function computeLowStockItemsFresh(warehouseId: string): Promise<DashboardLowStockItem[]> {
+  const productsResult = await getWarehouseProducts(warehouseId, { limit: PRODUCTS_LIMIT });
+  const products = productsResult.data;
+  const lowStockCandidates: ProductRecord[] = [];
+  for (const p of products) {
+    const qty = getProductQty(p);
+    const reorder = p.reorderLevel ?? 0;
+    if (qty <= reorder) lowStockCandidates.push(p);
+  }
+  return lowStockCandidates
+    .sort((a, b) => getProductQty(a) - getProductQty(b))
+    .slice(0, LOW_STOCK_ALERTS_LIMIT)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category?.trim() || 'Uncategorised',
+      quantity: getProductQty(p),
+      quantityBySize: (p.quantityBySize ?? []).map((s) => ({ sizeCode: s.sizeCode, quantity: s.quantity })),
+      reorderLevel: p.reorderLevel ?? 0,
+    }));
+}
+
+/**
  * Compute dashboard stats from DB (no cache). Used on cache miss or when date !== today.
  */
 async function computeDashboardStatsUncached(
@@ -230,6 +256,8 @@ async function computeDashboardStatsUncached(
 
 /**
  * Compute dashboard stats for a warehouse. Cached 30s for today only when Redis is configured.
+ * Stock Alerts (lowStockItems) are always computed fresh so they reflect current inventory
+ * even when serving from cache — avoids stale alerts after product edits.
  */
 export async function getDashboardStats(
   warehouseId: string,
@@ -241,7 +269,8 @@ export async function getDashboardStats(
   if (useCache) {
     const cached = await getCached(warehouseId);
     if (isDashboardStatsResult(cached)) {
-      return cached;
+      const lowStockItems = await computeLowStockItemsFresh(warehouseId);
+      return { ...cached, lowStockItems };
     }
   }
 
