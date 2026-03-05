@@ -3,6 +3,7 @@ import { getWarehouseProducts, createWarehouseProduct, updateWarehouseProduct } 
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
 import { requireAdmin, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { logDurability } from '@/lib/data/durabilityLogger';
+import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +55,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const created = await createWarehouseProduct(body);
     const entityId = (created as { id?: string })?.id ?? '';
+    const wid = (created as { warehouseId?: string })?.warehouseId ?? warehouseId;
+    if (wid) await notifyInventoryUpdated(wid);
     logDurability({
       status: 'success',
       entity_type: 'product',
@@ -112,6 +115,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     if (!updated) {
       return NextResponse.json({ message: 'Product not found' }, { status: 404 });
     }
+    await notifyInventoryUpdated(effectiveWarehouseId);
     return NextResponse.json(updated);
   } catch (e) {
     console.error('[admin/api/products PUT]', e);

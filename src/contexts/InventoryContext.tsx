@@ -981,6 +981,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       showToast('success', 'Product saved.');
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.refetchQueries({ queryKey: ['dashboard'] });
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update');
         console.timeEnd('Total Save Time');
@@ -1096,6 +1097,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       showToast('success', 'Product updated.');
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.refetchQueries({ queryKey: ['dashboard'] });
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update (update)');
         console.timeEnd('Total Update Time');
@@ -1140,6 +1142,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setProducts((prev) => prev.filter((p) => p.id !== id));
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.refetchQueries({ queryKey: ['dashboard'] });
       loadProducts(undefined, { bypassCache: true, silent: true }).catch((e) => {
         reportError(e instanceof Error ? e : new Error(String(e)), { context: 'deleteProduct-refresh' });
       });
@@ -1209,6 +1212,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     setProducts((prev) => prev.filter((p) => !idSet.has(p.id)));
     queryClient.invalidateQueries({ queryKey: ['products'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    queryClient.refetchQueries({ queryKey: ['dashboard'] });
     loadProducts(undefined, { bypassCache: true, silent: true }).catch((e) => {
       reportError(e instanceof Error ? e : new Error(String(e)), { context: 'deleteProducts-refresh' });
     });

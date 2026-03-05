@@ -17,6 +17,7 @@ import {
   deleteWarehouseProduct,
 } from '@/lib/data/warehouseProducts';
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
+import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 
 export const dynamic = 'force-dynamic';
 /** Higher than DB statement_timeout (10s) so we return a clean 504/503 instead of Vercel 504. Requires Vercel Pro for >10s. */
@@ -192,6 +193,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     const created = await createWarehouseProduct({ ...body, warehouseId: effectiveWarehouseId });
+    await notifyInventoryUpdated(effectiveWarehouseId);
     return withCors(NextResponse.json(created, { status: 201, headers: h }), req);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Failed to create product';
@@ -245,6 +247,7 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
     if (!updated) {
       return withCors(NextResponse.json({ error: 'Product not found' }, { status: 404, headers: h }), req);
     }
+    await notifyInventoryUpdated(effectiveWarehouseId);
     return withCors(NextResponse.json(updated, { headers: h }), req);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Failed to update product';
@@ -282,6 +285,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
 
   try {
     await deleteWarehouseProduct(productId, warehouseId);
+    await notifyInventoryUpdated(warehouseId);
     return withCors(NextResponse.json({ ok: true }, { headers: h }), req);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Failed to delete product';
