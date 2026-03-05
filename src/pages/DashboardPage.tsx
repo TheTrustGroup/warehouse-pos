@@ -297,7 +297,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Category breakdown ── */}
-        {!loading && dashboard && Object.keys(dashboard.categorySummary).length > 0 && (
+        {!loading && dashboard && dashboard.categorySummary && typeof dashboard.categorySummary === 'object' && Object.keys(dashboard.categorySummary).length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="px-5 py-4 border-b border-slate-100">
               <h2 className="text-[15px] font-black text-slate-900">By Category</h2>

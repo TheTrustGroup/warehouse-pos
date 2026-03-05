@@ -4,6 +4,22 @@ This doc summarizes **what causes** dashboard/products errors and **what tools a
 
 ---
 
+## When you see 500/503/504 and "Server temporarily unavailable"
+
+1. **Check Vercel env**  
+   In Vercel → Project → Settings → Environment Variables, ensure **`SUPABASE_URL`** and **`SUPABASE_SERVICE_ROLE_KEY`** are set for the environment you’re using (Production/Preview). Missing or wrong values cause 500 and "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" in server logs.
+
+2. **Check Vercel function logs**  
+   Vercel → Project → Logs (or Functions) to see the exact error (auth failure, DB timeout, missing RPC, etc.). Redeploy after fixing env so new values are applied.
+
+3. **Circuit breaker**  
+   After many 5xx or timeouts, the client stops calling the API for ~60s and shows the orange banner. Use **Try again** (or **Retry** on Dashboard) to reset and retry once the server is fixed.
+
+4. **Client `TypeError: null is not an object (evaluating 'e.trans')`**  
+   This can happen when a dependency receives a non-Error or null. The app now normalizes dashboard errors to always be `Error | null` and validates the dashboard response shape to avoid passing null where an object is expected.
+
+---
+
 ## What you’re seeing
 
 - **503 (Service Unavailable)**  
@@ -17,6 +33,10 @@ This doc summarizes **what causes** dashboard/products errors and **what tools a
 
 - **`e.trans` TypeError in console**  
   Often from a dependency (e.g. IndexedDB/Dexie or React Query) when it receives a `null` or unexpected value instead of an error object. Fix by using the resilient API client and by never passing `null` where an Error is expected.
+
+- **Vercel logs: "3K errors" and slow-request warnings**  
+  - **Errors (level: error)** — Filter by "Error" in Vercel Logs to see the real messages (500/503, missing env, timeouts). These are what open the circuit breaker and show the orange banner.
+  - **Warnings (level: warn)** — The API logs a **warn** when a request takes **≥ 2 seconds** (see `lib/requestLog.ts` `SLOW_MS`). So a `GET /api/products` that returns **200** but takes **~4s** will appear as a warning. That’s intentional so you can spot slow endpoints. Reduce duration by adding DB indexes (see below), using a smaller `limit` for the first load (e.g. 50), and keeping the Supabase region close to your Vercel region.
 
 ---
 
@@ -49,6 +69,7 @@ This doc summarizes **what causes** dashboard/products errors and **what tools a
 
 - **Database**  
   - Add indexes for filters used by dashboard and products (e.g. `warehouse_id`, `created_at`, category).
+  - For **GET /api/products**, the code queries `warehouse_products` (ordered by `name`), then `warehouse_inventory` and `warehouse_inventory_by_size` by `warehouse_id` and `product_id`. Indexes on `warehouse_inventory(warehouse_id, product_id)` and `warehouse_inventory_by_size(warehouse_id, product_id)` (and on `warehouse_products(name)` if the list is large) will reduce response time and the number of slow-request warnings.
   - Use the `get_warehouse_inventory_stats` RPC when available so the dashboard doesn’t have to load all products; fallback is a capped product sample.
   - Consider Supabase connection pooling (e.g. Supavisor) if you hit connection limits.
 

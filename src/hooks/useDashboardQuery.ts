@@ -44,10 +44,19 @@ async function fetchDashboard(
   signal?: AbortSignal | null
 ): Promise<DashboardData> {
   const path = `/api/dashboard?warehouse_id=${encodeURIComponent(warehouseId)}&date=${date}`;
-  return apiGet<DashboardData>(API_BASE_URL, path, {
-    timeoutMs: FETCH_TIMEOUT_MS,
-    signal,
-  });
+  try {
+    const data = await apiGet<DashboardData>(API_BASE_URL, path, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      signal,
+    });
+    if (data == null || typeof data !== 'object') {
+      throw new Error('Invalid dashboard response');
+    }
+    return data;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Failed to load dashboard';
+    throw new Error(message);
+  }
 }
 
 async function fetchTodayByWarehouse(date: string): Promise<Record<string, number>> {
@@ -93,9 +102,16 @@ export function useDashboardQuery(warehouseId: string) {
   });
 
   const isLoading = dashboardResult.isLoading || todayResult.isLoading;
-  const error = dashboardResult.error ?? todayResult.error;
   const dashboard = dashboardResult.data ?? null;
   const todayByWarehouse = (todayResult.data ?? {}) as Record<string, number>;
+
+  const rawError = dashboardResult.error ?? todayResult.error;
+  const normalizedError =
+    rawError == null
+      ? null
+      : rawError instanceof Error
+        ? rawError
+        : new Error(String(rawError));
 
   const refetch = () => {
     dashboardResult.refetch();
@@ -103,10 +119,10 @@ export function useDashboardQuery(warehouseId: string) {
   };
 
   return {
-    dashboard,
+    dashboard: dashboard ?? null,
     todayByWarehouse,
     isLoading,
-    error: error instanceof Error ? error : null,
+    error: normalizedError,
     refetch,
     isRefetching: dashboardResult.isRefetching || todayResult.isRefetching,
   };
