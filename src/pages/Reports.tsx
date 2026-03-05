@@ -1,18 +1,21 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Download, FileText, Table } from 'lucide-react';
 import { useInventory } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useWarehouse } from '../contexts/WarehouseContext';
 import { DateRangePicker } from '../components/reports/DateRangePicker';
 import { SalesMetrics } from '../components/reports/SalesMetrics';
 import { SalesChart } from '../components/reports/SalesChart';
 import { TopProductsTable } from '../components/reports/TopProductsTable';
 import { InventoryMetrics } from '../components/reports/InventoryMetrics';
-import { generateSalesReport, generateInventoryReport, exportToCSV, SalesReport, InventoryReport } from '../services/reportService';
+import { generateSalesReport, generateInventoryReport, exportToCSV, mapApiReportToSalesReport, SalesReport, InventoryReport } from '../services/reportService';
+import { fetchSalesReport } from '../services/reportsApi';
 import { fetchTransactionsFromApi } from '../services/transactionsApi';
 import { Transaction } from '../types';
 import { formatCurrency, getCategoryDisplay } from '../lib/utils';
 import { getStoredData } from '../lib/storage';
 import { parseDate, validateDateRange } from '../lib/dateUtils';
+import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -23,22 +26,134 @@ type TransactionsSource = 'server' | 'local';
 export function Reports() {
   const { products } = useInventory();
   const { user } = useAuth();
+  const { currentWarehouseId } = useWarehouse();
   const [reportType, setReportType] = useState<ReportType>('sales');
-  
+
   const today = new Date().toISOString().split('T')[0];
   const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(last30Days);
   const [endDate, setEndDate] = useState(today);
 
+  const setPeriod = useCallback((preset: 'today' | 'week' | 'month' | 'last_month' | 'quarter' | 'year') => {
+    const now = new Date();
+    let start = new Date(now);
+    let end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    switch (preset) {
+      case 'today':
+        start.setHours(0, 0, 0, 0);
+        break;
+      case 'week': {
+        const day = start.getDay();
+        start.setDate(start.getDate() - day);
+        start.setHours(0, 0, 0, 0);
+        break;
+      }
+      case 'month':
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+        break;
+      case 'last_month':
+        start.setMonth(start.getMonth() - 1);
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+        end.setTime(start.getTime());
+        end.setMonth(end.getMonth() + 1);
+        end.setDate(0);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case 'quarter': {
+        const q = Math.floor(start.getMonth() / 3) + 1;
+        start.setMonth((q - 1) * 3);
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+        break;
+      }
+      case 'year':
+        start.setMonth(0);
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+        break;
+    }
+    setStartDate(start.toISOString().split('T')[0]);
+    setEndDate(end.toISOString().split('T')[0]);
+  }, []);
+
   const [salesReport, setSalesReport] = useState<SalesReport | null>(null);
+  /** When set, sales metrics come from GET /api/reports/sales (sales + sale_lines). */
+  const [salesReportFromApi, setSalesReportFromApi] = useState<SalesReport | null>(null);
   const [inventoryReport, setInventoryReport] = useState<InventoryReport | null>(null);
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsSource, setTransactionsSource] = useState<TransactionsSource>('local');
   const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [salesReportLoading, setSalesReportLoading] = useState(false);
+
+  /** Displayed sales report: prefer API (SQL from sales/sale_lines), else JS from transactions. */
+  const displayedSalesReport = salesReportFromApi ?? salesReport;
+
+  const getProductQty = useCallback((p: { quantity?: number; quantityBySize?: Array<{ quantity?: number }>; sizeKind?: string }) => {
+    if (p.sizeKind === 'sized' && (p.quantityBySize?.length ?? 0) > 0) {
+      return (p.quantityBySize ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
+    }
+    return Number(p.quantity ?? 0) || 0;
+  }, []);
+
+  const inventorySnapshot = useMemo(() => {
+    const list = products ?? [];
+    let atCost = 0;
+    let atSelling = 0;
+    let totalUnits = 0;
+    let outOfStock = 0;
+    let lowStock = 0;
+    let noCostPrice = 0;
+    const reorderDefault = 3;
+    list.forEach((p) => {
+      const q = getProductQty(p);
+      const cost = Number((p as { costPrice?: number }).costPrice ?? 0) || 0;
+      const selling = Number((p as { sellingPrice?: number }).sellingPrice ?? 0) || 0;
+      atCost += q * cost;
+      atSelling += q * selling;
+      totalUnits += q;
+      if (q === 0) outOfStock++;
+      else if (q <= (Number((p as { reorderLevel?: number }).reorderLevel ?? 0) || reorderDefault)) lowStock++;
+      if (cost === 0) noCostPrice++;
+    });
+    return {
+      stockValueAtCost: atCost,
+      stockValueAtSelling: atSelling,
+      potentialProfit: atSelling - atCost,
+      totalUnits,
+      outOfStock,
+      lowStock,
+      noCostPrice,
+      skuCount: list.length,
+    };
+  }, [products, getProductQty]);
 
   /** Any authenticated user can fetch transactions; API returns scope-filtered data for non-admin (Phase 3). */
   const canFetchServerTransactions = !!user;
+
+  /** Fetch sales report from GET /api/reports/sales (single source of truth: sales + sale_lines). */
+  useEffect(() => {
+    if (reportType !== 'sales' || !currentWarehouseId || !user) {
+      setSalesReportFromApi(null);
+      return;
+    }
+    const fromIso = `${startDate}T00:00:00.000Z`;
+    const toIso = `${endDate}T23:59:59.999Z`;
+    setSalesReportLoading(true);
+    setSalesReportFromApi(null);
+    fetchSalesReport(API_BASE_URL, {
+      warehouseId: currentWarehouseId,
+      from: fromIso,
+      to: toIso,
+    })
+      .then((api) => {
+        if (api) setSalesReportFromApi(mapApiReportToSalesReport(api));
+      })
+      .finally(() => setSalesReportLoading(false));
+  }, [reportType, currentWarehouseId, startDate, endDate, user]);
 
   const loadSalesData = useCallback(async () => {
     const start = parseDate(startDate);
@@ -92,6 +207,7 @@ export function Reports() {
 
   useEffect(() => {
     if (reportType === 'sales') {
+      if (salesReportFromApi != null) return;
       const start = parseDate(startDate);
       const end = parseDate(endDate + 'T23:59:59');
       if (!start || !end) {
@@ -109,15 +225,17 @@ export function Reports() {
       const report = generateInventoryReport(products);
       setInventoryReport(report);
     }
-  }, [reportType, startDate, endDate, transactions, products]);
+  }, [reportType, startDate, endDate, transactions, products, salesReportFromApi]);
 
   const handleExportSales = () => {
-    if (!salesReport) return;
-    
-    const exportData = salesReport.topSellingProducts.map(p => ({
+    if (!displayedSalesReport) return;
+
+    const exportData = displayedSalesReport.topSellingProducts.map(p => ({
       'Product Name': p.productName,
       'Quantity Sold': p.quantitySold,
       'Revenue': p.revenue,
+      ...(p.cogs != null && { 'Cost': p.cogs }),
+      ...(p.profit != null && { 'Profit': p.profit }),
     }));
     
     exportToCSV(exportData, 'sales_report');
@@ -178,26 +296,68 @@ export function Reports() {
       {/* Sales Report */}
       {reportType === 'sales' && (
         <div className="space-y-6">
-          <DateRangePicker
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-          />
-          {transactionsLoading && (
-            <p className="text-sm text-slate-500">Loading sales from server…</p>
-          )}
-          {!transactionsLoading && reportType === 'sales' && (
+          <div className="solid-card animate-fade-in-up">
+            <h3 className="font-semibold text-slate-900 mb-3">Period</h3>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {(['today', 'week', 'month', 'last_month', 'quarter', 'year'] as const).map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setPeriod(preset)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                >
+                  {preset === 'today' ? 'Today' : preset === 'week' ? 'This Week' : preset === 'month' ? 'This Month' : preset === 'last_month' ? 'Last Month' : preset === 'quarter' ? 'Last 3 Months' : 'This Year'}
+                </button>
+              ))}
+            </div>
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={setStartDate}
+              onEndDateChange={setEndDate}
+            />
+          </div>
+          {(salesReportLoading || transactionsLoading) && (
             <p className="text-sm text-slate-500">
-              {transactionsSource === 'server' ? 'Showing sales from server (all devices).' : 'Showing sales from this device.'}
+              {salesReportLoading ? 'Loading sales report…' : 'Loading sales from server…'}
+            </p>
+          )}
+          {!salesReportLoading && !transactionsLoading && reportType === 'sales' && (
+            <p className="text-sm text-slate-500">
+              {salesReportFromApi != null
+                ? 'Sales from POS (revenue, COGS, profit from sale records).'
+                : transactionsSource === 'server'
+                  ? 'Showing sales from server (all devices).'
+                  : 'Showing sales from this device.'}
             </p>
           )}
 
-          {salesReport && (
+          {displayedSalesReport && (
             <>
-              <SalesMetrics report={salesReport} />
-              <SalesChart report={salesReport} />
-              <TopProductsTable report={salesReport} />
+              <SalesMetrics report={displayedSalesReport} />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="solid-card p-4">
+                  <p className="text-sm font-medium text-slate-600 mb-1">Stock value (at cost)</p>
+                  <p className="text-xl font-bold text-slate-900">{formatCurrency(inventorySnapshot.stockValueAtCost)}</p>
+                  <p className="text-xs text-slate-500 mt-1">{inventorySnapshot.skuCount} SKUs · {inventorySnapshot.totalUnits} units</p>
+                </div>
+                <div className="solid-card p-4">
+                  <p className="text-sm font-medium text-slate-600 mb-1">Stock value (at selling price)</p>
+                  <p className="text-xl font-bold text-slate-900">{formatCurrency(inventorySnapshot.stockValueAtSelling)}</p>
+                  <p className="text-xs text-slate-500 mt-1">Potential revenue if all sold</p>
+                </div>
+                <div className="solid-card p-4">
+                  <p className="text-sm font-medium text-slate-600 mb-1">Potential profit in stock</p>
+                  <p className="text-xl font-bold text-slate-900">{formatCurrency(inventorySnapshot.potentialProfit)}</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {inventorySnapshot.stockValueAtSelling > 0
+                      ? `${((inventorySnapshot.potentialProfit / inventorySnapshot.stockValueAtSelling) * 100).toFixed(1)}% potential margin`
+                      : '—'}
+                  </p>
+                </div>
+              </div>
+              <SalesChart report={displayedSalesReport} />
+              <TopProductsTable report={displayedSalesReport} />
               {/* Category Performance */}
               <div className="table-container">
                 <h3 className="text-lg font-semibold text-slate-900 mb-6 px-6 pt-6">Category Performance</h3>
@@ -212,7 +372,7 @@ export function Reports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {salesReport.salesByCategory.map((cat, idx) => (
+                  {displayedSalesReport.salesByCategory.map((cat, idx) => (
                     <tr key={idx} className="table-row">
                       <td className="px-4 py-3 font-medium text-slate-900">{cat.category}</td>
                       <td className="px-4 py-3 text-right text-slate-600">{cat.quantity}</td>
@@ -220,7 +380,7 @@ export function Reports() {
                         {formatCurrency(cat.revenue)}
                       </td>
                       <td className="px-4 py-3 text-right text-slate-600">
-                        {salesReport.totalRevenue > 0 ? ((cat.revenue / salesReport.totalRevenue) * 100).toFixed(1) : '0.0'}%
+                        {displayedSalesReport.totalRevenue > 0 ? ((cat.revenue / displayedSalesReport.totalRevenue) * 100).toFixed(1) : '0.0'}%
                       </td>
                     </tr>
                   ))}
@@ -228,6 +388,29 @@ export function Reports() {
               </table>
             </div>
           </div>
+              <div className="solid-card p-4">
+                <h3 className="font-semibold text-slate-900 mb-3">Alerts</h3>
+                <ul className="space-y-1.5 text-sm">
+                  <li className="flex items-center justify-between">
+                    <span className="text-slate-600">Out of stock</span>
+                    <span className="font-semibold text-red-600">{inventorySnapshot.outOfStock}</span>
+                  </li>
+                  <li className="flex items-center justify-between">
+                    <span className="text-slate-600">Low stock (at or below reorder level)</span>
+                    <span className="font-semibold text-amber-600">{inventorySnapshot.lowStock}</span>
+                  </li>
+                  <li className="flex items-center justify-between">
+                    <span className="text-slate-600">Products with no cost price</span>
+                    <span className="font-semibold text-slate-600">{inventorySnapshot.noCostPrice}</span>
+                  </li>
+                </ul>
+                <p className="text-xs text-slate-500 mt-2">Cost price is required for accurate profit in reports.</p>
+              </div>
+              <div className="flex justify-end">
+                <Link to="/sales" className="text-sm font-semibold text-primary-600 hover:underline">
+                  View full sales history →
+                </Link>
+              </div>
             </>
           )}
         </div>

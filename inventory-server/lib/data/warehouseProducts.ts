@@ -576,7 +576,48 @@ export async function updateWarehouseProduct(
     ? quantityBySize.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
     : Number(body.quantity ?? existing.quantity ?? 0);
 
-  await db.from('warehouse_inventory_by_size').delete().eq('product_id', productId).eq('warehouse_id', warehouseId);
+  if (isSized && quantityBySize.length > 0) {
+    const payloadCodes = new Set(
+      quantityBySize
+        .map((r) => String(r.sizeCode ?? '').trim().toUpperCase() || 'NA')
+    );
+    const { data: existingSizes } = await db
+      .from('warehouse_inventory_by_size')
+      .select('size_code')
+      .eq('warehouse_id', warehouseId)
+      .eq('product_id', productId);
+    const toRemove = (existingSizes ?? []).filter(
+      (row: { size_code: string }) => !payloadCodes.has(String(row.size_code).toUpperCase())
+    );
+    for (const row of toRemove) {
+      await db
+        .from('warehouse_inventory_by_size')
+        .delete()
+        .eq('warehouse_id', warehouseId)
+        .eq('product_id', productId)
+        .eq('size_code', row.size_code);
+    }
+    const sizeRows = quantityBySize
+      .filter((r) => String(r.sizeCode ?? '').trim() || true)
+      .map((r) => ({
+        product_id: productId,
+        warehouse_id: warehouseId,
+        size_code: String(r.sizeCode ?? '').trim().toUpperCase() || 'NA',
+        quantity: Math.max(0, Number(r.quantity) || 0),
+        updated_at: now,
+      }));
+    if (sizeRows.length > 0) {
+      const { error: upsertSizeError } = await db
+        .from('warehouse_inventory_by_size')
+        .upsert(sizeRows, { onConflict: 'warehouse_id,product_id,size_code', ignoreDuplicates: false });
+      if (upsertSizeError) {
+        throw new Error(`Failed to update inventory by size: ${upsertSizeError.message}`);
+      }
+    }
+  } else {
+    await db.from('warehouse_inventory_by_size').delete().eq('product_id', productId).eq('warehouse_id', warehouseId);
+  }
+
   const { error: delInvErr } = await db
     .from('warehouse_inventory')
     .delete()
@@ -592,23 +633,6 @@ export async function updateWarehouseProduct(
   });
   if (insertInvErr) {
     throw new Error(`Failed to update warehouse inventory: ${insertInvErr.message}`);
-  }
-
-  if (isSized && quantityBySize.length > 0) {
-    const sizeRows = quantityBySize
-      .filter((r) => String(r.sizeCode ?? '').trim())
-      .map((r) => ({
-        product_id: productId,
-        warehouse_id: warehouseId,
-        size_code: String(r.sizeCode).trim().toUpperCase(),
-        quantity: Number(r.quantity) || 0,
-      }));
-    if (sizeRows.length > 0) {
-      const { error: insertSizeError } = await db.from('warehouse_inventory_by_size').insert(sizeRows);
-      if (insertSizeError) {
-        throw new Error(`Failed to update inventory by size: ${insertSizeError.message}`);
-      }
-    }
   }
 
   return getProductById(warehouseId, productId);

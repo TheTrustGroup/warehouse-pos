@@ -292,7 +292,9 @@ export default function DeliveriesPage({ warehouseId: propWarehouseId = '', apiB
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      if (isMounted.current) setDeliveries((json.data ?? []) as Delivery[]);
+      // API returns array at root or { data }; accept both so deliveries list is never empty due to shape.
+      const list = Array.isArray(json) ? json : (json?.data ?? []);
+      if (isMounted.current) setDeliveries(list as Delivery[]);
     } catch (e: unknown) {
       if (isMounted.current) setError(e instanceof Error ? e.message : 'Failed to load deliveries');
     } finally {

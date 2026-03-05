@@ -7,6 +7,7 @@ interface SalesMetricsProps {
 }
 
 export function SalesMetrics({ report }: SalesMetricsProps) {
+  const marginPct = report.totalRevenue > 0 ? ((report.totalProfit / report.totalRevenue) * 100).toFixed(1) : '0.0';
   const metrics = [
     {
       label: 'Total Revenue',
@@ -14,8 +15,16 @@ export function SalesMetrics({ report }: SalesMetricsProps) {
       icon: DollarSign,
       color: 'blue',
     },
+    ...(report.totalCogs != null
+      ? [{
+          label: 'Cost of Goods',
+          value: formatCurrency(report.totalCogs),
+          icon: DollarSign,
+          color: 'slate' as const,
+        }]
+      : []),
     {
-      label: 'Total Profit',
+      label: 'Gross Profit',
       value: formatCurrency(report.totalProfit),
       icon: TrendingUp,
       color: 'green',
@@ -40,7 +49,7 @@ export function SalesMetrics({ report }: SalesMetricsProps) {
     },
     {
       label: 'Profit Margin',
-      value: `${report.totalRevenue > 0 ? ((report.totalProfit / report.totalRevenue) * 100).toFixed(1) : '0.0'}%`,
+      value: `${marginPct}%`,
       icon: TrendingUp,
       color: 'green',
     },
@@ -52,6 +61,7 @@ export function SalesMetrics({ report }: SalesMetricsProps) {
     purple: 'bg-purple-50 text-purple-600',
     amber: 'bg-amber-50 text-amber-600',
     indigo: 'bg-indigo-50 text-indigo-600',
+    slate: 'bg-slate-50 text-slate-600',
   };
 
   return (

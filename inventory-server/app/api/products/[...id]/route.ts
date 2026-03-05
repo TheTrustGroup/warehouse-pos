@@ -357,12 +357,11 @@ async function manualUpdate(
   if (sizeRows !== null) {
     await db.from('warehouse_inventory_by_size').delete()
       .eq('warehouse_id', wid).eq('product_id', id);
-
     if (sizeRows.length > 0) {
       const { error: insErr } = await db.from('warehouse_inventory_by_size').insert(
         sizeRows.map(r => ({
           warehouse_id: wid, product_id: id,
-          size_code: r.sizeCode, quantity: r.quantity,
+          size_code: r.sizeCode, quantity: Math.max(0, r.quantity),
           updated_at: now,
         }))
       );

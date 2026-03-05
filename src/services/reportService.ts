@@ -1,8 +1,37 @@
 import { Product, Transaction, TransactionItem } from '../types';
 import { formatDate, getCategoryDisplay } from '../lib/utils';
+import type { SalesReportApiResponse } from './reportsApi';
+
+/** Map GET /api/reports/sales response to SalesReport (revenue = SUM(line_total), COGS = SUM(cost_price×qty)). */
+export function mapApiReportToSalesReport(api: SalesReportApiResponse): SalesReport {
+  return {
+    totalRevenue: Number(api.revenue ?? 0),
+    totalCogs: Number(api.cogs ?? 0),
+    totalProfit: Number(api.grossProfit ?? 0),
+    totalTransactions: Number(api.transactionCount ?? 0),
+    totalItemsSold: Number(api.unitsSold ?? 0),
+    averageOrderValue: Number(api.averageOrderValue ?? 0),
+    topSellingProducts: (api.topProducts ?? []).map((p) => ({
+      productName: String(p.productName ?? ''),
+      quantitySold: Number(p.unitsSold ?? 0),
+      revenue: Number(p.revenue ?? 0),
+      cogs: p.cogs != null ? Number(p.cogs) : undefined,
+      profit: p.profit != null ? Number(p.profit) : undefined,
+      marginPct: p.marginPct != null ? Number(p.marginPct) : undefined,
+    })),
+    salesByCategory: [],
+    salesByDay: (api.salesByDay ?? []).map((d) => ({
+      date: String(d.date ?? ''),
+      revenue: Number(d.revenue ?? 0),
+      transactions: Number(d.transactions ?? 0),
+    })),
+  };
+}
 
 export interface SalesReport {
   totalRevenue: number;
+  /** COGS = cost at time of sale × quantity (from sale_lines). Present when report from API. */
+  totalCogs?: number;
   totalProfit: number;
   totalTransactions: number;
   totalItemsSold: number;
@@ -11,6 +40,9 @@ export interface SalesReport {
     productName: string;
     quantitySold: number;
     revenue: number;
+    cogs?: number;
+    profit?: number;
+    marginPct?: number;
   }>;
   salesByCategory: Array<{
     category: string;
