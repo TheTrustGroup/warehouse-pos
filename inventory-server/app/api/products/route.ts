@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { corsHeaders } from '@/lib/cors';
-import { getRequestId, jsonError, jsonErrorBody } from '../../../lib/apiResponse';
+import { getRequestId, jsonError } from '../../../lib/apiResponse';
 import { logApiResponse } from '../../../lib/requestLog';
 import { requireAuth, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { getScopeForUser } from '@/lib/data/userScopes';
@@ -29,7 +29,9 @@ function withCors(res: NextResponse, req: NextRequest): NextResponse {
   return res;
 }
 
-const PRODUCTS_QUERY_TIMEOUT_MS = 9000;
+/** Request-level timeout so we respond before gateway 504. */
+const PRODUCTS_GET_TIMEOUT_MS = 25_000;
+const PRODUCTS_QUERY_TIMEOUT_MS = 20_000;
 
 function isStatementTimeoutError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
@@ -53,7 +55,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return res;
   };
 
-  try {
+  const timeoutPromise = new Promise<NextResponse>((_, reject) => {
+    setTimeout(() => reject(new Error('PRODUCTS_GET_TIMEOUT')), PRODUCTS_GET_TIMEOUT_MS);
+  });
+
+  const work = async (): Promise<NextResponse> => {
     try {
       if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
         return fail(500, 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Set them in Vercel project environment variables.');
@@ -125,7 +131,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const isAbortOrTimeout =
           (e instanceof Error && e.name === 'AbortError') || isStatementTimeoutError(e);
         if (isAbortOrTimeout) {
-          return fail(504, 'Query timed out', 'QUERY_TIMEOUT');
+          logApiResponse(req, 503, Date.now() - start, { message: 'Query timed out', code: 'QUERY_TIMEOUT' });
+          return withCors(
+            jsonError(503, 'Products list is taking too long. Please try again.', {
+              code: 'QUERY_TIMEOUT',
+              requestId,
+              headers: { ...h, 'Retry-After': '15' },
+            }),
+            req
+          );
         }
         throw e;
       } finally {
@@ -147,19 +161,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
       return fail(500, message);
     }
-  } catch (outer: unknown) {
-    const msg = outer instanceof Error ? outer.message : 'Failed to load products';
-    const durationMs = Date.now() - start;
-    logApiResponse(req, 500, durationMs, { message: msg });
-    try {
-      const h = corsHeaders(req);
-      return withCors(jsonError(500, msg, { requestId: getRequestId(req), headers: h }), req);
-    } catch {
-      return NextResponse.json(
-        jsonErrorBody(msg, { requestId: getRequestId(req) }),
-        { status: 500, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } }
+  };
+
+  try {
+    return await Promise.race([work(), timeoutPromise]);
+  } catch (e) {
+    if (e instanceof Error && e.message === 'PRODUCTS_GET_TIMEOUT') {
+      logApiResponse(req, 503, Date.now() - start, { message: 'Request timed out', code: 'REQUEST_TIMEOUT' });
+      return withCors(
+        jsonError(503, 'Products request timed out. Please try again.', {
+          code: 'REQUEST_TIMEOUT',
+          requestId,
+          headers: { ...h, 'Retry-After': '15' },
+        }),
+        req
       );
     }
+    throw e;
   }
 }
 
