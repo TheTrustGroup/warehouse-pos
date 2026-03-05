@@ -718,7 +718,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        loadProductsRef.current(undefined, { silent: true, bypassCache: true }).catch(() => {});
+        loadProductsRef.current(undefined, { silent: true, bypassCache: true }).catch((e) => {
+          reportError(e instanceof Error ? e : new Error(String(e)), { context: 'visibilitychange-refresh' });
+        });
       }
     };
     document.addEventListener('visibilitychange', onVisible);
@@ -926,7 +928,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.time('State Update');
       }
       let normalized = (created as { id?: string }).id
-        ? normalizeProduct(created as any)
+        ? normalizeProduct(created as Record<string, unknown>)
         : ({ ...tempProduct, _pending: undefined, id: tempId } as Product);
       const resolvedId = normalized.id ?? tempId;
       // Preserve form data when API omits or returns zero so every detail entered is recorded in state
@@ -1055,7 +1057,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.time('State Update (update)');
       }
       const normalized = fromApi && (fromApi as { id?: string }).id
-        ? normalizeProduct(fromApi as any)
+        ? normalizeProduct(fromApi as Record<string, unknown>)
         : updated;
       const apiHasImages = Array.isArray(normalized.images) && normalized.images.length > 0;
       // Keep images from our update if API response omits them (e.g. backend doesn't return base64)
@@ -1098,8 +1100,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.timeEnd('State Update (update)');
         console.timeEnd('Total Update Time');
       }
-      // Refetch from server so this device and others see the same data (sizes, quantity). Server is source of truth.
-      refreshProducts({ bypassCache: true }).catch(() => {});
+      // Do not refetch here: state is already correct from PUT response. Poll (30s) and explicit refresh keep other devices in sync.
     } catch (err) {
       const status = (err as { status?: number })?.status;
       const msg =
@@ -1139,7 +1140,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setProducts((prev) => prev.filter((p) => p.id !== id));
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      loadProducts(undefined, { bypassCache: true, silent: true }).catch(() => {});
+      loadProducts(undefined, { bypassCache: true, silent: true }).catch((e) => {
+        reportError(e instanceof Error ? e : new Error(String(e)), { context: 'deleteProduct-refresh' });
+      });
     } catch (err) {
       const status = (err as { status?: number })?.status;
       const msg =
@@ -1206,7 +1209,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     setProducts((prev) => prev.filter((p) => !idSet.has(p.id)));
     queryClient.invalidateQueries({ queryKey: ['products'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    loadProducts(undefined, { bypassCache: true, silent: true }).catch(() => {});
+    loadProducts(undefined, { bypassCache: true, silent: true }).catch((e) => {
+      reportError(e instanceof Error ? e : new Error(String(e)), { context: 'deleteProducts-refresh' });
+    });
   };
 
   const getProduct = (id: string) => {

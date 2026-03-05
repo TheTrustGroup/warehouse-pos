@@ -815,7 +815,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
           </div>
         )}
 
-        {/* Empty warehouse */}
+        {/* Empty warehouse — clear CTA so user knows what to do next */}
         {!loading && !error && products.length === 0 && (
           <div className="flex flex-col items-center gap-5 py-24 text-center">
             <div className="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center text-slate-300">
@@ -829,7 +829,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
                     className="h-12 px-7 rounded-2xl bg-red-500 text-white text-[14px] font-bold
                                flex items-center gap-2 hover:bg-red-600 transition-colors
                                shadow-[0_6px_20px_rgba(239,68,68,0.35)]">
-              <PlusIcon/> Add first product
+              <PlusIcon/> Add your first product →
             </button>
           </div>
         )}

@@ -29,12 +29,13 @@ function safeQuery(fn) {
 }
 
 /**
- * Normalize productData (partial) to the shape expected by inventoryDB (name, sku, category, price, quantity, etc.).
- * @param {Object} productData - Any object with at least name, sku, category
- * @returns {Object} Record for ProductRecord
+ * Normalize productData (partial) to the shape expected by inventoryDB.
+ * Includes all editable fields so offline updates persist name, price, cost, sizes, location, etc.
+ * @param {Object} productData - Any object with product fields (name, sku, category, sellingPrice, quantityBySize, etc.)
+ * @returns {Object} Record for ProductRecord / ProductUpdateData
  */
 function toRecord(productData) {
-  return {
+  const base = {
     name: productData.name ?? '',
     sku: productData.sku ?? '',
     category: productData.category ?? '',
@@ -43,6 +44,16 @@ function toRecord(productData) {
     description: productData.description ?? '',
     images: Array.isArray(productData.images) ? productData.images : [],
   };
+  // Editable fields so offline update persists full product (P1 audit)
+  if (productData.barcode !== undefined) base.barcode = productData.barcode ?? '';
+  if (productData.costPrice !== undefined) base.costPrice = productData.costPrice;
+  if (productData.reorderLevel !== undefined) base.reorderLevel = productData.reorderLevel;
+  if (productData.sizeKind !== undefined) base.sizeKind = productData.sizeKind;
+  if (productData.quantityBySize !== undefined) base.quantityBySize = Array.isArray(productData.quantityBySize) ? productData.quantityBySize : [];
+  if (productData.location !== undefined) base.location = productData.location && typeof productData.location === 'object' ? productData.location : null;
+  if (productData.supplier !== undefined) base.supplier = productData.supplier && typeof productData.supplier === 'object' ? productData.supplier : null;
+  if (productData.tags !== undefined) base.tags = Array.isArray(productData.tags) ? productData.tags : [];
+  return base;
 }
 
 /**
@@ -54,8 +65,8 @@ function recordToProduct(record) {
   if (!record) return null;
   return {
     ...record,
-    sellingPrice: record.price,
-    costPrice: record.price,
+    sellingPrice: record.price ?? 0,
+    costPrice: record.costPrice ?? record.price ?? 0,
     barcode: record.barcode ?? '',
     tags: Array.isArray(record.tags) ? record.tags : [],
     reorderLevel: record.reorderLevel ?? 0,
