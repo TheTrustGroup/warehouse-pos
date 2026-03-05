@@ -402,33 +402,43 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           const qs = params.toString();
           return `${base}${base.includes('?') ? '&' : '?'}${qs}`;
         };
-        // First page only: 50 products per page (pagination; Load more fetches next pages).
-        const PAGE_LIMIT = 50;
+        // Initial load: fetch up to API max (250) so inventory and POS show full catalog; Load more fetches next pages if total > 250.
+        const PAGE_LIMIT = 250;
         const PRODUCTS_REQUEST_TIMEOUT_MS = 25_000;
         const getOpts = { signal, timeoutMs: timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 2 };
         const result = await queryClient.fetchQuery({
           queryKey: queryKeys.products(wid),
           queryFn: async (): Promise<{ list: Product[]; total?: number }> => {
-            const path = pathForWid('/api/products', { limit: PAGE_LIMIT, offset: 0 });
-            let raw: { data?: Product[]; total?: number } | Product[] | null = null;
-            try {
-              raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
-            } catch (e) {
-              const status = (e as { status?: number })?.status;
-              if (status === 404) {
-                raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, pathForWid('/admin/api/products', { limit: PAGE_LIMIT, offset: 0 }), getOpts);
-              } else {
-                throw e;
+            const allItems: Product[] = [];
+            let totalFromApi: number | undefined;
+            const apiBase = '/api/products';
+            const adminBase = '/admin/api/products';
+            let offset = 0;
+            for (;;) {
+              const path = pathForWid(apiBase, { limit: PAGE_LIMIT, offset });
+              let raw: { data?: Product[]; total?: number } | Product[] | null = null;
+              try {
+                raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
+              } catch (e) {
+                const status = (e as { status?: number })?.status;
+                if (status === 404) {
+                  raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, pathForWid(adminBase, { limit: PAGE_LIMIT, offset }), getOpts);
+                } else {
+                  throw e;
+                }
               }
+              const parsed = parseProductsResponse(raw);
+              if (!parsed.success) throw new Error(parsed.message);
+              const page = parsed.items
+                .filter((p) => p != null && typeof p === 'object')
+                .map((p) => normalizeProduct(p))
+                .filter((p): p is Product => p != null && typeof p === 'object');
+              allItems.push(...page);
+              if (raw != null && typeof raw === 'object' && 'total' in raw) totalFromApi = (raw as { total?: number }).total;
+              if (page.length < PAGE_LIMIT || (typeof totalFromApi === 'number' && allItems.length >= totalFromApi)) break;
+              offset += PAGE_LIMIT;
             }
-            const parsed = parseProductsResponse(raw);
-            if (!parsed.success) throw new Error(parsed.message);
-            const list = parsed.items
-              .filter((p) => p != null && typeof p === 'object')
-              .map((p) => normalizeProduct(p))
-              .filter((p): p is Product => p != null && typeof p === 'object');
-            const totalFromApi = raw != null && typeof raw === 'object' && 'total' in raw ? (raw as { total?: number }).total : undefined;
-            return { list, total: totalFromApi };
+            return { list: allItems, total: totalFromApi };
           },
           staleTime: PRODUCTS_STALE_MS,
           gcTime: PRODUCTS_GC_MS,
