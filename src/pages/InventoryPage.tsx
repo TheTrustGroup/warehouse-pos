@@ -620,6 +620,10 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
   const alertCount = stats.outCount + stats.lowCount;
 
+  /** Total to show in "Showing X–Y of N": when no filters applied, use warehouse total from dashboard (e.g. 205) so it matches the SKU card; when filtered, use filtered count (e.g. 12). */
+  const hasActiveFilters = Boolean(search.trim() || category !== 'all' || sizeFilter || colorFilter);
+  const totalForDisplay = hasActiveFilters ? totalFiltered : (dashboard != null && skuCount >= 0 ? skuCount : totalFiltered);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -639,7 +643,9 @@ export default function InventoryPage(_props: InventoryPageProps) {
             Inventory
           </h1>
           <p className="text-[12px] text-[var(--edk-ink-3)]" aria-live="polite">
-            {products.length} product{products.length !== 1 ? 's' : ''} · Page {currentPage} of {totalPages}
+            {totalForDisplay > 0 && products.length < totalForDisplay
+              ? `${totalForDisplay} product${totalForDisplay !== 1 ? 's' : ''} (${products.length} loaded)`
+              : `${products.length} product${products.length !== 1 ? 's' : ''}`} · Page {currentPage} of {totalPages}
             {backgroundRefreshing && (
               <span className="text-[var(--edk-ink-3)]"> · Updating…</span>
             )}
@@ -663,7 +669,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
           <StatCard
             label="SKUs"
             value={skuCount}
-            sub={totalPages > 1 ? `Showing ${pageStart + 1}–${Math.min(pageStart + pageSize, totalFiltered)} of ${totalFiltered}` : `${totalFiltered} shown`}
+            sub={totalPages > 1 ? `Showing ${pageStart + 1}–${Math.min(pageStart + pageSize, totalFiltered)} of ${totalForDisplay}` : (totalForDisplay > totalFiltered ? `${totalFiltered} loaded of ${totalForDisplay}` : `${totalFiltered} shown`)}
           />
           {alertCount > 0 && (
             <StatCard
@@ -762,7 +768,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
           </div>
         </div>
         <span className="text-[11px] text-[var(--edk-ink-3)] whitespace-nowrap">
-          Showing <strong className="text-[var(--edk-ink-2)] font-semibold">{pageStart + 1}–{Math.min(pageStart + pageSize, totalFiltered)}</strong> of {totalFiltered}
+          Showing <strong className="text-[var(--edk-ink-2)] font-semibold">{pageStart + 1}–{Math.min(pageStart + pageSize, totalFiltered)}</strong> of {totalForDisplay}
         </span>
       </div>
 
