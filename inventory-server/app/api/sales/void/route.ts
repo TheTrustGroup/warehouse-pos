@@ -42,19 +42,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   try {
     const supabase = getSupabase();
-    const update: { status: string } = { status: 'voided' };
-    let query = supabase.from('sales').update(update).eq('id', saleId);
-    if (warehouseId) query = query.eq('warehouse_id', warehouseId);
-    const { data, error } = await query.select('id, warehouse_id').maybeSingle();
-    if (error) {
-      console.error('[POST /api/sales/void]', error);
-      return withCors(NextResponse.json({ error: error.message }, { status: 500, headers: h }), req);
+    const { data: saleRow, error: fetchError } = await supabase
+      .from('sales')
+      .select('id, warehouse_id, status')
+      .eq('id', saleId)
+      .maybeSingle();
+    if (fetchError) {
+      console.error('[POST /api/sales/void] fetch', fetchError);
+      return withCors(NextResponse.json({ error: fetchError.message }, { status: 500, headers: h }), req);
     }
-    if (!data) {
+    if (!saleRow) {
       return withCors(NextResponse.json({ error: 'Sale not found' }, { status: 404, headers: h }), req);
     }
-    const affectedWarehouseId = (data as { warehouse_id?: string }).warehouse_id ?? warehouseId;
-    if (affectedWarehouseId) await notifyInventoryUpdated(affectedWarehouseId);
+    const saleWarehouseId = (saleRow as { warehouse_id?: string }).warehouse_id ?? '';
+    if (saleWarehouseId && !isAdmin && !allowed.includes(saleWarehouseId)) {
+      return withCors(NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: h }), req);
+    }
+    if (warehouseId && saleWarehouseId && saleWarehouseId !== warehouseId) {
+      return withCors(NextResponse.json({ error: 'Sale not in specified warehouse' }, { status: 400, headers: h }), req);
+    }
+    const { error: rpcError } = await supabase.rpc('void_sale', { p_sale_id: saleId });
+    if (rpcError) {
+      console.error('[POST /api/sales/void] RPC', rpcError);
+      return withCors(NextResponse.json({ error: rpcError.message }, { status: 500, headers: h }), req);
+    }
+    if (saleWarehouseId) await notifyInventoryUpdated(saleWarehouseId);
     return withCors(
       NextResponse.json({ ok: true, voidedAt: new Date().toISOString() }, { status: 200, headers: h }),
       req
