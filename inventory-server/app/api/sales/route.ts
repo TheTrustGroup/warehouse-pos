@@ -251,7 +251,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const discountPct = Number(body.discountPct) ?? 0;
   const discountAmt = Number(body.discountAmt) ?? 0;
   const total = Number(body.total) ?? 0;
-  const paymentMethod = typeof body.paymentMethod === 'string' ? body.paymentMethod : 'Cash';
+  const rawPaymentMethod = typeof body.paymentMethod === 'string' ? body.paymentMethod : 'cash';
+  const paymentMethod = rawPaymentMethod.trim().toLowerCase() || 'cash';
+  const allowedMethods = ['cash', 'card', 'mobile_money', 'mixed'];
+  const paymentMethodForDb = allowedMethods.includes(paymentMethod) ? paymentMethod : 'cash';
   const customerName = typeof body.customerName === 'string' ? body.customerName : null;
   const rawPayments = Array.isArray(body.payments) ? body.payments : null;
   const paymentsBreakdown =
@@ -263,7 +266,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       )
       .map((p: { method: string; amount: number }) => ({ method: p.method, amount: Number(p.amount) }))
       .filter((p) => ['cash', 'card', 'mobile_money'].includes(p.method) && p.amount > 0);
-  if (paymentMethod.toLowerCase() === 'mixed') {
+  if (paymentMethodForDb === 'mixed') {
     const sum = (paymentsBreakdown ?? []).reduce((s, p) => s + p.amount, 0);
     const ok = sum > 0 && Math.abs(sum - total) < 0.01;
     if (!ok || !paymentsBreakdown?.length) {
@@ -298,7 +301,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       p_discount_pct: discountPct,
       p_discount_amt: discountAmt,
       p_total: total,
-      p_payment_method: paymentMethod,
+      p_payment_method: paymentMethodForDb,
       p_customer_name: customerName,
       p_sold_by: null,
       p_sold_by_email: auth.email,
