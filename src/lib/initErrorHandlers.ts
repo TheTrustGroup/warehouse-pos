@@ -8,12 +8,15 @@ import { reportError } from './errorReporting';
 
 const CONSENT_KEY = 'error_reporting_consent';
 
+/** When not set, we default to true so Sentry receives events. Set to 'false' to opt out. */
 export function getErrorReportingConsent(): boolean {
-  if (typeof localStorage === 'undefined') return false;
+  if (typeof localStorage === 'undefined') return true;
   try {
-    return localStorage.getItem(CONSENT_KEY) === 'true';
+    const stored = localStorage.getItem(CONSENT_KEY);
+    if (stored === null) return true;
+    return stored === 'true';
   } catch {
-    return false;
+    return true;
   }
 }
 

@@ -4,6 +4,23 @@ This doc summarizes **what causes** dashboard/products errors and **what tools a
 
 ---
 
+## Quick troubleshooting (when the app has "server issues")
+
+1. **Local development**
+   - Start the API server: from `warehouse-pos/` run `cd inventory-server && npm run dev` (runs on port 3001).
+   - Point the frontend at it: create `warehouse-pos/.env.local` with `VITE_API_BASE_URL=http://localhost:3001`. Without this, dev uses the default remote URL and will fail if that server is down.
+   - Health check: `cd inventory-server && BASE_URL=http://localhost:3001 npm run test:health` (hits `GET /api/health`).
+
+2. **Production (Vercel)**
+   - In Vercel → Project → Settings → Environment Variables, set **`SUPABASE_URL`** and **`SUPABASE_SERVICE_ROLE_KEY`** for the environment you use. Missing or wrong values → 500 and "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY".
+   - In Vercel → Logs (or Functions), filter by "Error" to see the real server error. Redeploy after fixing env.
+
+3. **If the UI shows "Failed to load data" or orange banner**
+   - Use the **Retry** (Dashboard) or **Try again** button to reset the circuit breaker and retry after the server is fixed.
+   - Check network tab: 500 = server error (often env/DB); 503 = timeout or overload; CORS/blocked = wrong `VITE_API_BASE_URL` or backend not running.
+
+---
+
 ## When you see 500/503/504 and "Server temporarily unavailable"
 
 1. **Check Vercel env**  

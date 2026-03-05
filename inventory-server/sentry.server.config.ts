@@ -1,67 +1,15 @@
 /**
- * Sentry server config for Next.js (API routes, server components).
- * Do not send passwords, tokens, or Supabase keys — beforeSend scrubs them.
+ * Sentry server-side init for Next.js API routes and server code.
+ * Without this, Sentry.captureException/captureMessage in API routes never send.
+ * Set SENTRY_DSN in env (local and production) for events to appear in Sentry.
  */
 import * as Sentry from '@sentry/nextjs';
 
-const SENSITIVE_KEYS = [
-  'password',
-  'passwd',
-  'secret',
-  'token',
-  'authorization',
-  'auth',
-  'bearer',
-  'api_key',
-  'apikey',
-  'supabase',
-  'service_role',
-  'credentials',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'UPSTASH_REDIS_REST_TOKEN',
-];
-
-function isSensitiveKey(key: string): boolean {
-  const lower = key.toLowerCase();
-  return SENSITIVE_KEYS.some((k) => lower.includes(k.toLowerCase()));
-}
-
-function scrubObj(obj: Record<string, unknown> | null | undefined): void {
-  if (!obj || typeof obj !== 'object') return;
-  for (const key of Object.keys(obj)) {
-    if (isSensitiveKey(key)) {
-      (obj as Record<string, unknown>)[key] = '[REDACTED]';
-    } else if (obj[key] !== null && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
-      scrubObj(obj[key] as Record<string, unknown>);
-    }
-  }
-}
-
-function getEnvironment(): 'production' | 'staging' | 'development' {
-  const raw =
-    process.env.VERCEL_ENV ??
-    process.env.APP_ENV ??
-    process.env.NODE_ENV ??
-    'development';
-  const normalized = String(raw).toLowerCase();
-  if (normalized === 'production' || normalized === 'prod') return 'production';
-  if (normalized === 'staging' || normalized === 'stage') return 'staging';
-  return 'development';
-}
-
-const dsn = process.env.SENTRY_DSN;
-
-if (dsn && typeof dsn === 'string' && dsn.trim() !== '') {
+const dsn = process.env.SENTRY_DSN?.trim();
+if (dsn) {
   Sentry.init({
     dsn,
-    environment: getEnvironment(),
-    tracesSampleRate: getEnvironment() === 'production' ? 0.1 : 1,
-    beforeSend(event) {
-      if (event.request?.headers) scrubObj(event.request.headers as unknown as Record<string, unknown>);
-      if (event.request?.data) scrubObj(event.request.data as Record<string, unknown>);
-      if (event.extra) scrubObj(event.extra as Record<string, unknown>);
-      if (event.contexts) scrubObj(event.contexts as unknown as Record<string, unknown>);
-      return event;
-    },
+    environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? 'development',
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1,
   });
 }
