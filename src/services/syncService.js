@@ -15,6 +15,7 @@
 import { getDB, clearDbInstance, isTransactionError, setSyncError, getConflictPreference, appendConflictAuditLog } from '../db/inventoryDB';
 import { API_BASE_URL } from '../lib/api';
 import { apiPost, apiPut, apiDelete, apiGet } from '../lib/apiClient';
+import { resizeBase64ToMaxLength } from '../lib/imageResize';
 import { logSync } from '../utils/logger';
 import { recordSyncSuccess, recordSyncFailure, recordConflict } from '../lib/telemetry';
 
@@ -28,22 +29,31 @@ const TABLE_NAMES = /** @type {const} */ (['products']);
 // TODO: Support additional tableNames (e.g. 'orders') and corresponding API paths in syncSingleItem.
 
 /**
- * Max size for a single image (base64) to include in sync payload. Larger images are omitted
- * to avoid 413 / body limit (e.g. Vercel 4.5MB), which often surfaces as "Load failed".
+ * Max size for a single image (base64 data-URL length in chars) so sync stays under body limit.
+ * We resize larger images instead of omitting them (data integrity).
  */
-const MAX_IMAGE_SIZE_SYNC = 100_000; // ~100KB per image
+const MAX_IMAGE_SIZE_SYNC = 95_000; // ~95KB to stay under typical 100KB target
+const MAX_IMAGES_PER_PRODUCT = 5;
 
 /**
- * Build API payload from Dexie product record. Images are stripped or limited so sync POST
- * stays under server body limit (avoids "Load failed" after first few products with large images).
+ * Build API payload from Dexie product record. Images over limit are resized (not omitted)
+ * so sync stays under server body limit without silent data loss.
  * @param {Object} data - Record from sync queue (product shape)
- * @returns {Record<string, unknown>}
+ * @returns {Promise<Record<string, unknown>>}
  */
-function buildProductPayload(data) {
+async function buildProductPayload(data) {
   const rawImages = Array.isArray(data.images) ? data.images : [];
-  const images = rawImages
-    .filter((img) => typeof img === 'string' && img.length <= MAX_IMAGE_SIZE_SYNC)
-    .slice(0, 5);
+  const images = [];
+  for (let i = 0; i < Math.min(rawImages.length, MAX_IMAGES_PER_PRODUCT); i++) {
+    const img = rawImages[i];
+    if (typeof img !== 'string') continue;
+    if (img.length <= MAX_IMAGE_SIZE_SYNC) {
+      images.push(img);
+      continue;
+    }
+    const resized = await resizeBase64ToMaxLength(img, MAX_IMAGE_SIZE_SYNC);
+    if (resized) images.push(resized);
+  }
   return {
     id: data.id,
     name: data.name ?? '',
@@ -177,14 +187,14 @@ export class SyncService {
 
     try {
       if (operation === 'CREATE') {
-        const payload = buildProductPayload(data);
+        const payload = await buildProductPayload(data);
         const result = await apiPost(API_BASE_URL, basePath, payload, {
           idempotencyKey: data.id,
         });
         return { success: true, data: result };
       }
       if (operation === 'UPDATE') {
-        const payload = buildProductPayload(data);
+        const payload = await buildProductPayload(data);
         await apiPut(API_BASE_URL, `${basePath}/${idForApi}`, payload);
         return { success: true, data: payload };
       }
@@ -567,10 +577,13 @@ export class SyncService {
         const attempts = (item.attempts || 0) + 1;
         const status = result.status;
         const rawMsg = result.error || 'Unknown error';
+        const is413 = status === 413;
         const errorMsg =
-          status != null && status >= 400
-            ? `[${status}] ${rawMsg}`
-            : rawMsg;
+          is413
+            ? '[413] Request too large. Images were resized for sync; if retry still fails, remove some product images and save again.'
+            : status != null && status >= 400
+              ? `[${status}] ${rawMsg}`
+              : rawMsg;
         const isFinalFailure = attempts > MAX_ATTEMPTS;
         if (status >= 400 && status < 500 && item.data?.id) {
           try {

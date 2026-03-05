@@ -140,17 +140,17 @@ export function SyncQueueModal({ isOpen, onClose }: SyncQueueModalProps) {
                         <span className="text-slate-500 text-sm ml-2 truncate block">{String(label)}</span>
                         {item.error && (
                           <>
-                            <p className="text-red-600 text-xs mt-0.5 truncate" title={item.error}>
+                            <p className="text-red-600 text-xs mt-0.5 break-words" title={item.error}>
                               {item.error}
                             </p>
-                            {item.error.toLowerCase().includes('load failed') && (
-                              <p className="text-amber-700 text-xs mt-0.5" title="Common causes">
-                                Usually connection, CORS, or request too large. Retry. New uploads are auto-resized to ~100KB each; old large images are omitted when syncing.
+                            {(item.error.toLowerCase().includes('load failed') || item.error.includes('413')) && (
+                              <p className="text-slate-600 text-xs mt-1" title="What to do">
+                                Large images are now resized before sync. Retry this item; if it still fails, edit the product and remove or replace large photos, then save.
                               </p>
                             )}
                           </>
                         )}
-                        <p className="text-slate-400 text-xs">
+                        <p className="text-slate-400 text-xs mt-0.5">
                           Attempts: {item.attempts} · {item.status}
                         </p>
                       </div>
