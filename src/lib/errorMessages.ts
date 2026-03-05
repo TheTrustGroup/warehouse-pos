@@ -75,6 +75,13 @@ export function getUserFriendlyMessage(error: unknown): string {
   if (str.includes('sync') && str.includes('fail')) {
     return 'Sync failed. You can try again when the connection is stable.';
   }
+  // Size code: DB trigger rejects codes not in size_codes catalog
+  if (str.includes('size_code') && (str.includes('does not exist') || str.includes('size_codes'))) {
+    return 'That size code is not in the catalog. Use a suggested size from the list (e.g. US9, EU42, M, 6Y) or add it in Admin.';
+  }
+  if (str.includes('invalid size') || str.includes('invalid size code')) {
+    return 'That size code is not valid. Use a suggested size from the list (e.g. US9, EU42, M) or check spelling.';
+  }
 
   // Generic but safe: use message if it looks user-facing (short, no stack), else fallback
   if (error instanceof Error && msg.length <= 120 && !msg.includes(' at ') && !msg.includes('.ts')) {

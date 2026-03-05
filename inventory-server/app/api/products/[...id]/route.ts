@@ -11,6 +11,7 @@ import { corsHeaders } from '@/lib/cors';
 import { requireAuth, requireAdmin, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { isValidId } from '@/lib/validation';
 import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
+import { getSizeCodes } from '@/lib/data/sizeCodes';
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   const h = corsHeaders(req);
@@ -182,6 +183,29 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     } else {
       sizesToWrite = [];
       totalQty     = Number(body.quantity ?? 0);
+    }
+
+    // Validate size codes against catalog before DB write (trigger would reject invalid codes)
+    if (sizesToWrite && sizesToWrite.length > 0) {
+      const catalog = await getSizeCodes();
+      const allowed = new Set(catalog.map((r) => String(r.size_code).toUpperCase().trim()));
+      const invalid = sizesToWrite
+        .map((r) => r.sizeCode?.trim().toUpperCase())
+        .filter((code) => code && !allowed.has(code));
+      if (invalid.length > 0) {
+        const unique = [...new Set(invalid)];
+        return withCors(
+          NextResponse.json(
+            {
+              error: `Invalid size code(s): ${unique.join(', ')}. Use a size from the catalog (e.g. US9, EU42, M, 6Y).`,
+              code: 'INVALID_SIZE_CODE',
+              invalidSizeCodes: unique,
+            },
+            { status: 400 }
+          ),
+          req
+        );
+      }
     }
 
     const productRow = buildRow(body, id, wid, effectiveSK, now, currentVersion + 1);

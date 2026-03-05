@@ -3,6 +3,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
+import { getSizeCodes } from '@/lib/data/sizeCodes';
 
 export interface ListOptions {
   limit?: number;
@@ -479,6 +480,17 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
         quantity: Number(r.quantity) || 0,
       }));
     if (sizeRows.length > 0) {
+      const catalog = await getSizeCodes();
+      const allowed = new Set(catalog.map((r) => String(r.size_code).toUpperCase().trim()));
+      const invalid = sizeRows
+        .map((r) => r.size_code)
+        .filter((code) => !allowed.has(code));
+      if (invalid.length > 0) {
+        const unique = [...new Set(invalid)];
+        throw new Error(
+          `Invalid size code(s): ${unique.join(', ')}. Use a size from the catalog (e.g. US9, EU42, M, 6Y).`
+        );
+      }
       const { error: insertSizeError } = await db.from('warehouse_inventory_by_size').insert(sizeRows);
       if (insertSizeError) {
         await db.from('warehouse_inventory').delete().eq('product_id', id).eq('warehouse_id', warehouseId);
@@ -607,6 +619,17 @@ export async function updateWarehouseProduct(
         updated_at: now,
       }));
     if (sizeRows.length > 0) {
+      const catalog = await getSizeCodes();
+      const allowed = new Set(catalog.map((r) => String(r.size_code).toUpperCase().trim()));
+      const invalid = sizeRows
+        .map((r) => r.size_code)
+        .filter((code) => code !== 'NA' && !allowed.has(code));
+      if (invalid.length > 0) {
+        const unique = [...new Set(invalid)];
+        throw new Error(
+          `Invalid size code(s): ${unique.join(', ')}. Use a size from the catalog (e.g. US9, EU42, M, 6Y).`
+        );
+      }
       const { error: upsertSizeError } = await db
         .from('warehouse_inventory_by_size')
         .upsert(sizeRows, { onConflict: 'warehouse_id,product_id,size_code', ignoreDuplicates: false });
