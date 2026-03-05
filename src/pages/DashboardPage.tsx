@@ -268,11 +268,16 @@ export default function DashboardPage() {
                 {warehouseName} — products at or below reorder level
               </p>
             </div>
-            {stats && stats.outOfStockCount > 0 && (
-              <span className="px-3 py-1 rounded-full bg-red-50 text-red-500 text-[12px] font-bold border border-red-100">
-                {stats.outOfStockCount} out of stock
-              </span>
-            )}
+            {(() => {
+              const items = dashboard?.lowStockItems ?? [];
+              const outCount = items.filter((i) => i.quantity === 0).length;
+              if (outCount === 0) return null;
+              return (
+                <span className="px-3 py-1 rounded-full bg-red-50 text-red-500 text-[12px] font-bold border border-red-100">
+                  {outCount} out of stock
+                </span>
+              );
+            })()}
           </div>
           {loading ? (
             <div className="p-6 space-y-3">

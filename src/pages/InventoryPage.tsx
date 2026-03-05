@@ -626,6 +626,24 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
   const alertCount = stats.outCount + stats.lowCount;
 
+  // One-time auto-retry when dashboard says products exist but list didn't load (improves fetch stability).
+  const didRetryEmptyListRef = useRef(false);
+  useEffect(() => {
+    didRetryEmptyListRef.current = false;
+  }, [warehouseId]);
+  useEffect(() => {
+    if (products.length > 0) didRetryEmptyListRef.current = false;
+  }, [products.length]);
+  useEffect(() => {
+    if (!dashboard || skuCount <= 0 || products.length > 0 || loading || error) return;
+    if (didRetryEmptyListRef.current) return;
+    didRetryEmptyListRef.current = true;
+    const t = setTimeout(() => {
+      refreshProducts({ bypassCache: true }).catch(() => {});
+    }, 800);
+    return () => clearTimeout(t);
+  }, [dashboard, skuCount, products.length, loading, error, refreshProducts]);
+
   // Auto-load more when user is on a page that requires items not yet loaded (e.g. page 4 needs 61–80, we have 50).
   useEffect(() => {
     if (!pageNeedsMore || isLoadingMore) return;
@@ -815,8 +833,29 @@ export default function InventoryPage(_props: InventoryPageProps) {
           </div>
         )}
 
+        {/* List failed to load but dashboard says products exist — show retry, not "No products yet" */}
+        {!loading && !error && products.length === 0 && dashboard != null && skuCount > 0 && (
+          <div className="flex flex-col items-center gap-5 py-24 text-center">
+            <div className="w-20 h-20 rounded-3xl bg-amber-50 flex items-center justify-center text-amber-400">
+              <BoxIcon/>
+            </div>
+            <div>
+              <p className="text-[18px] font-black text-slate-800">Couldn&apos;t load product list</p>
+              <p className="text-[14px] text-slate-500 mt-1 max-w-sm mx-auto">
+                This warehouse has {skuCount} product{skuCount !== 1 ? 's' : ''}. The list didn&apos;t load. Tap Retry to try again.
+              </p>
+            </div>
+            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true }); }}
+                    className="h-12 px-7 rounded-2xl bg-[var(--edk-red)] text-white text-[14px] font-bold
+                               flex items-center gap-2 hover:opacity-95 transition-opacity
+                               shadow-[0_6px_20px_rgba(239,68,68,0.35)]">
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Empty warehouse — clear CTA so user knows what to do next */}
-        {!loading && !error && products.length === 0 && (
+        {!loading && !error && products.length === 0 && !(dashboard != null && skuCount > 0) && (
           <div className="flex flex-col items-center gap-5 py-24 text-center">
             <div className="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center text-slate-300">
               <BoxIcon/>

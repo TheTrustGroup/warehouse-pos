@@ -711,7 +711,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   }, [currentWarehouseId]);
 
   // Real-time: poll when tab visible so all devices see server truth. 30s reduces jitter from aggressive refresh while keeping cross-device updates reasonable.
-  const INVENTORY_POLL_MS = 30_000;
+  const INVENTORY_POLL_MS = 15_000;
   useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }), intervalMs: INVENTORY_POLL_MS });
 
   // When user returns to this tab, refetch from server so changes from other devices (e.g. deletes) show immediately.
@@ -978,10 +978,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         });
       }
       logInventoryCreate({ productId: resolvedId, sku: productData.sku ?? '', listLength: apiOnlyProducts.length + 1 });
+      const today = new Date().toISOString().split('T')[0];
+      queryClient.invalidateQueries({ queryKey: queryKeys.products(effectiveWarehouseId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(effectiveWarehouseId, today) });
+      queryClient.refetchQueries({ queryKey: queryKeys.dashboard(effectiveWarehouseId, today) });
+      await loadProductsRef.current(undefined, { bypassCache: true, silent: true }).catch(() => {});
       showToast('success', 'Product saved.');
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.refetchQueries({ queryKey: ['dashboard'] });
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update');
         console.timeEnd('Total Save Time');
@@ -1094,15 +1096,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       setLastSyncAt(new Date());
       logInventoryUpdate({ productId: id, sku: product.sku });
+      const today = new Date().toISOString().split('T')[0];
+      queryClient.invalidateQueries({ queryKey: queryKeys.products(effectiveWarehouseId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(effectiveWarehouseId, today) });
+      queryClient.refetchQueries({ queryKey: queryKeys.dashboard(effectiveWarehouseId, today) });
+      await loadProductsRef.current(undefined, { bypassCache: true, silent: true }).catch(() => {});
       showToast('success', 'Product updated.');
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.refetchQueries({ queryKey: ['dashboard'] });
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update (update)');
         console.timeEnd('Total Update Time');
       }
-      // Do not refetch here: state is already correct from PUT response. Poll (30s) and explicit refresh keep other devices in sync.
     } catch (err) {
       const status = (err as { status?: number })?.status;
       const msg =
@@ -1140,9 +1143,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       recentlyDeletedIdsRef.current.add(id);
       setTimeout(() => recentlyDeletedIdsRef.current.delete(id), RECENT_DELETE_WINDOW_MS);
       setProducts((prev) => prev.filter((p) => p.id !== id));
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.refetchQueries({ queryKey: ['dashboard'] });
+      const today = new Date().toISOString().split('T')[0];
+      queryClient.invalidateQueries({ queryKey: queryKeys.products(effectiveWarehouseId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(effectiveWarehouseId, today) });
+      queryClient.refetchQueries({ queryKey: queryKeys.dashboard(effectiveWarehouseId, today) });
       loadProducts(undefined, { bypassCache: true, silent: true }).catch((e) => {
         reportError(e instanceof Error ? e : new Error(String(e)), { context: 'deleteProduct-refresh' });
       });
@@ -1210,9 +1214,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setTimeout(() => recentlyDeletedIdsRef.current.delete(id), RECENT_DELETE_WINDOW_MS);
     });
     setProducts((prev) => prev.filter((p) => !idSet.has(p.id)));
-    queryClient.invalidateQueries({ queryKey: ['products'] });
-    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    queryClient.refetchQueries({ queryKey: ['dashboard'] });
+    const today = new Date().toISOString().split('T')[0];
+    queryClient.invalidateQueries({ queryKey: queryKeys.products(effectiveWarehouseId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(effectiveWarehouseId, today) });
+    queryClient.refetchQueries({ queryKey: queryKeys.dashboard(effectiveWarehouseId, today) });
     loadProducts(undefined, { bypassCache: true, silent: true }).catch((e) => {
       reportError(e instanceof Error ? e : new Error(String(e)), { context: 'deleteProducts-refresh' });
     });
