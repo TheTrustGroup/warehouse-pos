@@ -6,6 +6,7 @@ import { corsHeaders } from '@/lib/cors';
 import { requirePosRole } from '@/lib/auth/session';
 import { getScopeForUser } from '@/lib/data/userScopes';
 import { getSupabase } from '@/lib/supabase';
+import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const update: { status: string } = { status: 'voided' };
     let query = supabase.from('sales').update(update).eq('id', saleId);
     if (warehouseId) query = query.eq('warehouse_id', warehouseId);
-    const { data, error } = await query.select('id').maybeSingle();
+    const { data, error } = await query.select('id, warehouse_id').maybeSingle();
     if (error) {
       console.error('[POST /api/sales/void]', error);
       return withCors(NextResponse.json({ error: error.message }, { status: 500, headers: h }), req);
@@ -52,6 +53,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!data) {
       return withCors(NextResponse.json({ error: 'Sale not found' }, { status: 404, headers: h }), req);
     }
+    const affectedWarehouseId = (data as { warehouse_id?: string }).warehouse_id ?? warehouseId;
+    if (affectedWarehouseId) await notifyInventoryUpdated(affectedWarehouseId);
     return withCors(
       NextResponse.json({ ok: true, voidedAt: new Date().toISOString() }, { status: 200, headers: h }),
       req

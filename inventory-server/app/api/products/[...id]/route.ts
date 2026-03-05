@@ -10,6 +10,7 @@ import { getSupabase } from '@/lib/supabase';
 import { corsHeaders } from '@/lib/cors';
 import { requireAuth, requireAdmin, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { isValidId } from '@/lib/validation';
+import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   const h = corsHeaders(req);
@@ -220,6 +221,7 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
       updated.quantity = totalQty;
     }
 
+    await notifyInventoryUpdated(wid);
     return withCors(NextResponse.json(updated), req);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Internal server error';
@@ -268,6 +270,7 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
     if (error)
       return withCors(NextResponse.json({ error: error.message }, { status: 500 }), req);
 
+    await notifyInventoryUpdated(wid);
     return withCors(NextResponse.json({ success: true, id }), req);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

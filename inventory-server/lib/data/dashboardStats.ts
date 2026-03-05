@@ -1,10 +1,12 @@
 /**
  * Dashboard stats: one server-side aggregation so the client gets a small payload
  * instead of loading all products. Used by GET /api/dashboard.
+ * Cached for 30s (today only) via Upstash Redis when configured; invalidate on inventory change.
  */
 
 import { getWarehouseProducts, type ProductRecord } from '@/lib/data/warehouseProducts';
 import { getSupabase } from '@/lib/supabase';
+import { getCached, setCached } from '@/lib/cache/dashboardStatsCache';
 
 const LOW_STOCK_ALERTS_LIMIT = 10;
 /** Cap aligned with getWarehouseProducts (250) to avoid timeouts; stats are over this sample. */
@@ -123,16 +125,32 @@ export async function getTodaySalesByWarehouse(date: string): Promise<Record<str
   return out;
 }
 
+function isToday(date: string): boolean {
+  return date === new Date().toISOString().split('T')[0];
+}
+
+function isDashboardStatsResult(v: unknown): v is DashboardStatsResult {
+  if (v == null || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.totalStockValue === 'number' &&
+    typeof o.totalProducts === 'number' &&
+    typeof o.totalUnits === 'number' &&
+    typeof o.lowStockCount === 'number' &&
+    typeof o.outOfStockCount === 'number' &&
+    typeof o.todaySales === 'number' &&
+    Array.isArray(o.lowStockItems) &&
+    typeof o.categorySummary === 'object'
+  );
+}
+
 /**
- * Compute dashboard stats for a warehouse.
- * Totals (stock value, product count, units, low/out counts) come from DB RPC over all products.
- * Low-stock list and category summary use a capped product fetch (250) for response size.
+ * Compute dashboard stats from DB (no cache). Used on cache miss or when date !== today.
  */
-export async function getDashboardStats(
+async function computeDashboardStatsUncached(
   warehouseId: string,
-  options: { date?: string } = {}
+  date: string
 ): Promise<DashboardStatsResult> {
-  const date = options.date ?? new Date().toISOString().split('T')[0];
   const [rpcStats, productsResult, todaySales] = await Promise.all([
     getWarehouseStatsFromRpc(warehouseId),
     getWarehouseProducts(warehouseId, { limit: PRODUCTS_LIMIT }),
@@ -153,7 +171,6 @@ export async function getDashboardStats(
     lowStockCount = rpcStats.low_stock_count;
     outOfStockCount = rpcStats.out_of_stock_count;
   } else {
-    // Fallback when RPC not available: compute from product sample (first PRODUCTS_LIMIT)
     let value = 0;
     let low = 0;
     let out = 0;
@@ -209,4 +226,28 @@ export async function getDashboardStats(
     lowStockItems,
     categorySummary,
   };
+}
+
+/**
+ * Compute dashboard stats for a warehouse. Cached 30s for today only when Redis is configured.
+ */
+export async function getDashboardStats(
+  warehouseId: string,
+  options: { date?: string } = {}
+): Promise<DashboardStatsResult> {
+  const date = options.date ?? new Date().toISOString().split('T')[0];
+  const useCache = isToday(date);
+
+  if (useCache) {
+    const cached = await getCached(warehouseId);
+    if (isDashboardStatsResult(cached)) {
+      return cached;
+    }
+  }
+
+  const result = await computeDashboardStatsUncached(warehouseId, date);
+  if (useCache) {
+    await setCached(warehouseId, result);
+  }
+  return result;
 }

@@ -3,6 +3,7 @@ import { processSaleDeductions } from '@/lib/data/warehouseInventory';
 import { requirePosRole } from '@/lib/auth/session';
 import { corsHeaders } from '@/lib/cors';
 import { warehouseItemsBodySchema } from '@/lib/schemas/requestBodies';
+import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { warehouseId, items } = parsed.data;
 
     await processSaleDeductions(warehouseId, items);
+    await notifyInventoryUpdated(warehouseId);
     return withCors(NextResponse.json({ ok: true }), request);
   } catch (e: unknown) {
     const err = e as Error & { status?: number };

@@ -4,6 +4,7 @@ import { requirePosRole, getEffectiveWarehouseId, requireAuth } from '@/lib/auth
 import { resolveUserScope, isStoreAllowed, isWarehouseAllowed, isPosAllowed, logScopeDeny } from '@/lib/auth/scope';
 import { getRejectionByKey, recordRejection } from '@/lib/data/syncRejections';
 import { corsHeaders } from '@/lib/cors';
+import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -148,6 +149,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       operatorId: undefined as string | null | undefined,
     };
     const result = await processSale(payload, sessionContext, idempotencyKey);
+    await notifyInventoryUpdated(warehouseId);
     return withCors(NextResponse.json({ id: result.id, ...body }), request);
   } catch (e: unknown) {
     const err = e as Error & { status?: number };

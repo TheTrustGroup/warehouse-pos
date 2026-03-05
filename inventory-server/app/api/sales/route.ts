@@ -8,6 +8,7 @@ import { logApiResponse } from '../../../lib/requestLog';
 import { requirePosRole } from '@/lib/auth/session';
 import { getScopeForUser } from '@/lib/data/userScopes';
 import { getSupabase } from '@/lib/supabase';
+import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -217,6 +218,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         req
       );
     }
+    await notifyInventoryUpdated(warehouseId);
     const result = (data ?? {}) as Record<string, unknown>;
     return withCors(
       NextResponse.json(
