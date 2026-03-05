@@ -8,6 +8,7 @@ import { requireAuth, sessionUserToJson } from '@/lib/auth/session';
 import { getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 15;
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   Object.entries(corsHeaders(req)).forEach(([k, v]) => res.headers.set(k, v));

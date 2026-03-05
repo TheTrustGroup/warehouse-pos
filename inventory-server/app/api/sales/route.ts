@@ -12,6 +12,8 @@ import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 import { captureApiError } from '@/lib/sentryApi';
 
 export const dynamic = 'force-dynamic';
+/** Allow time for record_sale RPC + cache invalidation (cold start, Supabase). Avoid 504 on slow DB. */
+export const maxDuration = 25;
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   Object.entries(corsHeaders(req)).forEach(([k, v]) => res.headers.set(k, v));

@@ -12,6 +12,8 @@ export const dynamic = 'force-dynamic';
 /** Allow time for getWarehouseProducts + getTodaySalesTotal (cold start + Supabase). */
 export const maxDuration = 30;
 
+const DASHBOARD_STATS_TIMEOUT_MS = 22_000;
+
 export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
@@ -55,11 +57,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      const stats = await getDashboardStats(warehouseId.trim(), { date: date || undefined });
+      const statsPromise = getDashboardStats(warehouseId.trim(), { date: date || undefined });
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('DASHBOARD_TIMEOUT')), DASHBOARD_STATS_TIMEOUT_MS);
+      });
+      const stats = await Promise.race([statsPromise, timeoutPromise]);
       return withCors(NextResponse.json(stats), request);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load dashboard';
       console.error('[api/dashboard GET]', message);
+      if (message === 'DASHBOARD_TIMEOUT') {
+        const res = withCors(
+          NextResponse.json(
+            { error: 'Dashboard is taking too long. Please try again in a moment.' },
+            { status: 503, headers: { ...h, 'Retry-After': '10' } }
+          ),
+          request
+        );
+        return res;
+      }
       return fail500(message);
     }
   } catch (outer: unknown) {

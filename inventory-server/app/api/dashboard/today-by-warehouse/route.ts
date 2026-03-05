@@ -10,6 +10,7 @@ import { requireAuth } from '@/lib/auth/session';
 import { getTodaySalesByWarehouse } from '@/lib/data/dashboardStats';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 20;
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   Object.entries(corsHeaders(req)).forEach(([k, v]) => res.headers.set(k, v));
