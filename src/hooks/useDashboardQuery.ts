@@ -2,9 +2,11 @@
  * React Query hooks for dashboard data.
  * Dashboard query: staleTime 0 so Stock Alerts refetch when Dashboard is shown/focused.
  * Server always returns fresh lowStockItems (merged on cache hit); client refetch ensures UI updates.
+ * Uses apiGet so dashboard GET gets retries, timeout, and circuit breaker (fewer "Failed to load data" from transient 503).
  */
 import { useQueries } from '@tanstack/react-query';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
+import { apiGet } from '../lib/apiClient';
 import { queryKeys } from '../lib/queryKeys';
 
 const FETCH_TIMEOUT_MS = 35_000;
@@ -36,34 +38,16 @@ export interface DashboardData {
   categorySummary: DashboardCategorySummary;
 }
 
-async function fetchDashboard(warehouseId: string, date: string): Promise<DashboardData> {
+async function fetchDashboard(
+  warehouseId: string,
+  date: string,
+  signal?: AbortSignal | null
+): Promise<DashboardData> {
   const path = `/api/dashboard?warehouse_id=${encodeURIComponent(warehouseId)}&date=${date}`;
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      headers: getApiHeaders() as HeadersInit,
-      signal: ctrl.signal,
-    });
-    clearTimeout(t);
-    if (!res.ok) {
-      const raw = await res.text();
-      let msg = `HTTP ${res.status}`;
-      try {
-        const b = raw ? (JSON.parse(raw) as { error?: string; message?: string }) : {};
-        msg = b.error ?? b.message ?? msg;
-      } catch {
-        if (raw && raw.length < 200) msg = raw;
-      }
-      throw new Error(msg);
-    }
-    const text = await res.text();
-    return (text ? JSON.parse(text) : {}) as DashboardData;
-  } catch (e: unknown) {
-    clearTimeout(t);
-    if (e instanceof Error && e.name === 'AbortError') throw new Error('Request timed out');
-    throw e;
-  }
+  return apiGet<DashboardData>(API_BASE_URL, path, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    signal,
+  });
 }
 
 async function fetchTodayByWarehouse(date: string): Promise<Record<string, number>> {
@@ -92,7 +76,7 @@ export function useDashboardQuery(warehouseId: string) {
     queries: [
       {
         queryKey: queryKeys.dashboard(warehouseId, today),
-        queryFn: () => fetchDashboard(warehouseId, today),
+        queryFn: ({ signal }) => fetchDashboard(warehouseId, today, signal),
         staleTime: STALE_MS_DASHBOARD,
         gcTime: GC_MS,
         refetchOnWindowFocus: true,

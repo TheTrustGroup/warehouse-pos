@@ -427,8 +427,9 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
       const base = apiBaseUrl.replace(/\/$/, '');
       const res = await fetch(`${base}/api/admin/clear-sales-history`, {
         method: 'POST',
-        headers: getApiHeaders() as Record<string, string>,
+        headers: { ...getApiHeaders() as Record<string, string>, 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({ confirm: 'CLEAR_ALL_SALES' }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {

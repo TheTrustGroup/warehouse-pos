@@ -1,10 +1,10 @@
--- One-time clear of all sales and delivery history so real sales can begin.
--- Run ONE statement per execution. If it still times out: use LIMIT 10, or run
---   SET statement_timeout = '30s';
--- in the same tab first, then run the DELETE.
+-- Placeholder migration: one-time clear of sales/sale_lines is NOT run automatically.
 --
--- A) Run the next line repeatedly until it returns DELETE 0:
-DELETE FROM sale_lines WHERE ctid = ANY(ARRAY(SELECT ctid FROM sale_lines LIMIT 25));
--- B) Then run this repeatedly until DELETE 0:
--- DELETE FROM sales WHERE ctid = ANY(ARRAY(SELECT ctid FROM sales LIMIT 25));
--- C) Then once: SELECT setval('receipt_seq', 1);
+-- To clear all sales and receipt state use ONE of:
+--   A) Admin API (preferred): POST /api/admin/clear-sales-history with body { "confirm": "CLEAR_ALL_SALES" }.
+--      This calls the clear_sales_history() RPC (see 20260305230000).
+--   B) In DB (emergency): run the statements in supabase/scripts/clear_sales_manual.sql
+--        in order, with statement_timeout set if needed.
+--
+-- This file intentionally contains no DELETE/TRUNCATE so that applying migrations
+-- never destroys data. Data integrity: destructive actions are explicit and audited.
