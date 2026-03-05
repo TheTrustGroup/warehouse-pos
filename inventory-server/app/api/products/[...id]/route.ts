@@ -102,6 +102,9 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     return withCors(NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 }), req);
   }
 
+  // Normalize array/object fields so RPC never receives scalars (avoids "cannot get array length of a scalar").
+  body = normalizeProductBody(body);
+
   const bodyWarehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
   const wid = await getEffectiveWarehouseId(auth, bodyWarehouseId || undefined);
   if (!wid)
@@ -195,7 +198,10 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     if (rpcErr) {
       if (rpcErr.code === '42883' || rpcErr.message?.includes('does not exist')) {
         await manualUpdate(db, id, wid, productRow, totalQty, sizesToWrite, now);
-      } else       if (rpcErr.message?.includes('someone else') || rpcErr.code === 'P0001') {
+      } else if (/scalar|array length|array_length/i.test(rpcErr.message ?? '')) {
+        // RPC expected array but received scalar (e.g. jsonb); fallback to direct update.
+        await manualUpdate(db, id, wid, productRow, totalQty, sizesToWrite, now);
+      } else if (rpcErr.message?.includes('someone else') || rpcErr.code === 'P0001') {
         return withCors(
           NextResponse.json(
             { error: 'This product was modified by someone else. Please refresh and try again.' },
@@ -420,6 +426,20 @@ function normSK(b: Record<string, unknown>, fallback: string): string {
   if (raw === 'sized')    return 'sized';
   if (raw === 'one_size') return 'one_size';
   return 'na';
+}
+
+/** Ensure tags, images, quantityBySize (and optional location/supplier) are arrays/objects so RPC never gets scalars. */
+function normalizeProductBody(b: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...b };
+  out.tags = Array.isArray(b.tags) ? b.tags : [];
+  out.images = Array.isArray(b.images) ? b.images : [];
+  const qbs = b.quantityBySize ?? b.quantity_by_size;
+  out.quantityBySize = Array.isArray(qbs) ? qbs : [];
+  if (out.location !== undefined && (typeof out.location !== 'object' || out.location === null))
+    out.location = null;
+  if (out.supplier !== undefined && (typeof out.supplier !== 'object' || out.supplier === null))
+    out.supplier = null;
+  return out;
 }
 
 function parseRawSizes(b: Record<string, unknown>): Array<{ sizeCode: string; quantity: number }> {

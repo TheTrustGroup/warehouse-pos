@@ -232,8 +232,16 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Normalize array fields so backend never receives scalars (avoids type errors in DB/RPC).
+  const normalizedBody: PutProductBody & { warehouseId?: string; warehouse_id?: string } = {
+    ...body,
+    tags: Array.isArray(body.tags) ? body.tags : [],
+    images: Array.isArray(body.images) ? body.images : [],
+    quantityBySize: Array.isArray(body.quantityBySize) ? body.quantityBySize : undefined,
+  };
+
   try {
-    const updated = await updateWarehouseProduct(productId, effectiveWarehouseId, body);
+    const updated = await updateWarehouseProduct(productId, effectiveWarehouseId, normalizedBody);
     if (!updated) {
       return withCors(NextResponse.json({ error: 'Product not found' }, { status: 404, headers: h }), req);
     }
