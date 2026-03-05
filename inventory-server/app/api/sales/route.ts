@@ -302,7 +302,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       p_customer_name: customerName,
       p_sold_by: null,
       p_sold_by_email: auth.email,
-      p_payments_breakdown: paymentsBreakdown ?? null,
     });
     if (error) {
       const msg = error.message ?? 'Failed to record sale';

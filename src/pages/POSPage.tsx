@@ -421,13 +421,20 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     },
     onError: (err: unknown, _vars: SaleMutationVars, context: { previousCart: CartLine[]; previousProducts: POSProduct[] } | undefined) => {
       const status = (err as { status?: number })?.status;
+      const message = (err as Error)?.message ?? '';
       if (context) {
         setProducts(context.previousProducts);
         setCart(context.previousCart);
       }
       setSaleResult(null);
-      if (status === 409) {
+      if (status === 409 || status === 422) {
         showToast('Insufficient stock for one or more items. Adjust the cart and try again.', 'err');
+      } else if (status === 401) {
+        showToast('Session expired. Please log in again.', 'err');
+      } else if (status === 404) {
+        showToast('Sales API not found. Ensure the backend is deployed and VITE_API_BASE_URL points to it.', 'warn');
+      } else if (message.includes('timed out') || /fetch|network|load failed/i.test(message)) {
+        showToast("Can't reach the server. Check your connection and tap Charge again.", 'warn');
       } else {
         console.error('[POS] /api/sales failed — rolled back optimistic sale:', err);
         showToast(
