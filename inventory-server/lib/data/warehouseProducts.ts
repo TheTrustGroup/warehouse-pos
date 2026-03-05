@@ -555,11 +555,13 @@ export async function updateWarehouseProduct(
   const sizeKind = String(body.sizeKind ?? existing.sizeKind ?? 'na').toLowerCase();
   const bodySizes = Array.isArray(body.quantityBySize) ? (body.quantityBySize as Array<{ sizeCode: string; quantity: number }>) : null;
   const existingSizes = Array.isArray(existing.quantityBySize) ? existing.quantityBySize : [];
-  // Preserve existing sizes when product is sized but request omits or sends empty quantityBySize (prevents "No sizes recorded" after partial updates).
+  // Use client's quantityBySize when it's an array (including [] to clear). Only preserve existing when client did not send the field (bodySizes === null).
   const quantityBySize =
-    sizeKind === 'sized' && (bodySizes === null || bodySizes.length === 0) && existingSizes.length > 0
-      ? existingSizes.map((s) => ({ sizeCode: s.sizeCode, quantity: s.quantity }))
-      : bodySizes ?? [];
+    bodySizes !== null
+      ? bodySizes
+      : sizeKind === 'sized' && existingSizes.length > 0
+        ? existingSizes.map((s) => ({ sizeCode: s.sizeCode, quantity: s.quantity }))
+        : [];
   const isSized = sizeKind === 'sized' && quantityBySize.length > 0;
   const totalQty = isSized
     ? quantityBySize.reduce((s, r) => s + (Number(r.quantity) || 0), 0)

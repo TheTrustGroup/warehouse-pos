@@ -1025,8 +1025,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
       const isSized = updates.sizeKind === 'sized' || updated.sizeKind === 'sized';
       const payload = { ...productToPayload(updated), warehouseId: (updates.warehouseId ?? effectiveWarehouseId) || DEFAULT_WAREHOUSE_ID } as Record<string, unknown>;
+      // Always send quantityBySize when product is sized so the server applies the new sizes (add/change/clear).
       if (isSized) {
-        payload.quantityBySize = Array.isArray(updates.quantityBySize) ? updates.quantityBySize : [];
+        payload.quantityBySize = Array.isArray(updates.quantityBySize)
+          ? updates.quantityBySize
+          : Array.isArray(updated.quantityBySize)
+            ? updated.quantityBySize
+            : [];
       }
       const putProduct = async (): Promise<Record<string, unknown> | null> => {
         try {
