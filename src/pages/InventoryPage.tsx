@@ -603,12 +603,18 @@ export default function InventoryPage(_props: InventoryPageProps) {
     [products, search, category, sort, sizeFilter, colorFilter]
   );
   const totalFiltered = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  /** Total to show in "Showing X–Y of N": when no filters applied, use warehouse total from dashboard (e.g. 205) so it matches the SKU card; when filtered, use filtered count (e.g. 12). */
+  const hasActiveFilters = Boolean(search.trim() || category !== 'all' || sizeFilter || colorFilter);
+  const totalForDisplay = hasActiveFilters ? totalFiltered : (dashboard != null && skuCount >= 0 ? skuCount : totalFiltered);
+  /** Page count over full list (205 → 11 pages at 20/page), so user can go to page 4 and we load more until we have items 61–80. */
+  const totalPages = Math.max(1, Math.ceil(totalForDisplay / pageSize));
   const pageStart = (currentPage - 1) * pageSize;
   const displayed = useMemo(
     () => filtered.slice(pageStart, pageStart + pageSize),
     [filtered, pageStart, pageSize]
   );
+  /** Current page needs items we haven't loaded yet (e.g. page 4 needs 61–80, we have 50). */
+  const pageNeedsMore = totalFiltered < pageStart + pageSize && hasMore && !hasActiveFilters;
   const SORT_OPTIONS: { key: SortKey; label: string }[] = [
     { key: 'name_asc',   label: 'Name A–Z'       },
     { key: 'name_desc',  label: 'Name Z–A'       },
@@ -620,9 +626,16 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
   const alertCount = stats.outCount + stats.lowCount;
 
-  /** Total to show in "Showing X–Y of N": when no filters applied, use warehouse total from dashboard (e.g. 205) so it matches the SKU card; when filtered, use filtered count (e.g. 12). */
-  const hasActiveFilters = Boolean(search.trim() || category !== 'all' || sizeFilter || colorFilter);
-  const totalForDisplay = hasActiveFilters ? totalFiltered : (dashboard != null && skuCount >= 0 ? skuCount : totalFiltered);
+  // Auto-load more when user is on a page that requires items not yet loaded (e.g. page 4 needs 61–80, we have 50).
+  useEffect(() => {
+    if (!pageNeedsMore || isLoadingMore) return;
+    loadMore();
+  }, [pageNeedsMore, isLoadingMore, loadMore]);
+
+  // Clamp current page when totalPages shrinks (e.g. after applying a filter).
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(Math.max(1, totalPages));
+  }, [currentPage, totalPages]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -821,8 +834,23 @@ export default function InventoryPage(_props: InventoryPageProps) {
           </div>
         )}
 
-        {/* Empty filter */}
-        {!loading && !error && products.length > 0 && displayed.length === 0 && (
+        {/* Loading more for current page (e.g. page 4 needs items 61–80, we had 50; auto-loading) */}
+        {!loading && !error && products.length > 0 && pageNeedsMore && displayed.length === 0 && (
+          <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 w-full">
+              {Array.from({ length: isMobileViewport ? 4 : 6 }).map((_, i) => <ProductCardSkeleton key={`page-load-${i}`} />)}
+            </div>
+            <p className="text-[13px] text-slate-500">{isLoadingMore ? 'Loading page…' : 'Load more to view this page'}</p>
+            {!isLoadingMore && hasMore && (
+              <button type="button" onClick={() => loadMore()} className="h-10 px-6 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 hover:bg-slate-50">
+                Load more
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Empty filter (enough data loaded, but slice empty due to filters) */}
+        {!loading && !error && products.length > 0 && displayed.length === 0 && !pageNeedsMore && (
           <div className="flex flex-col items-center gap-3 py-20 text-center">
             <p className="text-[15px] font-bold text-slate-700">
               No results for current filters
