@@ -9,6 +9,7 @@ import { requirePosRole } from '@/lib/auth/session';
 import { getScopeForUser } from '@/lib/data/userScopes';
 import { getSupabase } from '@/lib/supabase';
 import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
+import { captureApiError } from '@/lib/sentryApi';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +59,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const { data: salesRows, error: salesError } = await query;
     if (salesError) {
       logApiResponse(req, 500, Date.now() - start, { message: salesError.message });
+      captureApiError(500, 'GET /api/sales: failed to load sales', { path: req.url, message: salesError.message });
       return withCors(NextResponse.json({ error: 'Failed to load sales. Please try again.' }, { status: 500, headers: h }), req);
     }
     const sales = (salesRows ?? []) as Array<{

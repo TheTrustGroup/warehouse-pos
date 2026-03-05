@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@ericblade/quagga2": "^1.8.1",
+    "@sentry/react": "^8.55.0",
     "@tanstack/react-query": "^5.90.21",
     "date-fns": "^2.30.0",
     "dexie": "^4.3.0",
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "@sentry/vite-plugin": "^2.22.0",
     "@testing-library/react": "^14.0.0",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",

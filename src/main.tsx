@@ -1,10 +1,18 @@
+import { initSentry } from '../sentry.client.config';
+import { getErrorReportingConsent } from './lib/initErrorHandlers';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import * as Sentry from '@sentry/react';
 import App from './App.tsx';
 import './index.css';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { API_BASE_URL } from './lib/api';
 import { initObservability, startHealthPings } from './lib/observability';
+import { initErrorHandlers } from './lib/initErrorHandlers';
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+import { isOfflineEnabled } from './lib/offlineFeatureFlag';
+
+initSentry({ shouldSend: getErrorReportingConsent });
 
 /** Preconnect to API origin so first /me and product requests avoid DNS+TLS delay. */
 if (typeof document !== 'undefined' && API_BASE_URL) {
@@ -21,9 +29,6 @@ if (typeof document !== 'undefined' && API_BASE_URL) {
     // ignore invalid URL
   }
 }
-import { initErrorHandlers, getErrorReportingConsent } from './lib/initErrorHandlers';
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
-import { isOfflineEnabled } from './lib/offlineFeatureFlag';
 
 initObservability({
   healthUrl: import.meta.env.VITE_HEALTH_URL || undefined,
@@ -32,8 +37,7 @@ initObservability({
       ? (err, ctx) => {
           if (!getErrorReportingConsent()) return;
           if (import.meta.env.DEV) console.error('[Report]', err, ctx);
-          // Install @sentry/react, init Sentry in main.tsx with VITE_SENTRY_DSN, then:
-          // if (typeof Sentry !== 'undefined') Sentry.captureException(err, { extra: ctx });
+          Sentry.captureException(err, { extra: ctx });
         }
       : undefined,
 });
