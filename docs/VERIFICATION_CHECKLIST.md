@@ -36,3 +36,5 @@
 4. `20260305150000_get_sales_report_rpc.sql`
 
 Plus delivery columns: `DELIVERY_MIGRATION.sql`, `ADD_DELIVERY_CANCELLED.sql` (if not already).
+
+**Full next steps (principal engineer / data integrity):** See `docs/NEXT_STEPS_PRINCIPAL_ENGINEER.md`.
