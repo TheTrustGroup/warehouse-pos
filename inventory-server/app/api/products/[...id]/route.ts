@@ -400,13 +400,16 @@ function buildRow(
   b: Record<string, unknown>, id: string, wid: string,
   sk: string, now: string, version: number
 ) {
+  // DB has NOT NULL on barcode/description; never send null (sync sends "" which was coerced to null here).
+  const barcode = (b.barcode != null ? String(b.barcode).trim() : '') || '';
+  const description = (b.description != null ? String(b.description).trim() : '') || '';
   return {
     id,
     warehouse_id:  wid,
     sku:           String(b.sku ?? '').trim(),
-    barcode:       b.barcode ? String(b.barcode).trim() : null,
+    barcode,
     name:          String(b.name ?? '').trim(),
-    description:   b.description ? String(b.description).trim() : null,
+    description,
     category:      String(b.category ?? '').trim(),
     size_kind:     sk,
     selling_price: Number(b.sellingPrice ?? b.selling_price ?? 0),
