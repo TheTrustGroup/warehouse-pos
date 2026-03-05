@@ -20,7 +20,8 @@ function safeQuery(fn) {
       try {
         const result = await fn(d);
         return result ?? [];
-      } catch {
+      } catch (err) {
+        if (inventoryDb.isTransactionError(err)) inventoryDb.clearDbInstance();
         return [];
       }
     })
@@ -94,7 +95,13 @@ export function useInventory() {
   const unsyncedCount = useLiveQuery(
     () =>
       getDB()
-        .then((d) => (d ? d.products.where('syncStatus').notEqual('synced').count().catch(() => 0) : 0))
+        .then((d) => {
+          if (!d) return 0;
+          return d.products.where('syncStatus').notEqual('synced').count().catch((err) => {
+            if (inventoryDb.isTransactionError(err)) inventoryDb.clearDbInstance();
+            return 0;
+          });
+        })
         .catch(() => 0),
     []
   );
