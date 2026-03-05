@@ -6,6 +6,7 @@
 // with staleTime 1 min so navigating back is instant. Skeleton screens while loading.
 // ============================================================
 
+import { useEffect } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle } from 'lucide-react';
 import { useWarehouse } from '../contexts/WarehouseContext';
@@ -135,6 +136,11 @@ export default function DashboardPage() {
 
   const { dashboard, todayByWarehouse, isLoading: loading, error: queryError, refetch } = useDashboardQuery(warehouseId);
   const error = queryError?.message ?? null;
+
+  // Refetch when Dashboard is opened so Stock Alerts reflect latest inventory (e.g. after editing product sizes).
+  useEffect(() => {
+    if (warehouseId) refetch();
+  }, [warehouseId, refetch]);
 
   const stats = dashboard
     ? {
