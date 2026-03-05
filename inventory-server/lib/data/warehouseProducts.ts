@@ -345,18 +345,27 @@ export async function getProductById(
     .eq('warehouse_id', warehouseId)
     .eq('product_id', productId)
     .maybeSingle();
-  const { data: sizeRows } = await db
+  let sizeRows: Array<{ size_code: string; quantity: number; size_codes?: { size_label?: string } | null }> | null = null;
+  const { data: sizeData, error: sizeErr } = await db
     .from('warehouse_inventory_by_size')
     .select('size_code, quantity, size_codes!left(size_label)')
     .eq('warehouse_id', warehouseId)
     .eq('product_id', productId);
-  const sizes = ((sizeRows ?? []) as Array<{ size_code: string; quantity: number; size_codes?: { size_label?: string } | null }>)
-    .map((s) => ({
-      sizeCode: String(s.size_code),
-      sizeLabel: s.size_codes?.size_label ?? s.size_code,
-      quantity: Number(s.quantity ?? 0),
-    }))
-    .sort((a, b) => a.sizeCode.localeCompare(b.sizeCode));
+  if (sizeErr && (String(sizeErr.message ?? '').includes('relation') || String(sizeErr.message ?? '').includes('size_codes'))) {
+    const { data: fallback } = await db
+      .from('warehouse_inventory_by_size')
+      .select('size_code, quantity')
+      .eq('warehouse_id', warehouseId)
+      .eq('product_id', productId);
+    sizeRows = (fallback ?? []) as Array<{ size_code: string; quantity: number }>;
+  } else {
+    sizeRows = (sizeData ?? []) as Array<{ size_code: string; quantity: number; size_codes?: { size_label?: string } | null }>;
+  }
+  const sizes = (sizeRows ?? []).map((s) => ({
+    sizeCode: String(s.size_code),
+    sizeLabel: (s as { size_codes?: { size_label?: string } | null }).size_codes?.size_label ?? s.size_code,
+    quantity: Number(s.quantity ?? 0),
+  })).sort((a, b) => a.sizeCode.localeCompare(b.sizeCode));
   const hasSizeRows = sizes.length > 0;
   quantity = hasSizeRows ? sizes.reduce((s, x) => s + x.quantity, 0) : Number((invRow as { quantity?: number } | null)?.quantity ?? 0);
 

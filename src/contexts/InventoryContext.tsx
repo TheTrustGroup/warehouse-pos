@@ -1098,7 +1098,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.timeEnd('State Update (update)');
         console.timeEnd('Total Update Time');
       }
-      // Do not refetch after update: API often omits images in GET, which would overwrite the list and make the new image vanish
+      // Refetch from server so this device and others see the same data (sizes, quantity). Server is source of truth.
+      refreshProducts({ bypassCache: true }).catch(() => {});
     } catch (err) {
       const status = (err as { status?: number })?.status;
       const msg =
