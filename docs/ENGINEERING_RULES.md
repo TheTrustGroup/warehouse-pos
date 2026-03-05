@@ -76,6 +76,7 @@ A script runs `git status --porcelain` and **exits 1** if there are uncommitted 
 - [ ] Code change in `warehouse-pos/`.
 - [ ] Any new migration/seed committed.
 - [ ] `npm run test` and `npm run build` pass.
+- [ ] If you changed `inventory-server/`, run `npm run build:server` (or `build:all`) and deploy the backend so Stock Alerts and API stay in sync — see **docs/DEPLOY_AND_STOCK_VERIFY.md**.
 - [ ] `git add` / `git commit` with a clear message.
 - [ ] `git push origin main`.
 - [ ] (Optional) Run `npm run guard:uncommitted` to confirm clean state.

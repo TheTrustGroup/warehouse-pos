@@ -265,7 +265,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ── Low stock alerts ── */}
+        {/* ── Low stock alerts (from API: GET /api/dashboard → lowStockItems, never hardcoded) ── */}
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
             <div>
