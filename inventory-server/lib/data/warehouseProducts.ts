@@ -218,14 +218,16 @@ export async function getWarehouseProducts(
     }
 
     let sizeRows: SizeRow[] = [];
-    if (sizesResult.error && (sizesResult.error.message?.includes('relation') || sizesResult.error.message?.includes('size_codes'))) {
+    if (sizesResult.error) {
+      // Any error (join missing, timeout, etc.): retry without size_codes join so we still get quantities and don't drop products.
       const withoutJoin = await db
         .from('warehouse_inventory_by_size')
         .select('product_id, size_code, quantity', selectOpts())
         .eq('warehouse_id', effectiveWarehouseId)
         .in('product_id', productIds);
       if (!withoutJoin.error) sizeRows = (withoutJoin.data ?? []) as SizeRow[];
-    } else if (!sizesResult.error) {
+      else console.error('[warehouseProducts] warehouse_inventory_by_size query failed:', (withoutJoin as { error?: { message?: string } }).error?.message ?? sizesResult.error.message);
+    } else {
       const sizeData = (sizesResult.data ?? []) as SizeRow[];
       sizeRows = sizeData.filter((r) => productIdSet.has(r.product_id));
     }
