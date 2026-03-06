@@ -74,6 +74,7 @@ function getCachedProductsForWarehouse(warehouseId: string): Product[] {
 }
 import { saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
 import { reportError } from '../lib/errorReporting';
+import { useInventoryRealtime } from '../hooks/useInventoryRealtime';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { isOfflineEnabled } from '../lib/offlineFeatureFlag';
 import { mirrorProductsFromApi } from '../db/inventoryDB';
@@ -418,8 +419,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         };
         // Initial load: fetch up to API max (250) so inventory and POS show full catalog; Load more fetches next pages if total > 250.
         const PAGE_LIMIT = 250;
-        const PRODUCTS_REQUEST_TIMEOUT_MS = 25_000;
-        const getOpts = { signal, timeoutMs: timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 2 };
+        // Longer timeout for slow/mobile networks so product list loads reliably across devices.
+        const PRODUCTS_REQUEST_TIMEOUT_MS = 55_000;
+        const getOpts = { signal, timeoutMs: timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 3 };
         const result = await queryClient.fetchQuery({
           queryKey: queryKeys.products(wid),
           queryFn: async (): Promise<{ list: Product[]; total?: number }> => {
@@ -647,6 +649,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           showToast('warning', 'Showing cached data. Tap Retry to refresh.');
         }
       }
+      // When cache is empty, set error even for silent failure so UI shows "Couldn't load products" + Retry instead of ambiguous "list didn't load" (e.g. mobile after phase-2 timeout).
+      if (localProducts.length === 0) setError(message);
     } finally {
       if (silent) setBackgroundRefreshing(false);
       setIsLoading(false);
@@ -727,14 +731,22 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   }, [currentWarehouseId]);
 
-  // Real-time: poll when tab visible so all devices see server truth. 30s reduces jitter from aggressive refresh while keeping cross-device updates reasonable.
-  const INVENTORY_POLL_MS = 15_000;
-  useRealtimeSync({ onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }), intervalMs: INVENTORY_POLL_MS });
+  // Real-time: Supabase Realtime so changes appear on all devices in 1–2s.
+  useInventoryRealtime(effectiveWarehouseId);
 
-  // When user returns to this tab, refetch from server so changes from other devices (e.g. deletes) show immediately.
+  // Fallback: 5-minute poll when Realtime drops (belt-and-suspenders).
+  useRealtimeSync({
+    onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }),
+    intervalMs: 300_000,
+  });
+
+  // When user returns to this tab, full refetch (products + dashboard + sales) so we don't show stale data after background.
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: ['products'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        queryClient.invalidateQueries({ queryKey: ['sales'] });
         loadProductsRef.current(undefined, { silent: true, bypassCache: true }).catch((e) => {
           reportError(e instanceof Error ? e : new Error(String(e)), { context: 'visibilitychange-refresh' });
         });
@@ -742,7 +754,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, []);
+  }, [queryClient]);
 
   // When user clicks "Try again" on the server-unavailable banner, refetch products.
   useEffect(() => {

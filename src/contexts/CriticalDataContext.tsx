@@ -47,8 +47,8 @@ interface CriticalDataInternalType extends CriticalDataContextType {
 const CriticalDataInternalContext = createContext<CriticalDataInternalType | undefined>(undefined);
 
 const MAX_RETRIES = 3;
-/** Longer timeout for first load after login (serverless cold start + mobile). */
-const INITIAL_LOAD_TIMEOUT_MS = 60_000;
+/** Longer timeout for first load after login (serverless cold start + slow/mobile networks). */
+const INITIAL_LOAD_TIMEOUT_MS = 90_000;
 
 /** Lightweight health check to wake serverless before the main load. No auth; failures ignored. */
 function apiWarmup(): Promise<void> {

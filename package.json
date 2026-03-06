@@ -23,6 +23,7 @@
     "analyze": "node scripts/analyze-supabase-vercel.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.47.10",
     "@ericblade/quagga2": "^1.8.1",
     "@sentry/react": "^8.55.0",
     "@tanstack/react-query": "^5.90.21",

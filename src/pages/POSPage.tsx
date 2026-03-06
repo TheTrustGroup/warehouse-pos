@@ -453,7 +453,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       return { previousCart, previousProducts };
     },
     onError: (err: unknown, _vars: SaleMutationVars, context: { previousCart: CartLine[]; previousProducts: POSProduct[] } | undefined) => {
-      setCharging(false);
+      if (isMounted.current) setCharging(false);
       const status = (err as { status?: number })?.status;
       const message = (err as Error)?.message ?? '';
       const detail = (err as { detail?: string })?.detail;
@@ -491,7 +491,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       }
     },
     onSuccess: (result, _vars: SaleMutationVars) => {
-      setCharging(false);
+      if (isMounted.current) setCharging(false);
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       productsCacheRef.current = null;
@@ -673,11 +673,49 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       return;
     }
 
-    saleMutation.mutate({
-      payload,
-      cartSnapshot: cart,
-      productsSnapshot: products,
-    });
+    // Pre-sale stock check so we don't sell out-of-stock when mobile data is stale
+    try {
+      const verifyRes = await apiFetch<{ valid: boolean; conflicts?: Array<{ product_id: string; size_code: string | null; requested: number; available: number }> }>(
+        '/api/products/verify-stock',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            warehouse_id: payload.warehouseId,
+            items: payload.lines.map((l) => ({
+              product_id: l.productId,
+              size_code: l.sizeCode ?? undefined,
+              quantity: l.qty,
+            })),
+          }),
+        }
+      );
+      if (!verifyRes.valid && Array.isArray(verifyRes.conflicts) && verifyRes.conflicts.length > 0) {
+        const first = verifyRes.conflicts[0];
+        const product = products.find((p) => p.id === first.product_id);
+        const name = product?.name ?? first.product_id;
+        const sizeLabel = first.size_code ? ` - ${first.size_code}` : '';
+        showToast(
+          `Stock has changed since you added this item. ${name}${sizeLabel}: Only ${first.available} available. Update your cart and try again.`,
+          'err'
+        );
+        setCharging(false);
+        return;
+      }
+    } catch (e) {
+      console.warn('[POS] verify-stock failed, proceeding with sale:', e);
+      // Proceed with sale; record_sale will still enforce stock server-side
+    }
+
+    try {
+      await saleMutation.mutateAsync({
+        payload,
+        cartSnapshot: cart,
+        productsSnapshot: products,
+      });
+    } finally {
+      setCharging(false);
+    }
   }
 
   function handleNewSale() {

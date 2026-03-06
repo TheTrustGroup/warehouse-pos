@@ -5,6 +5,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Search, Bell, LogOut } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/Button';
+import { RealtimeSyncIndicator } from '../RealtimeSyncIndicator';
 
 export function Header() {
   const navigate = useNavigate();
@@ -74,6 +75,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+        <RealtimeSyncIndicator />
         <Button
           type="button"
           variant="secondary"

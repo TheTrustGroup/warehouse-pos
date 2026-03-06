@@ -806,21 +806,22 @@ export default function InventoryPage(_props: InventoryPageProps) {
       {/* Main content */}
       <main>
 
-        {/* Error */}
+        {/* Error — mobile-first: min tap target 44px, readable copy */}
         {(error || getApiCircuitBreaker().isDegraded()) && (
-          <div className="flex flex-col items-center gap-5 py-20 text-center">
-            <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center text-red-300">
-              <BoxIcon/>
+          <div className="flex flex-col items-center gap-5 py-20 text-center px-4">
+            <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center text-red-300 flex-shrink-0">
+              <BoxIcon aria-hidden />
             </div>
             <div>
               <p className="text-[17px] font-black text-slate-800">Couldn&apos;t load products</p>
               <p className="text-[13px] text-slate-500 mt-1 max-w-md mx-auto break-words leading-relaxed">
-                {error || (getApiCircuitBreaker().isDegraded() ? 'Server temporarily unavailable (too many failed requests). Click Retry to try again.' : null)}
+                {error || (getApiCircuitBreaker().isDegraded() ? 'Server temporarily unavailable (too many failed requests). Tap Retry to try again.' : null)}
               </p>
             </div>
-            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true }); }}
-                    className="h-10 px-6 rounded-xl bg-red-500 text-white text-[13px] font-bold
-                               hover:bg-red-600 transition-colors shadow-[0_4px_12px_rgba(239,68,68,0.25)]">
+            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true, timeoutMs: 90_000 }); }}
+                    className="min-h-[44px] h-12 px-6 rounded-xl bg-red-500 text-white text-[14px] font-bold
+                               hover:bg-red-600 active:bg-red-700 transition-colors shadow-[0_4px_12px_rgba(239,68,68,0.25)]
+                               touch-manipulation" aria-label="Retry loading products">
               Retry
             </button>
           </div>
@@ -833,11 +834,11 @@ export default function InventoryPage(_props: InventoryPageProps) {
           </div>
         )}
 
-        {/* List failed to load but dashboard says products exist — show retry, not "No products yet" */}
+        {/* List failed to load but dashboard says products exist — show retry (longer timeout for mobile) */}
         {!loading && !error && products.length === 0 && dashboard != null && skuCount > 0 && (
-          <div className="flex flex-col items-center gap-5 py-24 text-center">
-            <div className="w-20 h-20 rounded-3xl bg-amber-50 flex items-center justify-center text-amber-400">
-              <BoxIcon/>
+          <div className="flex flex-col items-center gap-5 py-24 text-center px-4">
+            <div className="w-20 h-20 rounded-3xl bg-amber-50 flex items-center justify-center text-amber-400 flex-shrink-0">
+              <BoxIcon aria-hidden />
             </div>
             <div>
               <p className="text-[18px] font-black text-slate-800">Couldn&apos;t load product list</p>
@@ -845,10 +846,10 @@ export default function InventoryPage(_props: InventoryPageProps) {
                 This warehouse has {skuCount} product{skuCount !== 1 ? 's' : ''}. The list didn&apos;t load. Tap Retry to try again.
               </p>
             </div>
-            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true }); }}
-                    className="h-12 px-7 rounded-2xl bg-[var(--edk-red)] text-white text-[14px] font-bold
-                               flex items-center gap-2 hover:opacity-95 transition-opacity
-                               shadow-[0_6px_20px_rgba(239,68,68,0.35)]">
+            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true, timeoutMs: 90_000 }); }}
+                    className="min-h-[44px] h-12 px-7 rounded-2xl bg-[var(--edk-red)] text-white text-[14px] font-bold
+                               flex items-center gap-2 hover:opacity-95 active:opacity-90 transition-opacity
+                               shadow-[0_6px_20px_rgba(239,68,68,0.35)] touch-manipulation" aria-label="Retry loading product list">
               Retry
             </button>
           </div>

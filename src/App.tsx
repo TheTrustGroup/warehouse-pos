@@ -12,6 +12,7 @@ import { API_BASE_URL } from './lib/api';
 import { POSProvider } from './contexts/POSContext';
 import { OrderProvider } from './contexts/OrderContext';
 import { CriticalDataProvider, CriticalDataGate } from './contexts/CriticalDataContext';
+import { RealtimeProvider } from './contexts/RealtimeContext';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { NetworkStatusProvider } from './contexts/NetworkStatusContext';
 import { QUOTA_EVENT } from './lib/offlineQuota';
@@ -266,9 +267,10 @@ function ProtectedRoutes() {
 
   return (
     <CriticalDataProvider>
-      <StoreProvider>
-        <WarehouseProvider>
-          <InventoryProvider>
+      <RealtimeProvider>
+        <StoreProvider>
+          <WarehouseProvider>
+            <InventoryProvider>
             <POSProvider>
               <OrderProvider>
                 <CriticalDataGate>
@@ -279,6 +281,7 @@ function ProtectedRoutes() {
           </InventoryProvider>
         </WarehouseProvider>
       </StoreProvider>
+    </RealtimeProvider>
     </CriticalDataProvider>
   );
 }

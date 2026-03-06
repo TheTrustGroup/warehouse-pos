@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export interface CartLine {
   key: string;
@@ -91,6 +91,15 @@ export default function CartSheet({
   const [customerName, setCustomerName] = useState('');
   const [discountPct, setDiscountPct] = useState(0);
   const [charging, setCharging] = useState(false);
+  const [chargingLonger, setChargingLonger] = useState(false);
+  useEffect(() => {
+    if (!charging) {
+      setChargingLonger(false);
+      return;
+    }
+    const t = setTimeout(() => setChargingLonger(true), 10_000);
+    return () => clearTimeout(t);
+  }, [charging]);
   const [deliveryRequested, setDeliveryRequested] = useState(false);
   const [deliveryAsap, setDeliveryAsap] = useState(true);
   const [expectedDate, setExpectedDate] = useState('');
@@ -121,7 +130,11 @@ export default function CartSheet({
         ].filter((p) => p.amount > 0) as Array<{ method: PaymentMethodType; amount: number }>)
       : [];
 
+  const lastChargeTapRef = useRef(0);
   const handleCharge = async () => {
+    const now = Date.now();
+    if (now - lastChargeTapRef.current < 1000) return;
+    lastChargeTapRef.current = now;
     if (!warehouseId || !isWarehouseReady || lines.length === 0 || charging) return;
     if (paymentMethod === 'mixed' && !isMixedValid) return;
     setCharging(true);
@@ -389,6 +402,11 @@ export default function CartSheet({
             >
               {!isWarehouseReady ? 'Loading…' : charging ? '…' : `Charge GH₵${total.toLocaleString('en-GH', { minimumFractionDigits: 2 })}`}
             </button>
+            {chargingLonger && (
+              <p className="text-xs text-slate-500 mt-2 text-center" role="status" aria-live="polite">
+                Taking longer than usual. Please keep the app open.
+              </p>
+            )}
           </div>
         </div>
       </div>

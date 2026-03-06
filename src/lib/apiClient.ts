@@ -133,6 +133,7 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
       headers,
       credentials: init.credentials ?? 'include',
       signal: requestSignal,
+      cache: init.cache ?? 'no-store',
     };
 
     try {

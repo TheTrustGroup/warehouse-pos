@@ -10,6 +10,7 @@ import { ConflictModalContainer } from '../ConflictModalContainer';
 import { ApiStatusProvider, useApiStatus } from '../../contexts/ApiStatusContext';
 import { useCriticalData } from '../../contexts/CriticalDataContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useRealtimeContext } from '../../contexts/RealtimeContext';
 import { PERMISSIONS } from '../../types/permissions';
 import { Button } from '../ui/Button';
 
@@ -64,6 +65,20 @@ function LayoutContent() {
     return sessionStorage.getItem(DISMISS_BANNER_KEY) === '1';
   });
   const { criticalDataError, isSyncingCriticalData, reloadCriticalData } = useCriticalData();
+  const realtimeContext = useRealtimeContext();
+  const [now, setNow] = useState(() => Date.now());
+  const disconnectedSince = realtimeContext?.disconnectedSince ?? null;
+  const realtimeStatus = realtimeContext?.status ?? 'disconnected';
+  const showReconnectingBanner =
+    disconnectedSince != null &&
+    (realtimeStatus === 'error' || realtimeStatus === 'disconnected') &&
+    now - disconnectedSince >= 30_000;
+
+  useEffect(() => {
+    if (!showReconnectingBanner) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [showReconnectingBanner]);
 
   // Debounce: show banner only after degraded for BANNER_DEBOUNCE_MS so brief flickers don't cause jitter
   useEffect(() => {
@@ -142,6 +157,15 @@ function LayoutContent() {
           <Button type="button" variant="ghost" onClick={() => reloadCriticalData()} className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-amber-800 rounded">
             Retry
           </Button>
+        </div>
+      )}
+      {showReconnectingBanner && (
+        <div
+          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-amber-100 text-amber-900 text-center py-2 px-4 text-sm font-medium border-b border-amber-200"
+          role="status"
+          aria-live="polite"
+        >
+          Reconnecting… Your data may be slightly delayed.
         </div>
       )}
       {showDegradedBanner && (

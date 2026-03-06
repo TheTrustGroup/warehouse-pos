@@ -11,4 +11,6 @@ export const queryKeys = {
     ['sales', warehouseId, params ?? {}] as const,
   /** POS product list — same data as products but longer stale for instant POS load. */
   posProducts: (warehouseId: string) => ['pos-products', warehouseId] as const,
+  /** Reports (sales/inventory). Invalidated on Realtime sales changes. */
+  reports: (warehouseId: string) => ['reports', warehouseId] as const,
 };
