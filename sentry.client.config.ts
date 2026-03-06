@@ -53,6 +53,8 @@ export interface SentryClientOptions {
 }
 
 export function initSentry(options: SentryClientOptions = {}): void {
+  const enabled = import.meta.env.VITE_SENTRY_ENABLED as string | undefined;
+  if (enabled === 'false' || enabled === '0') return;
   const dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
   if (!dsn || typeof dsn !== 'string' || dsn.trim() === '') return;
 
