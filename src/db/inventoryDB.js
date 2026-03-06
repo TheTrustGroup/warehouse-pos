@@ -278,7 +278,7 @@ export async function updateProduct(id, data) {
   }
   const now = nowISO();
   const ts = nowTs();
-  const updated = {
+  const merged = {
     ...existing,
     ...data,
     id,
@@ -286,6 +286,12 @@ export async function updateProduct(id, data) {
     lastModified: ts,
     syncStatus: existing.syncStatus === 'synced' ? 'pending' : existing.syncStatus,
   };
+  const sk = merged.sizeKind ?? merged.size_kind ?? 'na';
+  const qbs = Array.isArray(merged.quantityBySize) ? merged.quantityBySize : [];
+  if (sk === 'sized' && qbs.length > 0) {
+    merged.quantity = qbs.reduce((s, r) => s + (Number(r.quantity) ?? 0), 0);
+  }
+  const updated = merged;
   try {
     await d.products.put(updated);
     await d.syncQueue.add({

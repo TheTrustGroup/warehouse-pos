@@ -58,11 +58,20 @@ function toRecord(productData) {
 
 /**
  * Map Dexie ProductRecord to app Product-like shape (dates as Date, sellingPrice from price).
+ * Preserves sizeKind and quantityBySize so list/cards show correct sizes and stock; derives quantity
+ * from quantityBySize when sized so out-of-stock and totals are correct.
+ *
  * @param {Object} record - ProductRecord from Dexie
  * @returns {Object} Product-like object for UI
  */
 function recordToProduct(record) {
   if (!record) return null;
+  const sizeKind = record.sizeKind ?? record.size_kind ?? 'na';
+  const quantityBySize = Array.isArray(record.quantityBySize) ? record.quantityBySize : [];
+  const quantity =
+    sizeKind === 'sized' && quantityBySize.length > 0
+      ? quantityBySize.reduce((s, r) => s + (Number(r.quantity) ?? 0), 0)
+      : Number(record.quantity) ?? 0;
   return {
     ...record,
     sellingPrice: record.price ?? 0,
@@ -76,6 +85,9 @@ function recordToProduct(record) {
     createdBy: record.createdBy ?? '',
     createdAt: record.createdAt ? new Date(record.createdAt) : new Date(),
     updatedAt: record.updatedAt ? new Date(record.updatedAt) : new Date(),
+    sizeKind,
+    quantityBySize,
+    quantity,
   };
 }
 

@@ -303,7 +303,7 @@ export default function ProductCard({
 
   const status = getStockStatus(product);
   const hasImage = Array.isArray(product.images) && product.images.length > 0;
-
+  const isOutOfStock = status === 'out';
   const isLowStock = status === 'low';
 
   return (
@@ -313,7 +313,8 @@ export default function ProductCard({
         shadow-[0_1px_3px_rgba(0,0,0,0.06)]
         transition-all duration-200
         ${editing ? 'ring-2 ring-[var(--edk-red)]' : ''}
-        ${!editing && isLowStock ? 'border-[rgba(217,119,6,0.25)]' : ''}
+        ${!editing && isOutOfStock ? 'border-red-200 opacity-95' : ''}
+        ${!editing && isLowStock && !isOutOfStock ? 'border-[rgba(217,119,6,0.25)]' : ''}
         ${!editing ? 'hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:-translate-y-0.5' : ''}
       `}
     >
@@ -325,13 +326,22 @@ export default function ProductCard({
             alt={product.name}
             width={320}
             height={240}
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03] ${isOutOfStock ? 'opacity-60' : ''}`}
             loading="lazy"
             decoding="async"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[var(--edk-ink-3)]">
             <IconImage />
+          </div>
+        )}
+
+        {/* Out-of-stock overlay: clear visual signal so cards never look in-stock when they are not */}
+        {isOutOfStock && (
+          <div className="absolute inset-0 bg-black/45 flex items-center justify-center">
+            <span className="text-white text-[11px] font-bold uppercase tracking-wider drop-shadow-sm">
+              Out of stock
+            </span>
           </div>
         )}
 
