@@ -1,12 +1,13 @@
 /**
  * GET /api/auth/user — return current user from Bearer or session cookie.
- * Frontend uses this for session check and to enrich warehouse_id so boundWarehouseId is set.
- * warehouse_id is resolved from user_scopes (single-warehouse = that ID; multi-warehouse = first in scope).
+ * warehouse_id is returned only when the user has exactly one warehouse in user_scopes
+ * (so cashier/POS gets a bound warehouse and no selector). Multi-warehouse users (e.g. admin)
+ * get no warehouse_id so the frontend shows the warehouse selector.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { corsHeaders } from '@/lib/cors';
 import { requireAuth, sessionUserToJson } from '@/lib/auth/session';
-import { getScopeForUser, getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
+import { getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 15;
@@ -25,17 +26,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const auth = await requireAuth(req);
   if (auth instanceof NextResponse) return withCors(auth, req);
 
-  // Prefer warehouse_id from session (JWT payload); else resolve from user_scopes
-  let warehouseId: string | undefined = auth.warehouse_id;
-  if (!warehouseId) {
-    const single = await getSingleWarehouseIdForUser(auth.email);
-    if (single) {
-      warehouseId = single;
-    } else {
-      const scope = await getScopeForUser(auth.email);
-      warehouseId = scope.allowedWarehouseIds[0];
-    }
-  }
+  // Only bind warehouse when user has exactly one in scope (cashier/POS). Multi-warehouse (admin) gets no warehouse_id so selector shows.
+  const warehouseId = auth.warehouse_id ?? await getSingleWarehouseIdForUser(auth.email);
 
   const userPayload = {
     ...sessionUserToJson(auth),

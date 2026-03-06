@@ -11,7 +11,7 @@
 
 | User | user_scopes | getScopeForUser returns |
 |------|-------------|--------------------------|
-| **maintown_cashier@** | 1 row → Main Town (312ee60a...) | `allowedWarehouseIds = [312ee60a...]` ✓ correct |
+| **maintown_cashier@** (Main Town cashier/POS) | 1 row → Main Town (312ee60a...) | `allowedWarehouseIds = [312ee60a...]` ✓ correct |
 | **cashier@** | 1 row → Main Store (001) | `[001]` ✓ correct |
 | **info@** | 2 rows → Main Store + Main Town | `[001, 312ee60a...]` (order from DB) |
 | **Admin@** | no row | null → fallback to ALLOWED_WAREHOUSE_IDS or empty |
