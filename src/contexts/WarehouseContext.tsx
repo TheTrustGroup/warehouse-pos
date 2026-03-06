@@ -21,10 +21,11 @@ import { createContext, useContext, useState, ReactNode, useEffect, useCallback 
 import { Warehouse } from '../types';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet } from '../lib/apiClient';
+import { isValidWarehouseId, PLACEHOLDER_WAREHOUSE_ID } from '../lib/warehouseId';
 import { useOptionalAuth } from './AuthContext';
 
-/** Default warehouse id created by migration (Main Store). Fallback when API has no warehouses yet. */
-export const DEFAULT_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000001';
+/** @deprecated Use isValidWarehouseId and PLACEHOLDER_WAREHOUSE_ID from lib/warehouseId. Kept for backward compat with InventoryContext/ProductFormModal. */
+export const DEFAULT_WAREHOUSE_ID = PLACEHOLDER_WAREHOUSE_ID;
 
 const STORAGE_KEY = 'warehouse_current_id';
 
@@ -68,9 +69,10 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
   const [currentWarehouseId, setCurrentWarehouseIdState] = useState<string>(() => {
     if (typeof localStorage !== 'undefined') {
       const stored = localStorage.getItem(STORAGE_KEY)?.trim();
-      if (stored && stored !== '00000000-0000-0000-0000-000000000000') return stored;
+      if (isValidWarehouseId(stored)) return stored ?? '';
+      if (stored) localStorage.removeItem(STORAGE_KEY);
     }
-    return DEFAULT_WAREHOUSE_ID;
+    return '';
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -87,16 +89,15 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
         setCurrentWarehouseIdState((prev) => {
           const bound = boundWarehouseId && deduped.some((w) => w.id === boundWarehouseId) ? boundWarehouseId : null;
           if (bound) return bound;
-          const exists = deduped.some((w) => w.id === prev);
-          if (exists) return prev;
-          // Always set a valid selection so the warehouse filter/dropdown works (single or multiple warehouses).
+          if (isValidWarehouseId(prev) && deduped.some((w) => w.id === prev)) return prev;
           return deduped[0].id;
         });
+      } else {
+        setCurrentWarehouseIdState('');
       }
-      // On empty list from API, keep current selection (don't clear) so products still load for default warehouse.
     } catch {
       setWarehouses([]);
-      // On error (e.g. 401/network), keep currentWarehouseId so dropdown and products still work after Reload.
+      setCurrentWarehouseIdState('');
     } finally {
       setIsLoading(false);
     }
@@ -121,7 +122,7 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
   }, [boundWarehouseId, warehouses]);
 
   useEffect(() => {
-    if (typeof localStorage !== 'undefined' && currentWarehouseId && !boundWarehouseId) {
+    if (typeof localStorage !== 'undefined' && isValidWarehouseId(currentWarehouseId) && !boundWarehouseId) {
       localStorage.setItem(STORAGE_KEY, currentWarehouseId);
     }
   }, [currentWarehouseId, boundWarehouseId]);

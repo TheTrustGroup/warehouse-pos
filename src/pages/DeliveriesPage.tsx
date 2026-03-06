@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPatch } from '../lib/apiClient';
 import { useWarehouse } from '../contexts/WarehouseContext';
+import { isValidWarehouseId } from '../lib/warehouseId';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -283,6 +284,11 @@ export default function DeliveriesPage({ warehouseId: propWarehouseId = '', apiB
   // ── Load all pending + dispatched deliveries ────────────────────────────
 
   const load = useCallback(async (silent = false) => {
+    if (!isValidWarehouseId(warehouseId)) {
+      setLoading(false);
+      setDeliveries([]);
+      return;
+    }
     if (!silent) setLoading(true);
     setError(null);
     try {
@@ -303,6 +309,7 @@ export default function DeliveriesPage({ warehouseId: propWarehouseId = '', apiB
   // ── Action: mark dispatched / delivered / cancelled ─────────────────────
 
   async function updateStatus(saleId: string, newStatus: 'dispatched' | 'delivered' | 'cancelled') {
+    if (!isValidWarehouseId(warehouseId)) return;
     setActionLoading(saleId);
     try {
       await apiPatch<unknown>(base, '/api/sales', { saleId, deliveryStatus: newStatus, warehouseId });

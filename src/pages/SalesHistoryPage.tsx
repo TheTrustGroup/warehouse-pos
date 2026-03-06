@@ -15,6 +15,7 @@ import { apiGet, apiPost } from '../lib/apiClient';
 import { printReceipt } from '../lib/printReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
+import { isValidWarehouseId } from '../lib/warehouseId';
 import { PERMISSIONS } from '../types/permissions';
 
 interface SalesHistoryPageProps { apiBaseUrl?: string; }
@@ -304,7 +305,7 @@ function SaleRow({
   );
 }
 
-/** Fallback when WarehouseContext has not yet loaded warehouses (same ids as migration defaults). */
+/** Fallback when WarehouseContext has not yet loaded warehouses (display only; API is not called until a valid warehouse is selected). */
 const FALLBACK_WAREHOUSES = [
   { id: '00000000-0000-0000-0000-000000000001', name: 'Main Store' },
   { id: '00000000-0000-0000-0000-000000000002', name: 'Main Town' },
@@ -330,6 +331,12 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
   const fetchSales = useCallback(async () => {
+    if (!isValidWarehouseId(warehouseId)) {
+      setLoading(false);
+      setError(null);
+      setSales([]);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {

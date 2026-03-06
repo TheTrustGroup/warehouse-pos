@@ -11,6 +11,7 @@ import type { LucideIcon } from 'lucide-react';
 import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle } from 'lucide-react';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { getApiCircuitBreaker } from '../lib/circuit';
+import { isValidWarehouseId } from '../lib/warehouseId';
 import { useDashboardQuery, type DashboardLowStockItem } from '../hooks/useDashboardQuery';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -133,14 +134,15 @@ export default function DashboardPage() {
   const { currentWarehouseId, currentWarehouse, warehouses } = useWarehouse();
   const warehouseId = currentWarehouseId ?? '';
   const warehouseName = currentWarehouse?.name ?? 'Warehouse';
+  const isWarehouseValid = isValidWarehouseId(warehouseId);
 
   const { dashboard, todayByWarehouse, isLoading: loading, error: queryError, refetch } = useDashboardQuery(warehouseId);
   const error = queryError?.message ?? null;
 
   // Refetch when Dashboard is opened so Stock Alerts reflect latest inventory (e.g. after editing product sizes).
   useEffect(() => {
-    if (warehouseId) refetch();
-  }, [warehouseId, refetch]);
+    if (isWarehouseValid) refetch();
+  }, [isWarehouseValid, refetch]);
 
   const stats = dashboard
     ? {
@@ -185,14 +187,17 @@ export default function DashboardPage() {
           </a>
         </div>
 
-        {/* ── Warehouse label — proves context is working ── */}
+        {/* ── Warehouse label — prove context is working; show loading when warehouse not resolved ── */}
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400"/>
           <p className="text-[13px] font-semibold text-slate-600">
-            Inventory stats for:{' '}
-            <span className="text-slate-900 font-black">{warehouseName}</span>
+            {!isWarehouseValid ? (
+              <>Loading warehouse…</>
+            ) : (
+              <>Inventory stats for: <span className="text-slate-900 font-black">{warehouseName}</span></>
+            )}
           </p>
-          {loading && (
+          {isWarehouseValid && loading && (
             <span className="text-[12px] text-slate-400 animate-pulse">Loading…</span>
           )}
         </div>
@@ -233,9 +238,9 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Stat cards (skeleton when loading) ── */}
+        {/* ── Stat cards (skeleton when loading or warehouse not yet resolved) ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {loading && !dashboard ? (
+          {(!isWarehouseValid || (loading && !dashboard)) ? (
             Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
           ) : (
             <>

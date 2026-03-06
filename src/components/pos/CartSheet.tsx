@@ -53,6 +53,8 @@ interface CartSheetProps {
   isOpen: boolean;
   lines: CartLine[];
   warehouseId: string;
+  /** When false, charge is disabled and button shows "Loading...". Prevents sale with unloaded warehouse. */
+  isWarehouseReady?: boolean;
   onUpdateQty: (key: string, delta: number) => void;
   onRemoveLine: (key: string) => void;
   onClearCart: () => void;
@@ -72,6 +74,7 @@ export default function CartSheet({
   isOpen,
   lines,
   warehouseId,
+  isWarehouseReady = true,
   onUpdateQty,
   onRemoveLine,
   onClearCart,
@@ -119,7 +122,7 @@ export default function CartSheet({
       : [];
 
   const handleCharge = async () => {
-    if (!warehouseId || lines.length === 0 || charging) return;
+    if (!warehouseId || !isWarehouseReady || lines.length === 0 || charging) return;
     if (paymentMethod === 'mixed' && !isMixedValid) return;
     setCharging(true);
     try {
@@ -381,10 +384,10 @@ export default function CartSheet({
             <button
               type="button"
               onClick={handleCharge}
-              disabled={charging || lines.length === 0 || !warehouseId || !isMixedValid}
+              disabled={charging || lines.length === 0 || !warehouseId || !isWarehouseReady || !isMixedValid}
               className="min-h-[44px] w-full rounded-[var(--edk-radius-sm)] bg-[var(--edk-red)] hover:bg-[var(--edk-red-hover)] px-6 py-3 font-bold text-white disabled:opacity-50 touch-manipulation"
             >
-              {charging ? '…' : `Charge GH₵${total.toLocaleString('en-GH', { minimumFractionDigits: 2 })}`}
+              {!isWarehouseReady ? 'Loading…' : charging ? '…' : `Charge GH₵${total.toLocaleString('en-GH', { minimumFractionDigits: 2 })}`}
             </button>
           </div>
         </div>

@@ -8,6 +8,7 @@ import { useQueries } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet } from '../lib/apiClient';
 import { queryKeys } from '../lib/queryKeys';
+import { isValidWarehouseId } from '../lib/warehouseId';
 
 const FETCH_TIMEOUT_MS = 35_000;
 const STALE_MS_DASHBOARD = 0;        // Always refetch when Dashboard is used (alerts must be current)
@@ -81,7 +82,7 @@ export function useDashboardQuery(warehouseId: string) {
         staleTime: STALE_MS_DASHBOARD,
         gcTime: GC_MS,
         refetchOnWindowFocus: true,
-        enabled: Boolean(warehouseId?.trim()),
+        enabled: isValidWarehouseId(warehouseId),
       },
       {
         queryKey: queryKeys.todayByWarehouse(today),

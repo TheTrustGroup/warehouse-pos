@@ -26,6 +26,7 @@ import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
+import { isValidWarehouseId } from '../lib/warehouseId';
 import { onUnauthorized } from '../lib/onUnauthorized';
 import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
@@ -143,6 +144,8 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     name: 'Loading...',
     code: '',
   };
+  const effectiveWarehouseId = warehouse?.id ?? currentWarehouseId ?? warehouses[0]?.id ?? '';
+  const isWarehouseLoaded = isValidWarehouseId(effectiveWarehouseId);
 
   /** POS never shows location selection; warehouse comes from auth (cashier) or context only. */
 
@@ -344,7 +347,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   // P3#19: When user returns to the tab, invalidate product cache so next read gets fresh stock.
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && warehouse.id) {
+      if (document.visibilityState === 'visible' && isValidWarehouseId(warehouse.id)) {
         productsCacheRef.current = null;
         loadProducts(warehouse.id, true);
       }
@@ -355,7 +358,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   useEffect(() => {
     const wid = warehouse.id?.trim();
-    if (!wid) return;
+    if (!wid || !isValidWarehouseId(wid)) return;
     loadProductsAbortRef.current?.abort();
     const ctrl = new AbortController();
     loadProductsAbortRef.current = ctrl;
@@ -398,6 +401,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   const saleMutation = useMutation({
     mutationFn: async ({ payload }: SaleMutationVars): Promise<SaleMutationResult> => {
+      if (!isValidWarehouseId(payload.warehouseId)) {
+        throw new Error('Warehouse not loaded. Please wait and try again.');
+      }
       const idempotencyKey = `pos-${payload.warehouseId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const result = await apiFetch<SaleMutationResult>('/api/sales', {
         method: 'POST',
@@ -575,6 +581,10 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   async function handleCharge(payload: SalePayload) {
     if (charging) return;
+    if (!isValidWarehouseId(payload.warehouseId)) {
+      showToast('Warehouse not loaded yet. Please wait.', 'warn');
+      return;
+    }
     setCharging(true);
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
@@ -791,7 +801,13 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[1fr_340px] min-h-0 overflow-hidden">
         {/* Products panel: on mobile add bottom padding for sticky CartBar */}
         <div className="flex-1 overflow-y-auto min-h-0 pb-20 lg:pb-0">
-          {productsLoadError ? (
+          {!isWarehouseLoaded ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+              <div className="w-10 h-10 border-2 border-[var(--edk-red)] border-t-transparent rounded-full animate-spin" aria-hidden />
+              <p className="text-[var(--edk-ink-2)] font-medium">Loading warehouse…</p>
+              <p className="text-sm text-[var(--edk-ink-3)]">Location must be set before you can sell.</p>
+            </div>
+          ) : productsLoadError ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
               <p className="text-[var(--edk-ink-2)] font-medium">Cannot load products</p>
               <p className="text-sm text-[var(--edk-ink-3)] max-w-md">{productsLoadError}</p>
@@ -800,7 +816,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
                 onClick={() => {
                   getApiCircuitBreaker().reset();
                   setProductsLoadError(null);
-                  if (warehouse.id) loadProducts(warehouse.id);
+                  if (isValidWarehouseId(warehouse.id)) loadProducts(warehouse.id);
                 }}
                 className="rounded-lg bg-[var(--edk-red)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--edk-red-hover)]"
               >
@@ -923,7 +939,8 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       <CartSheet
         isOpen={cartOpen}
         lines={cart}
-        warehouseId={warehouse?.id ?? currentWarehouseId ?? warehouses[0]?.id ?? ''}
+        warehouseId={effectiveWarehouseId}
+        isWarehouseReady={isWarehouseLoaded}
         onUpdateQty={handleUpdateQty}
         onRemoveLine={handleRemoveLine}
         onClearCart={handleClearCart}

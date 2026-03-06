@@ -3,6 +3,7 @@ import { Download, FileText, Table } from 'lucide-react';
 import { useInventory } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
+import { isValidWarehouseId } from '../lib/warehouseId';
 import { DateRangePicker } from '../components/reports/DateRangePicker';
 import { SalesMetrics } from '../components/reports/SalesMetrics';
 import { SalesChart } from '../components/reports/SalesChart';
@@ -138,7 +139,7 @@ export function Reports() {
 
   /** Fetch sales report from GET /api/reports/sales (single source of truth: sales + sale_lines). */
   useEffect(() => {
-    if (reportType !== 'sales' || !currentWarehouseId || !user) {
+    if (reportType !== 'sales' || !isValidWarehouseId(currentWarehouseId) || !user) {
       setSalesReportFromApi(null);
       return;
     }

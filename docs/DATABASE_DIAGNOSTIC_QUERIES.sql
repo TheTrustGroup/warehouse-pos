@@ -144,3 +144,28 @@ AND tc.table_name IN (
   'warehouse_inventory_by_size', 'warehouses', 'size_codes'
 )
 ORDER BY tc.table_name, tc.constraint_name;
+
+/* =============================================================================
+   Placeholder warehouse ID (production 503/504) — run for EDK and Hunnid.
+   ============================================================================= */
+
+/* Does the placeholder warehouse exist? (Expected: 0 rows = server correctly rejects it) */
+SELECT * FROM warehouses
+WHERE id = '00000000-0000-0000-0000-000000000001';
+
+/* What real warehouses exist? */
+SELECT id, name, created_at
+FROM warehouses
+ORDER BY created_at;
+
+/* What warehouse is the current user scoped to? (run while logged in; user_scopes uses user_email) */
+SELECT us.user_email, us.warehouse_id, us.store_id, w.name AS warehouse_name
+FROM user_scopes us
+JOIN warehouses w ON w.id = us.warehouse_id
+WHERE us.user_email = (auth.jwt() ->> 'email');
+
+/* If above returns 0 rows (e.g. run as service role), list all user_scopes with warehouse names: */
+-- SELECT us.user_email, us.warehouse_id, us.store_id, w.name AS warehouse_name
+-- FROM user_scopes us
+-- JOIN warehouses w ON w.id = us.warehouse_id
+-- ORDER BY us.user_email, us.warehouse_id;
