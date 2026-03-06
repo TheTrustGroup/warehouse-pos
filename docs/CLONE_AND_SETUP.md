@@ -4,6 +4,25 @@ This repo is a **full-stack template**: Vite + React frontend, Next.js API in `i
 
 ---
 
+## What's included (copy = everything below)
+
+When you **clone** or **copy the folder**, you get all of this (nothing is gitignored except secrets and build artifacts):
+
+| What | Where |
+|------|--------|
+| **Migrations** (schema + RPCs + triggers + seeds) | `inventory-server/supabase/migrations/*.sql` (70+ files, run in timestamp order) |
+| **Ad-hoc scripts** (backfill, verify, one-off SQL) | `inventory-server/supabase/scripts/*.sql` |
+| **Docs scripts** (e.g. set admin email) | `docs/scripts/*.sql` |
+| **Edge Functions** (e.g. low-stock alert, receipt email) | `inventory-server/supabase/functions/` |
+| **Frontend** (Vite + React) | `src/`, `index.html`, `vite.config.ts`, root `package.json` |
+| **API** (Next.js) | `inventory-server/app/`, `inventory-server/lib/`, `inventory-server/vercel.json` |
+| **Docs** (runbooks, diagnostics, setup) | `docs/*.md`, `docs/*.sql` (e.g. `REALTIME_OFFLINE.md`, `DASHBOARD_DIAGNOSTIC_QUERIES.sql`) |
+| **Env templates** (no secrets) | `.env.example`, `inventory-server/.env.example` |
+
+**Not in the repo** (you add per environment): `.env`, `.env.local`, `node_modules/`, `dist/`, `.vercel/`. Use the `.env.example` files to create local or Vercel env.
+
+---
+
 ## 1. Clone the repo
 
 ```bash
