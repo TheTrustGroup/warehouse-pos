@@ -60,7 +60,7 @@ export function RealtimeSyncIndicator() {
       return (
         <span
           className="flex items-center gap-1.5 text-[11px] font-medium text-red-600"
-          title="Updates paused"
+          title={isOnline ? 'Live updates paused — check docs/REALTIME_OFFLINE.md or console' : 'No internet connection'}
           role="status"
           aria-live="polite"
         >

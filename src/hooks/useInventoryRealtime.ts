@@ -30,6 +30,12 @@ export function useInventoryRealtime(warehouseId: string | null | undefined): vo
 
     const supabase = getSupabaseClient();
     if (!supabase) {
+      if (typeof console !== 'undefined' && !(window as unknown as { __realtimeConfigWarned?: boolean }).__realtimeConfigWarned) {
+        (window as unknown as { __realtimeConfigWarned?: boolean }).__realtimeConfigWarned = true;
+        console.warn(
+          '[Realtime] Not configured: set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY at build time (e.g. in Vercel env) and redeploy. See docs/REALTIME_OFFLINE.md.'
+        );
+      }
       setStatus('disconnected');
       return;
     }
