@@ -88,6 +88,8 @@ export function Reports() {
   const [transactionsSource, setTransactionsSource] = useState<TransactionsSource>('local');
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [salesReportLoading, setSalesReportLoading] = useState(false);
+  /** True when API was tried but returned 404/5xx or failed; show banner that report is from local data (P3#20). */
+  const [serverReportUnavailable, setServerReportUnavailable] = useState(false);
 
   /** Displayed sales report: prefer API (SQL from sales/sale_lines), else JS from transactions. */
   const displayedSalesReport = salesReportFromApi ?? salesReport;
@@ -150,8 +152,14 @@ export function Reports() {
       to: toIso,
     })
       .then((api) => {
-        if (api) setSalesReportFromApi(mapApiReportToSalesReport(api));
+        if (api) {
+          setSalesReportFromApi(mapApiReportToSalesReport(api));
+          setServerReportUnavailable(false);
+        } else {
+          setServerReportUnavailable(true);
+        }
       })
+      .catch(() => setServerReportUnavailable(true))
       .finally(() => setSalesReportLoading(false));
   }, [reportType, currentWarehouseId, startDate, endDate, user]);
 
@@ -191,7 +199,9 @@ export function Reports() {
         const safe = (data ?? []).filter((t): t is Transaction => t != null && typeof t === 'object');
         setTransactions(safe);
         setTransactionsSource('server');
+        setServerReportUnavailable(false);
       } catch {
+        setServerReportUnavailable(true);
         fallbackLocal();
       } finally {
         setTransactionsLoading(false);
@@ -321,6 +331,11 @@ export function Reports() {
             <p className="text-sm text-slate-500">
               {salesReportLoading ? 'Loading sales report…' : 'Loading sales from server…'}
             </p>
+          )}
+          {serverReportUnavailable && reportType === 'sales' && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+              Report is from local data; server report unavailable.
+            </div>
           )}
           {!salesReportLoading && !transactionsLoading && reportType === 'sales' && (
             <p className="text-sm text-slate-500">

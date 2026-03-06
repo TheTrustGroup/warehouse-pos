@@ -23,6 +23,17 @@ const _resolved =
       ? _trimmed
       : `https://${_trimmed}`;
 
+// In production, validate non-empty base URL is a valid absolute URL (P3#18).
+if (import.meta.env.PROD && _resolved !== '') {
+  try {
+    new URL(_resolved);
+  } catch {
+    throw new Error(
+      '[API] VITE_API_BASE_URL must be a valid URL or empty for same-origin. Current value is invalid.'
+    );
+  }
+}
+
 /** Single source of truth for API base URL. "" = same-origin (relative /api/...). */
 export const API_BASE_URL = _resolved;
 if (import.meta.env.DEV && _resolved === DEFAULT_API_BASE) {

@@ -341,6 +341,18 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     [apiFetch, showToast]
   );
 
+  // P3#19: When user returns to the tab, invalidate product cache so next read gets fresh stock.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && warehouse.id) {
+        productsCacheRef.current = null;
+        loadProducts(warehouse.id, true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [warehouse.id, loadProducts]);
+
   useEffect(() => {
     const wid = warehouse.id?.trim();
     if (!wid) return;
