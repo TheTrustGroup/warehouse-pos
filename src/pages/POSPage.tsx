@@ -26,6 +26,7 @@ import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
+import { getProductImageDisplayUrl } from '../lib/imageUpload';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { onUnauthorized } from '../lib/onUnauthorized';
 import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
@@ -927,7 +928,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
                 {cart.map((l) => (
                   <li key={l.key} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-[var(--edk-bg)]">
                     <div className="w-10 h-10 rounded-[var(--edk-radius-sm)] bg-[var(--edk-bg)] border border-[var(--edk-border)] flex-shrink-0 overflow-hidden">
-                      {l.imageUrl ? <img src={l.imageUrl} alt="" className="w-full h-full object-cover" /> : null}
+                      {l.imageUrl ? <img src={getProductImageDisplayUrl(l.imageUrl, { width: 80, height: 80, resize: 'cover' })} alt="" className="w-full h-full object-cover" /> : null}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-semibold truncate">{l.name}</p>

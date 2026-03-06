@@ -10,7 +10,7 @@ import { API_BASE_URL, getApiHeaders } from '../../lib/api';
 import { apiGet } from '../../lib/apiClient';
 import { compressImage, MAX_IMAGE_BASE64_LENGTH } from '../../lib/imageUtils';
 import { setProductImages } from '../../lib/productImagesStore';
-import { isStorageUrl, extractPathFromUrl, deleteProductImage } from '../../lib/imageUpload';
+import { isStorageUrl, extractPathFromUrl, deleteProductImage, uploadProductImage } from '../../lib/imageUpload';
 import { Button } from '../ui/Button';
 import SizesSection from './SizesSection';
 import { X, Upload, CloudOff } from 'lucide-react';
@@ -281,25 +281,30 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             showToast('error', `Could not read image: ${file.name}`);
             continue;
           }
-          // Prefer Storage URL when upload API is available (product-images bucket)
+          // Prefer Supabase Storage (product-images), then upload API, then base64
           let imageValue: string = dataUrl;
           try {
-            const form = new FormData();
-            form.append('file', file, file.name);
-            const headers = getApiHeaders() as Record<string, string>;
-            const { 'Content-Type': _omitCt, ...rest } = headers;
-            void _omitCt;
-            const res = await fetch(`${API_BASE_URL}/api/upload/product-image`, {
-              method: 'POST',
-              headers: rest,
-              body: form,
-            });
-            if (res.ok) {
-              const data = await res.json();
-              if (typeof data?.url === 'string') imageValue = data.url;
-            }
+            const { url } = await uploadProductImage(file);
+            if (url) imageValue = url;
           } catch {
-            // Fall back to base64
+            try {
+              const form = new FormData();
+              form.append('file', file, file.name);
+              const headers = getApiHeaders() as Record<string, string>;
+              const { 'Content-Type': _omitCt, ...rest } = headers;
+              void _omitCt;
+              const res = await fetch(`${API_BASE_URL}/api/upload/product-image`, {
+                method: 'POST',
+                headers: rest,
+                body: form,
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (typeof data?.url === 'string') imageValue = data.url;
+              }
+            } catch {
+              // Fall back to base64 below
+            }
           }
           if (!product && imageValue === dataUrl) {
             try {

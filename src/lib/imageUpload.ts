@@ -256,3 +256,38 @@ export function safeProductImageUrl(src: string): string {
 /** 1x1 transparent GIF used when image URL is not allowed (XSS). */
 export const EMPTY_IMAGE_DATA_URL =
   'data:image/gif;base64,R0lGOODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+/** Transform options for Supabase Storage image transformation (Pro plan). */
+export interface ProductImageTransformOptions {
+  width?: number;
+  height?: number;
+  quality?: number;
+  resize?: 'cover' | 'contain' | 'fill';
+  format?: 'origin' | 'webp';
+}
+
+/**
+ * Returns a display URL with optional resize/quality for product images.
+ * For Supabase Storage (product-images) URLs, returns the render endpoint with transform params;
+ * for base64 or other URLs, returns the safe URL as-is (no transform).
+ */
+export function getProductImageDisplayUrl(
+  src: string,
+  options?: ProductImageTransformOptions
+): string {
+  if (typeof src !== 'string' || !src.trim()) return EMPTY_IMAGE_DATA_URL;
+  const s = src.trim();
+  if (isBase64(s)) return s;
+  const path = extractPathFromUrl(s);
+  const base = getSupabaseUrl();
+  if (!base || !path) return safeProductImageUrl(s);
+  const params = new URLSearchParams();
+  if (options?.width != null) params.set('width', String(Math.round(options.width)));
+  if (options?.height != null) params.set('height', String(Math.round(options.height)));
+  if (options?.quality != null) params.set('quality', String(Math.min(100, Math.max(20, options.quality))));
+  if (options?.resize) params.set('resize', options.resize);
+  if (options?.format === 'origin') params.set('format', 'origin');
+  const qs = params.toString();
+  const renderBase = base.replace('/v1/object/', '/v1/render/image/');
+  return qs ? `${renderBase}public/${BUCKET}/${path}?${qs}` : `${renderBase}public/${BUCKET}/${path}`;
+}

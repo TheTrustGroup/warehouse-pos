@@ -55,8 +55,34 @@ interface WarehouseStatsRow {
 }
 
 /**
+ * Fetch warehouse-level stats from warehouse_dashboard_stats view (one query, instant).
+ * Returns null if view is unavailable (e.g. migration not applied).
+ */
+async function getWarehouseStatsFromView(warehouseId: string): Promise<WarehouseStatsRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('warehouse_dashboard_stats')
+    .select('total_stock_value, total_products, total_units, low_stock_count, out_of_stock_count')
+    .eq('warehouse_id', warehouseId)
+    .maybeSingle();
+  if (error) {
+    console.warn('[dashboardStats] warehouse_dashboard_stats view failed, trying RPC:', error.message);
+    return null;
+  }
+  if (!data || typeof data !== 'object') return null;
+  const row = data as Record<string, unknown>;
+  return {
+    total_stock_value: Number(row.total_stock_value ?? 0),
+    total_products: Number(row.total_products ?? 0),
+    total_units: Number(row.total_units ?? 0),
+    low_stock_count: Number(row.low_stock_count ?? 0),
+    out_of_stock_count: Number(row.out_of_stock_count ?? 0),
+  };
+}
+
+/**
  * Fetch accurate warehouse-level stats from DB (all products, no limit).
- * Returns null if RPC is unavailable (e.g. migration not applied).
+ * Prefers warehouse_dashboard_stats view; falls back to RPC then product sample.
  */
 async function getWarehouseStatsFromRpc(warehouseId: string): Promise<WarehouseStatsRow | null> {
   const supabase = getSupabase();
@@ -177,8 +203,8 @@ async function computeDashboardStatsUncached(
   warehouseId: string,
   date: string
 ): Promise<DashboardStatsResult> {
-  const [rpcStats, productsResult, todaySales] = await Promise.all([
-    getWarehouseStatsFromRpc(warehouseId),
+  const [viewStats, productsResult, todaySales] = await Promise.all([
+    getWarehouseStatsFromView(warehouseId),
     getWarehouseProducts(warehouseId, { limit: PRODUCTS_LIMIT }),
     getTodaySalesTotal(warehouseId, date),
   ]);
@@ -190,13 +216,21 @@ async function computeDashboardStatsUncached(
   let lowStockCount: number;
   let outOfStockCount: number;
 
-  if (rpcStats) {
-    totalStockValue = rpcStats.total_stock_value;
-    totalProducts = rpcStats.total_products;
-    totalUnits = rpcStats.total_units;
-    lowStockCount = rpcStats.low_stock_count;
-    outOfStockCount = rpcStats.out_of_stock_count;
+  if (viewStats) {
+    totalStockValue = viewStats.total_stock_value;
+    totalProducts = viewStats.total_products;
+    totalUnits = viewStats.total_units;
+    lowStockCount = viewStats.low_stock_count;
+    outOfStockCount = viewStats.out_of_stock_count;
   } else {
+    const rpcStats = await getWarehouseStatsFromRpc(warehouseId);
+    if (rpcStats) {
+      totalStockValue = rpcStats.total_stock_value;
+      totalProducts = rpcStats.total_products;
+      totalUnits = rpcStats.total_units;
+      lowStockCount = rpcStats.low_stock_count;
+      outOfStockCount = rpcStats.out_of_stock_count;
+    } else {
     let value = 0;
     let low = 0;
     let out = 0;
@@ -215,6 +249,7 @@ async function computeDashboardStatsUncached(
     totalUnits = units;
     lowStockCount = low;
     outOfStockCount = out;
+    }
   }
 
   const categorySummary: DashboardCategorySummary = {};
