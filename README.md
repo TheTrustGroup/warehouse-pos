@@ -1,6 +1,10 @@
 # Warehouse POS — Inventory & Smart POS
 
-Frontend (Vite + React) and inventory API (Next.js on Vercel) for warehouse inventory and POS.
+Frontend (Vite + React) and inventory API (Next.js on Vercel) for warehouse inventory and POS. This repo is a **full-stack source**: clone it to spin up duplicate projects (see **docs/CLONE_AND_SETUP.md**).
+
+## Clone and run a duplicate project
+
+See **docs/CLONE_AND_SETUP.md** for: clone → env (frontend + API) → Supabase migrations → run locally → branding → deploy. Quick refs: **docs/ENVIRONMENT.md**, **docs/BRANDING.md**, **docs/ENGINEERING_RULES.md**.
 
 ## Run locally
 
@@ -40,13 +44,16 @@ npm run dev
 
 ## Scripts (frontend)
 
-| Command           | Description                    |
-|-------------------|--------------------------------|
-| `npm run dev`     | Start Vite dev server          |
-| `npm run build`   | Type-check + production build  |
-| `npm run test`    | Run Vitest unit tests          |
-| `npm run test:e2e`| Run Playwright E2E (smoke)     |
-| `npm run lint`    | Run ESLint                     |
+| Command                  | Description                              |
+|--------------------------|------------------------------------------|
+| `npm run dev`            | Start Vite dev server                    |
+| `npm run build`          | Type-check + production build            |
+| `npm run build:server`   | Build inventory-server only              |
+| `npm run build:all`      | Build frontend + inventory-server        |
+| `npm run test`           | Run Vitest unit tests                    |
+| `npm run test:e2e`       | Run Playwright E2E (smoke)               |
+| `npm run lint`           | Run ESLint                               |
+| `npm run guard:uncommitted` | Exit 1 if uncommitted changes (before leaving) |
 
 ## Architecture and roadmap
 

@@ -8,8 +8,10 @@
 
 import { useEffect } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle } from 'lucide-react';
+import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle, Users } from 'lucide-react';
 import { useWarehouse } from '../contexts/WarehouseContext';
+import { useAuth } from '../contexts/AuthContext';
+import { usePresence } from '../contexts/PresenceContext';
 import { getApiCircuitBreaker } from '../lib/circuit';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { useDashboardQuery, type DashboardLowStockItem } from '../hooks/useDashboardQuery';
@@ -132,9 +134,12 @@ function LowStockTable({ items }: { items: DashboardLowStockItem[] }) {
 
 export default function DashboardPage() {
   const { currentWarehouseId, currentWarehouse, warehouses } = useWarehouse();
+  const { hasRole } = useAuth();
+  const { presenceList, isSubscribed } = usePresence();
   const warehouseId = currentWarehouseId ?? '';
   const warehouseName = currentWarehouse?.name ?? 'Warehouse';
   const isWarehouseValid = isValidWarehouseId(warehouseId);
+  const canSeePresence = hasRole(['admin', 'super_admin']);
 
   const { dashboard, todayByWarehouse, isLoading: loading, error: queryError, refetch } = useDashboardQuery(warehouseId);
   const error = queryError?.message ?? null;
@@ -219,6 +224,39 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ── Active cashiers (admin only, Supabase Realtime Presence) ── */}
+        {canSeePresence && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <Users className="w-5 h-5 text-slate-500" aria-hidden />
+              <div>
+                <h2 className="text-[15px] font-black text-slate-900">
+                  {presenceList.length === 0 ? 'No other users active' : `${presenceList.length} cashier${presenceList.length !== 1 ? 's' : ''} active`}
+                </h2>
+                <p className="text-[12px] text-slate-400 mt-0.5">
+                  {isSubscribed ? 'Live — updates when someone opens or leaves the app' : 'Connecting…'}
+                </p>
+              </div>
+            </div>
+            {presenceList.length > 0 && (
+              <ul className="p-5 space-y-2">
+                {presenceList.map((entry) => (
+                  <li key={entry.key} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-bold text-slate-800 truncate">{entry.payload.displayName || entry.payload.email}</p>
+                      <p className="text-[12px] text-slate-500">
+                        {entry.payload.page} — {entry.payload.warehouseName}
+                        {entry.isIdle && <span className="ml-2 text-amber-600 font-medium">Idle</span>}
+                      </p>
+                    </div>
+                    {!entry.isIdle && <span className="text-[11px] text-slate-400 whitespace-nowrap">{entry.lastActivityAgo}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 

@@ -1,5 +1,2 @@
-/**
- * Dashboard route entry. Re-exports DashboardPage as Dashboard for App lazy import.
- */
-import DashboardPage from './DashboardPage';
-export { DashboardPage as Dashboard };
+/** Re-export for App route: import('./pages/Dashboard').then(m => ({ default: m.Dashboard })) */
+export { default as Dashboard } from './DashboardPage';

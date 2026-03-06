@@ -6,13 +6,14 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { StoreProvider } from './contexts/StoreContext';
-import { WarehouseProvider } from './contexts/WarehouseContext';
+import { WarehouseProvider, useWarehouse } from './contexts/WarehouseContext';
 import { InventoryProvider } from './contexts/InventoryContext';
 import { API_BASE_URL } from './lib/api';
 import { POSProvider } from './contexts/POSContext';
 import { OrderProvider } from './contexts/OrderContext';
 import { CriticalDataProvider, CriticalDataGate } from './contexts/CriticalDataContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
+import { PresenceProvider } from './contexts/PresenceContext';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { NetworkStatusProvider } from './contexts/NetworkStatusContext';
 import { QUOTA_EVENT } from './lib/offlineQuota';
@@ -226,6 +227,23 @@ function SyncFailureToastListener() {
   return null;
 }
 
+/** Wires PresenceProvider with auth + warehouse (must be inside Auth and WarehouseProvider). */
+function PresenceProviderInner({ children }: { children: React.ReactNode }) {
+  const { user, isAuthenticated } = useAuth();
+  const { currentWarehouseId, currentWarehouse } = useWarehouse();
+  return (
+    <PresenceProvider
+      currentUserEmail={user?.email ?? null}
+      currentUserRole={user?.role ?? null}
+      currentWarehouseId={currentWarehouseId ?? ''}
+      currentWarehouseName={currentWarehouse?.name ?? '—'}
+      isAuthenticated={!!isAuthenticated}
+    >
+      {children}
+    </PresenceProvider>
+  );
+}
+
 /**
  * Protected Routes: block dashboard until role confirmed from server (Phase 1 stability).
  * No role fallback; invalid role → authError → redirect to login.
@@ -270,6 +288,7 @@ function ProtectedRoutes() {
       <RealtimeProvider>
         <StoreProvider>
           <WarehouseProvider>
+            <PresenceProviderInner>
             <InventoryProvider>
             <POSProvider>
               <OrderProvider>
@@ -279,6 +298,7 @@ function ProtectedRoutes() {
               </OrderProvider>
             </POSProvider>
           </InventoryProvider>
+            </PresenceProviderInner>
         </WarehouseProvider>
       </StoreProvider>
     </RealtimeProvider>

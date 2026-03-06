@@ -28,6 +28,8 @@ export type PaymentMethodType = 'cash' | 'card' | 'mobile_money';
 export interface SalePayload {
   warehouseId: string;
   customerName?: string | null;
+  /** When set, receipt is emailed to this address after the sale. */
+  customerEmail?: string | null;
   paymentMethod: string;
   /** When paymentMethod === 'mixed', required: amounts per method that sum to total. */
   payments?: Array<{ method: PaymentMethodType; amount: number }>;
@@ -89,6 +91,7 @@ export default function CartSheet({
     mobile_money: '',
   });
   const [customerName, setCustomerName] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [discountPct, setDiscountPct] = useState(0);
   const [charging, setCharging] = useState(false);
   const [chargingLonger, setChargingLonger] = useState(false);
@@ -152,6 +155,7 @@ export default function CartSheet({
       await onCharge({
         warehouseId,
         customerName: customerName.trim() || null,
+        customerEmail: customerEmail.trim() || null,
         paymentMethod,
         payments: paymentMethod === 'mixed' ? mixedPaymentsArray : undefined,
         subtotal,
@@ -247,6 +251,17 @@ export default function CartSheet({
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder="Name"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Email receipt (optional)</label>
+            <input
+              type="email"
+              inputMode="email"
+              value={customerEmail}
+              onChange={(e) => setCustomerEmail(e.target.value)}
+              placeholder="customer@example.com"
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>

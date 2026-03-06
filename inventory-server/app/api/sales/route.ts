@@ -261,6 +261,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const allowedMethods = ['cash', 'card', 'mobile_money', 'mixed'];
   const paymentMethodForDb = allowedMethods.includes(paymentMethod) ? paymentMethod : 'cash';
   const customerName = typeof body.customerName === 'string' ? body.customerName : null;
+  const customerEmail = typeof body.customerEmail === 'string' ? body.customerEmail.trim() || null : null;
   const rawPayments = Array.isArray(body.payments) ? body.payments : null;
   const paymentsBreakdown =
     rawPayments &&
@@ -310,6 +311,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       p_customer_name: customerName,
       p_sold_by: null,
       p_sold_by_email: auth.email,
+      p_customer_email: customerEmail,
     });
     if (error) {
       const msg = error.message ?? 'Failed to record sale';
@@ -332,6 +334,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
     await notifyInventoryUpdated(warehouseId);
     const result = (data ?? {}) as Record<string, unknown>;
+    if (customerEmail) {
+      supabase.functions
+        .invoke('send-receipt', { body: { sale_id: result.id } })
+        .catch((err) => console.error('[POST /api/sales] send-receipt invoke', err));
+    }
     return withCors(
       NextResponse.json(
         {

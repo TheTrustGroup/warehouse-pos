@@ -33,6 +33,7 @@ import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useInventory } from '../contexts/InventoryContext';
+import { usePresence } from '../contexts/PresenceContext';
 import type { Product } from '../types';
 
 import type { Warehouse } from '../components/pos/SessionScreen';
@@ -66,6 +67,31 @@ const PENDING_POS_CART_KEY = 'pending_pos_cart';
 function buildCartKey(productId: string, sizeCode: string | null): string {
   return `${productId}__${sizeCode ?? 'NA'}`;
 }
+
+/** Remaining stock for (productId, sizeCode) after subtracting cart qty and optional extra. Used for low-stock broadcast (NEXT 4). */
+function getRemainingForProduct(
+  products: POSProduct[],
+  cart: CartLine[],
+  productId: string,
+  sizeCode: string | null,
+  extraQty = 0
+): number {
+  const p = products.find((x) => x.id === productId);
+  if (!p) return 0;
+  const key = buildCartKey(productId, sizeCode);
+  const inCart = cart.find((l) => l.key === key)?.qty ?? 0;
+  const totalInCart = inCart + extraQty;
+  if (p.sizeKind === 'sized' && sizeCode) {
+    const row = p.quantityBySize?.find(
+      (r) => r.sizeCode?.toUpperCase() === (sizeCode ?? '').toUpperCase()
+    );
+    return Math.max(0, (row?.quantity ?? 0) - totalInCart);
+  }
+  return Math.max(0, (p.quantity ?? 0) - totalInCart);
+}
+
+const LOW_STOCK_BROADCAST_THRESHOLD = 3;
+const LOW_STOCK_BROADCAST_THROTTLE_MS = 60_000; // same product/size at most once per minute
 
 /** Apply sale lines deduction to a products list (pure, for optimistic apply and rollback). */
 function applySaleDeduction(
@@ -174,7 +200,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const [pendingCartRestore, setPendingCartRestore] = useState<{ cart: CartLine[] } | null>(null);
 
   const { toast, show: showToast } = useToast();
+  const { sendLowStockAlert, receivedLowStockAlerts, dismissLowStockAlert } = usePresence();
   const isMounted = useRef(true);
+  const lastLowStockBroadcastRef = useRef<{ key: string; at: number } | null>(null);
 
   /** Zero-latency barcode lookup (no API, no filter over array). Critical for scanner flow. */
   const barcodeToProduct = useMemo(() => {
@@ -385,6 +413,23 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     };
   }, [warehouse.id, currentWarehouseId, loadProducts]);
 
+  // NEXT 4: show toast when another cashier broadcasts low-stock, then dismiss
+  const processedAlertCountRef = useRef(0);
+  useEffect(() => {
+    const list = receivedLowStockAlerts;
+    if (list.length <= processedAlertCountRef.current) return;
+    for (let i = processedAlertCountRef.current; i < list.length; i++) {
+      const a = list[i];
+      const sizePart = a.sizeLabel ?? a.sizeCode ?? '';
+      const msg = sizePart
+        ? `⚠️ ${a.senderName} is also selling ${a.productName} · ${sizePart} (${a.remaining} remaining)`
+        : `⚠️ ${a.senderName} is also selling ${a.productName} (${a.remaining} remaining)`;
+      showToast(msg, 'warn');
+      dismissLowStockAlert(a.id);
+    }
+    processedAlertCountRef.current = list.length;
+  }, [receivedLowStockAlerts, showToast, dismissLowStockAlert]);
+
   type SaleMutationVars = {
     payload: SalePayload;
     cartSnapshot: CartLine[];
@@ -412,6 +457,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         body: JSON.stringify({
           warehouseId: payload.warehouseId,
           customerName: payload.customerName || null,
+          customerEmail: payload.customerEmail || null,
           paymentMethod: payload.paymentMethod,
           payments: payload.payments ?? null,
           subtotal: payload.subtotal,
@@ -563,14 +609,61 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     showToast(
       `${input.name}${input.sizeLabel ? ` · ${input.sizeLabel}` : ''} added`
     );
+    const remaining = getRemainingForProduct(
+      products,
+      cart,
+      input.productId,
+      input.sizeCode ?? null,
+      input.qty
+    );
+    if (remaining <= LOW_STOCK_BROADCAST_THRESHOLD) {
+      const broadcastKey = buildCartKey(input.productId, input.sizeCode ?? null);
+      const now = Date.now();
+      const last = lastLowStockBroadcastRef.current;
+      if (!last || last.key !== broadcastKey || now - last.at > LOW_STOCK_BROADCAST_THROTTLE_MS) {
+        lastLowStockBroadcastRef.current = { key: broadcastKey, at: now };
+        sendLowStockAlert({
+          productName: input.name,
+          sizeCode: input.sizeCode ?? null,
+          sizeLabel: input.sizeLabel ?? null,
+          remaining,
+          productId: input.productId,
+        });
+      }
+    }
   }
 
   function handleUpdateQty(key: string, delta: number) {
+    const line = cart.find((l) => l.key === key);
     setCart((prev) =>
       prev.map((l) =>
         l.key === key ? { ...l, qty: Math.max(1, l.qty + delta) } : l
       )
     );
+    if (delta > 0 && line) {
+      const remaining = getRemainingForProduct(
+        products,
+        cart,
+        line.productId,
+        line.sizeCode ?? null,
+        delta
+      );
+      if (remaining <= LOW_STOCK_BROADCAST_THRESHOLD) {
+        const broadcastKey = buildCartKey(line.productId, line.sizeCode ?? null);
+        const now = Date.now();
+        const last = lastLowStockBroadcastRef.current;
+        if (!last || last.key !== broadcastKey || now - last.at > LOW_STOCK_BROADCAST_THROTTLE_MS) {
+          lastLowStockBroadcastRef.current = { key: broadcastKey, at: now };
+          sendLowStockAlert({
+            productName: line.name,
+            sizeCode: line.sizeCode ?? null,
+            sizeLabel: line.sizeLabel ?? null,
+            remaining,
+            productId: line.productId,
+          });
+        }
+      }
+    }
   }
 
   function handleRemoveLine(key: string) {
@@ -600,6 +693,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       const syncPayload = {
         warehouseId: payload.warehouseId,
         customerName: payload.customerName || null,
+        customerEmail: payload.customerEmail || null,
         paymentMethod: payload.paymentMethod,
         payments: payload.payments ?? null,
         subtotal: payload.subtotal,
