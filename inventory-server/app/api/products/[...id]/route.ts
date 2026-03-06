@@ -12,6 +12,7 @@ import { requireAuth, requireAdmin, getEffectiveWarehouseId } from '@/lib/auth/s
 import { isValidId } from '@/lib/validation';
 import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 import { getSizeCodes } from '@/lib/data/sizeCodes';
+import { deleteWarehouseProduct } from '@/lib/data/warehouseProducts';
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   const h = corsHeaders(req);
@@ -288,18 +289,7 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
     return withCors(NextResponse.json({ error: 'Invalid warehouseId' }, { status: 400 }), req);
 
   try {
-    const db = getSupabase();
-    await db.from('warehouse_inventory_by_size').delete()
-      .eq('warehouse_id', wid).eq('product_id', id);
-    await db.from('warehouse_inventory').delete()
-      .eq('warehouse_id', wid).eq('product_id', id);
-
-    const { error } = await db.from('warehouse_products').delete()
-      .eq('id', id).eq('warehouse_id', wid);
-
-    if (error)
-      return withCors(NextResponse.json({ error: error.message }, { status: 500 }), req);
-
+    await deleteWarehouseProduct(id, wid);
     await notifyInventoryUpdated(wid);
     return withCors(NextResponse.json({ success: true, id }), req);
   } catch (e: unknown) {

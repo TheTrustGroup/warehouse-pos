@@ -199,7 +199,11 @@ export class SyncService {
         return { success: true, data: payload };
       }
       if (operation === 'DELETE') {
-        await apiDelete(API_BASE_URL, `${basePath}/${idForApi}`);
+        const warehouseId = data.warehouseId ?? data.warehouse_id ?? '';
+        const deleteUrl = warehouseId
+          ? `${basePath}/${idForApi}?warehouse_id=${encodeURIComponent(String(warehouseId))}`
+          : `${basePath}/${idForApi}`;
+        await apiDelete(API_BASE_URL, deleteUrl);
         return { success: true };
       }
       return { success: false, error: `Unknown operation: ${operation}` };

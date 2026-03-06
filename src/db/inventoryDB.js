@@ -231,6 +231,16 @@ export async function addProduct(data) {
     syncStatus: 'pending',
     serverId: null,
     lastModified: ts,
+    ...(data.warehouseId && { warehouseId: data.warehouseId }),
+    ...(data.barcode != null && { barcode: data.barcode }),
+    ...(data.sellingPrice != null && { sellingPrice: data.sellingPrice }),
+    ...(data.costPrice != null && { costPrice: data.costPrice }),
+    ...(data.reorderLevel != null && { reorderLevel: data.reorderLevel }),
+    ...(data.sizeKind != null && { sizeKind: data.sizeKind }),
+    ...(Array.isArray(data.quantityBySize) && { quantityBySize: data.quantityBySize }),
+    ...(data.location != null && { location: data.location }),
+    ...(data.supplier != null && { supplier: data.supplier }),
+    ...(Array.isArray(data.tags) && { tags: data.tags }),
   };
   try {
     await d.products.add(record);
