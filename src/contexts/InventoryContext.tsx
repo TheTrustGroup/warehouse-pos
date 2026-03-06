@@ -19,6 +19,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from '../lib/apiClient';
 import { getApiCircuitBreaker } from '../lib/circuit';
 import { queryKeys } from '../lib/queryKeys';
 import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
+import { isValidWarehouseId, PLACEHOLDER_WAREHOUSE_ID } from '../lib/warehouseId';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
@@ -146,10 +147,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const { currentWarehouseId, currentWarehouse } = useWarehouse();
   const { showToast } = useToast();
   const { tryRefreshSession } = useAuth();
-  const rawWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : DEFAULT_WAREHOUSE_ID;
+  /** Only use placeholder when API has actually returned it as the selected warehouse; otherwise avoid sending it so we don't trigger blocked/cors requests. */
+  const rawWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : '';
   const mainStoreNameNorm = 'main store';
   const isMainStoreIdWithWrongLabel =
-    rawWarehouseId === DEFAULT_WAREHOUSE_ID &&
+    rawWarehouseId === PLACEHOLDER_WAREHOUSE_ID &&
     currentWarehouse &&
     (currentWarehouse.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ') !== mainStoreNameNorm;
   const effectiveWarehouseId = isMainStoreIdWithWrongLabel ? SENTINEL_EMPTY_WAREHOUSE_ID : rawWarehouseId;
@@ -161,7 +163,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const offline = useOfflineInventory();
   /** Refs to keep refreshProducts stable and avoid re-run loops when server is down (prevents list jitter). */
-  const loadProductsRef = useRef<(signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => Promise<void>>(() => Promise.resolve());
+  const loadProductsRef = useRef<(signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number; postSaveRefetch?: boolean }) => Promise<void>>(() => Promise.resolve());
   const offlineRef = useRef(offline);
   offlineRef.current = offline;
   /** Mirror of current products for equivalence check during silent refresh (avoids setState when nothing changed → no jitter). */
@@ -346,16 +348,28 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    * @param options.silent - If true, do not show full-page loading (for background refresh). Default false.
    * @param options.bypassCache - If true, always fetch from server (e.g. when opening Inventory page for fresh data).
    */
-  const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => {
+  const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number; postSaveRefetch?: boolean }) => {
     const silent = options?.silent === true;
     const bypassCache = options?.bypassCache === true;
+    const postSaveRefetch = options?.postSaveRefetch === true;
     const timeoutMs = options?.timeoutMs;
     const wid = useSentinelForProductsRef.current ? SENTINEL_EMPTY_WAREHOUSE_ID : effectiveWarehouseIdRef.current;
 
     const now = Date.now();
+    if (!isValidWarehouseId(wid)) {
+      setBackgroundRefreshing(false);
+      setIsLoading(false);
+      if (!silent) setProducts([]);
+      return;
+    }
+    if (wid === PLACEHOLDER_WAREHOUSE_ID && (!currentWarehouse || currentWarehouse.id !== wid)) {
+      setBackgroundRefreshing(false);
+      setIsLoading(false);
+      return;
+    }
     if (silent) {
-      if (now - lastSilentRefreshAtRef.current < SILENT_REFRESH_THROTTLE_MS) return;
-      if (now - lastSizeUpdateAtRef.current < SIZE_UPDATE_COOLDOWN_MS) return;
+      if (now - lastSilentRefreshAtRef.current < SILENT_REFRESH_THROTTLE_MS && !postSaveRefetch) return;
+      if (now - lastSizeUpdateAtRef.current < SIZE_UPDATE_COOLDOWN_MS && !postSaveRefetch) return;
       lastSilentRefreshAtRef.current = now;
     }
 
@@ -618,6 +632,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         message = errMsg || 'Failed to load products. Please check your connection.';
       }
       if (!silent) setError(message);
+      if (silent && status === 403) {
+        showToast('error', 'Access denied (403). Check your login and permissions.');
+      }
       // On failure, only show this warehouse's cache so we never display another warehouse's stats (e.g. Main Store when Main Town is selected).
       const localRaw = getStoredData<any[]>(productsCacheKey(effectiveWarehouseId), []);
       const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
@@ -1100,7 +1117,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries({ queryKey: queryKeys.products(effectiveWarehouseId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(effectiveWarehouseId, today) });
       queryClient.refetchQueries({ queryKey: queryKeys.dashboard(effectiveWarehouseId, today) });
-      await loadProductsRef.current(undefined, { bypassCache: true, silent: true }).catch(() => {});
+      await loadProductsRef.current(undefined, { bypassCache: true, silent: true, postSaveRefetch: true }).catch(() => {});
       showToast('success', 'Product updated.');
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update (update)');

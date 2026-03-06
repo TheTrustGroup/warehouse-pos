@@ -494,6 +494,8 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       setCharging(false);
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      productsCacheRef.current = null;
+      if (isValidWarehouseId(warehouse.id)) loadProducts(warehouse.id, true);
       if (!isMounted.current) return;
       setSaleResult((prev) =>
         prev

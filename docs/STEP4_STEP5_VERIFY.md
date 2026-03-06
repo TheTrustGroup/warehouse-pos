@@ -69,10 +69,26 @@ The fix is in **shared code**; once this repo is deployed for Hunnid, the same b
 
 ---
 
+## CORS (API allows your frontend)
+
+The **inventory-server** API uses `inventory-server/lib/cors.ts`. It already allows:
+
+- **Exact origins:** `https://warehouse.extremedeptkidz.com`, `https://warehouse.hunnidofficial.com`, `http://localhost:5173`, `http://localhost:3000`, `http://localhost:4173`
+- **Suffixes (any host ending with):** `vercel.app`, `extremedeptkidz.com`, `hunnidofficial.com`
+
+So requests from `https://warehouse.extremedeptkidz.com` to the API (e.g. `https://warehouse-pos-Bag8.vercel.app`) get `Access-Control-Allow-Origin: https://warehouse.extremedeptkidz.com` when the request **reaches** the app. If you still see **Status: "-"** or "access control checks", the request is usually **blocked before** it hits Next.js (e.g. **Vercel Deployment Protection** on the API project). Turn that off for the API deployment; no CORS code change is needed.
+
+---
+
 ## If something fails
 
 - **503/504 on first load only:** Possible race; ensure dashboard/products/sales are only called when `isValidWarehouseId(warehouseId)` (already in code).
 - **Placeholder still in URL:** Hard refresh, clear site data, or confirm the latest commit is deployed.
 - **Charge button stuck on “Loading…”:** Warehouse list or auth may not be returning a valid warehouse; check `/api/warehouses` and `/api/auth/user` (and `user_scopes` in DB for that user).
+
+- **"Fetch API cannot load … due to access control checks" / stock not deducting:** Browser is blocking the request (CORS or 403). In Network tab check the failing request status. If **403**, the API host (e.g. Vercel) may be blocking cross-origin—disable Deployment Protection for API or allow your frontend origin. API must have `SESSION_SECRET`/`JWT_SECRET` and Supabase env so auth succeeds.
+- **"Failed to load resource: the server responded with a status of 403 ()"** appearing a little while after refresh: In **Network** tab, find the request that returned 403. If the URL is **ingest…sentry.io**, it’s Sentry (error reporting); fix or remove `VITE_SENTRY_DSN`, or disable Sentry in project settings—this does not affect app behaviour. If the URL is your **API** (e.g. `/api/products`, `/api/warehouses`), the app now shows a toast "Access denied (403)…"; fix auth/permissions or Deployment Protection on the API host.
+- **GET /api/products shows Status: “-” (no response) / edit product then “Syncing…” but list doesn’t update:** Usually the request is **blocked** (CORS or Vercel Deployment Protection) before the server responds. Check that the request URL uses a **real** warehouse UUID from `/api/warehouses`, not `00000000-0000-0000-0000-000000000001` before the warehouse list has loaded. The app now avoids sending that placeholder until a warehouse is actually selected from the API. Also ensure the **API** Vercel project (e.g. `warehouse-pos-Bag8.vercel.app`) has Deployment Protection **off** and CORS allows your frontend origin (e.g. `https://warehouse.extremedeptkidz.com`).
+- **Inventory update takes a while / don’t reflect:** After saving a product, the list refetches from the server immediately (post-save refetch). If updates still don’t show, check for 403/CORS or status “-” on `/api/products`; a 403 during that refetch now shows a toast so you can fix login or API access.
 
 The diagnostic queries in `DATABASE_DIAGNOSTIC_QUERIES.sql` (including the placeholder and `user_scopes` checks) can be run on both EDK and Hunnid Supabase projects as needed.
