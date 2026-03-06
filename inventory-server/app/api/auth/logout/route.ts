@@ -1,5 +1,6 @@
 /**
- * POST /api/auth/logout — clear session; client should clear token/cookie.
+ * POST /api/auth/logout — clear session cookie and return 200.
+ * No auth required so expired sessions can still clear the cookie.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { corsHeaders } from '@/lib/cors';
@@ -16,9 +17,9 @@ export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
 
-export async function POST(_req: NextRequest): Promise<NextResponse> {
-  const h = corsHeaders(_req);
-  const res = NextResponse.json({ ok: true }, { status: 200, headers: h });
-  clearSessionCookie(res);
-  return withCors(res, _req);
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const h = corsHeaders(req);
+  const response = NextResponse.json({ ok: true }, { status: 200, headers: h });
+  clearSessionCookie(response);
+  return withCors(response, req);
 }

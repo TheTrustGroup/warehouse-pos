@@ -11,7 +11,8 @@
 // ============================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { API_BASE_URL, getApiHeaders } from '../lib/api';
+import { API_BASE_URL } from '../lib/api';
+import { apiGet, apiPatch } from '../lib/apiClient';
 import { useWarehouse } from '../contexts/WarehouseContext';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -285,13 +286,8 @@ export default function DeliveriesPage({ warehouseId: propWarehouseId = '', apiB
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const url = `${base}/api/sales?warehouse_id=${encodeURIComponent(warehouseId)}&limit=200&pending=true`;
-      const res = await fetch(url, {
-        headers: getApiHeaders(),
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
+      const path = `/api/sales?warehouse_id=${encodeURIComponent(warehouseId)}&limit=200&pending=true`;
+      const json = await apiGet<Delivery[] | { data: Delivery[] }>(base, path);
       // API returns array at root or { data }; accept both so deliveries list is never empty due to shape.
       const list = Array.isArray(json) ? json : (json?.data ?? []);
       if (isMounted.current) setDeliveries(list as Delivery[]);
@@ -309,16 +305,7 @@ export default function DeliveriesPage({ warehouseId: propWarehouseId = '', apiB
   async function updateStatus(saleId: string, newStatus: 'dispatched' | 'delivered' | 'cancelled') {
     setActionLoading(saleId);
     try {
-      const res = await fetch(`${base}/api/sales`, {
-        method: 'PATCH',
-        headers: new Headers({ ...getApiHeaders(), 'Content-Type': 'application/json' }),
-        credentials: 'include',
-        body: JSON.stringify({ saleId, deliveryStatus: newStatus, warehouseId }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error((j as { error?: string }).error ?? `HTTP ${res.status}`);
-      }
+      await apiPatch<unknown>(base, '/api/sales', { saleId, deliveryStatus: newStatus, warehouseId });
       // Optimistic update
       setDeliveries(prev =>
         newStatus === 'delivered'

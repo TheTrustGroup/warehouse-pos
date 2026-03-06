@@ -5,3 +5,4 @@ node_modules
 tsconfig.tsbuildinfo
 # Vite build output (copied by build:vercel); generated on deploy
 /public/
+.vercel

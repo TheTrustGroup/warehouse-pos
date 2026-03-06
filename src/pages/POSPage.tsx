@@ -59,6 +59,8 @@ export interface CompletedSale extends SalePayload {
   completedAt?: string;
 }
 
+const PENDING_POS_CART_KEY = 'pending_pos_cart';
+
 function buildCartKey(productId: string, sizeCode: string | null): string {
   return `${productId}__${sizeCode ?? 'NA'}`;
 }
@@ -165,6 +167,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const [saleResult, setSaleResult] = useState<CompletedSale | null>(null);
   const [charging, setCharging] = useState(false);
   const [pendingSalesCount, setPendingSalesCount] = useState(0);
+  const [pendingCartRestore, setPendingCartRestore] = useState<{ cart: CartLine[] } | null>(null);
 
   const { toast, show: showToast } = useToast();
   const isMounted = useRef(true);
@@ -184,6 +187,20 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     return () => {
       isMounted.current = false;
     };
+  }, []);
+
+  // Offer to restore cart saved when session expired during charge
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(PENDING_POS_CART_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { cart: CartLine[]; warehouseId?: string };
+      if (Array.isArray(parsed?.cart) && parsed.cart.length > 0 && isMounted.current) {
+        setPendingCartRestore({ cart: parsed.cart });
+      }
+    } catch {
+      sessionStorage.removeItem(PENDING_POS_CART_KEY);
+    }
   }, []);
 
   // Refresh pending offline sales count (for "Pending sync: N" indicator)
@@ -403,7 +420,6 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       setProducts(applySaleDeduction(productsSnapshot, payload.lines));
       setCart([]);
       setCartOpen(false);
-      setCharging(false);
       await new Promise((r) => setTimeout(r, 50));
       if (!isMounted.current) return { previousCart, previousProducts };
       setSaleResult({
@@ -419,6 +435,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       return { previousCart, previousProducts };
     },
     onError: (err: unknown, _vars: SaleMutationVars, context: { previousCart: CartLine[]; previousProducts: POSProduct[] } | undefined) => {
+      setCharging(false);
       const status = (err as { status?: number })?.status;
       const message = (err as Error)?.message ?? '';
       const detail = (err as { detail?: string })?.detail;
@@ -430,6 +447,16 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       if (status === 409 || status === 422) {
         showToast('Insufficient stock for one or more items. Adjust the cart and try again.', 'err');
       } else if (status === 401) {
+        if (context?.previousCart?.length && _vars?.payload) {
+          try {
+            sessionStorage.setItem(
+              PENDING_POS_CART_KEY,
+              JSON.stringify({ cart: context.previousCart, warehouseId: _vars.payload.warehouseId })
+            );
+          } catch {
+            // ignore
+          }
+        }
         showToast('Session expired. Please log in again.', 'err');
       } else if (status === 404) {
         showToast('Sales API not found. Ensure the backend is deployed and VITE_API_BASE_URL points to it.', 'warn');
@@ -446,6 +473,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       }
     },
     onSuccess: (result, _vars: SaleMutationVars) => {
+      setCharging(false);
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       if (!isMounted.current) return;
@@ -634,6 +662,20 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     loadProducts(warehouse.id, true);
   }
 
+  function handleRestoreCart() {
+    if (pendingCartRestore?.cart?.length) {
+      setCart(pendingCartRestore.cart);
+      setCartOpen(true);
+    }
+    sessionStorage.removeItem(PENDING_POS_CART_KEY);
+    setPendingCartRestore(null);
+  }
+
+  function handleDismissRestore() {
+    sessionStorage.removeItem(PENDING_POS_CART_KEY);
+    setPendingCartRestore(null);
+  }
+
   function handleShareReceipt(sale: SaleSuccessCompletedSale) {
     const lines = sale.lines
       .map(
@@ -702,6 +744,19 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   return (
     <div className="min-h-screen bg-[var(--edk-bg)] flex flex-col overflow-hidden">
+      {pendingCartRestore && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-900 text-sm">
+          <span>Your cart was saved when your session expired. Restore it?</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button type="button" onClick={handleRestoreCart} className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700">
+              Restore
+            </button>
+            <button type="button" onClick={handleDismissRestore} className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-100">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
       <POSHeader
         warehouseName={warehouse.name}
         search={search}

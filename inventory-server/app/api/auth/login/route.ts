@@ -4,6 +4,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { corsHeaders } from '@/lib/cors';
+import { jsonError } from '@/lib/apiResponse';
+import { checkLoginRateLimit } from '@/lib/ratelimit';
 import { validateCredentials } from '@/lib/auth/credentials';
 import { createSessionToken, setSessionCookieWithToken } from '@/lib/auth/session';
 import { getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
@@ -22,15 +24,19 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const h = corsHeaders(req);
+  const rateLimit = await checkLoginRateLimit(req);
+  if (rateLimit.limited) {
+    return withCors(
+      jsonError(429, 'Too many login attempts. Please try again later.', { code: 'RATE_LIMITED', headers: h }),
+      req
+    );
+  }
   try {
     const body = await req.json().catch(() => ({}));
     const email = typeof body.email === 'string' ? body.email.trim() : '';
     const password = typeof body.password === 'string' ? body.password : '';
     if (!email || !password) {
-      return withCors(
-        NextResponse.json({ error: 'Invalid email or password', message: 'Email and password required' }, { status: 401, headers: h }),
-        req
-      );
+      return withCors(jsonError(401, 'Email and password required', { headers: h }), req);
     }
     const user = validateCredentials(email, password);
     const warehouseId = await getSingleWarehouseIdForUser(user.email);
@@ -50,9 +56,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return withCors(response, req);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Invalid email or password';
-    return withCors(
-      NextResponse.json({ error: message, message }, { status: 401, headers: h }),
-      req
-    );
+    return withCors(jsonError(401, message, { headers: h }), req);
   }
 }

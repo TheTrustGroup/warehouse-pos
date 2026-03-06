@@ -94,9 +94,9 @@ export async function fetchSalesFromApi(
   if (params.limit != null) searchParams.set('limit', String(params.limit));
 
   const path = `/api/sales?${searchParams.toString()}`;
-  const res = await apiGet<{ data?: SaleFromApi[]; total?: number }>(baseUrl, path);
-  const data = Array.isArray(res?.data) ? res.data : [];
-  const total = typeof res?.total === 'number' ? res.total : data.length;
+  const res = await apiGet<SaleFromApi[] | { data?: SaleFromApi[]; total?: number }>(baseUrl, path);
+  const data = Array.isArray(res) ? res : (res && typeof res === 'object' && Array.isArray((res as { data?: SaleFromApi[] }).data) ? (res as { data: SaleFromApi[] }).data : []);
+  const total = typeof (res as { total?: number })?.total === 'number' ? (res as { total: number }).total : data.length;
   return { data, total };
 }
 

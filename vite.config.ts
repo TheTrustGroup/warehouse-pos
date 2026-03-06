@@ -52,7 +52,7 @@ export default defineConfig({
     reportCompressedSize: false,
     modulePreload: false,
     terserOptions: {
-      compress: { drop_console: false },
+      compress: { drop_console: true },
     },
     rollupOptions: {
       output: {

@@ -149,7 +149,10 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
       }
 
       const body = await res.json().catch(() => ({ message: res.statusText }));
-      const msg = body?.error ?? body?.message ?? `HTTP ${res.status}: ${res.statusText}`;
+      const msg =
+        res.status === 429
+          ? 'Too many requests; please wait a moment.'
+          : body?.error ?? body?.message ?? `HTTP ${res.status}: ${res.statusText}`;
       const err = new Error(typeof msg === 'string' ? msg : 'Request failed') as Error & {
         status?: number;
         response?: Response;

@@ -37,6 +37,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(req.url);
   const warehouseId = searchParams.get('warehouse_id')?.trim() ?? '';
   const from = searchParams.get('from')?.trim() ?? '';
+  const to = searchParams.get('to')?.trim() ?? '';
   const pendingOnly = searchParams.get('pending') === 'true';
   const limit = Math.min(Number(searchParams.get('limit')) || 500, 500);
   const allowed = scope.allowedWarehouseIds;
@@ -64,6 +65,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .order('created_at', { ascending: false })
       .limit(limit);
     if (from) query = query.gte('created_at', from);
+    if (to) query = query.lte('created_at', to);
     if (pendingOnly) query = query.in('delivery_status', ['pending', 'dispatched', 'cancelled']);
     let salesRows: unknown[] | null = null;
     let salesError: { message: string } | null = null;
@@ -78,6 +80,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .order('created_at', { ascending: false })
         .limit(limit);
       if (from) fallback = fallback.gte('created_at', from);
+      if (to) fallback = fallback.lte('created_at', to);
       const fallbackResult = await fallback;
       salesError = fallbackResult.error as { message: string } | null;
       salesRows = fallbackResult.data as unknown[] | null;

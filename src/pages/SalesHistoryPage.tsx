@@ -11,10 +11,10 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import { apiGet } from '../lib/apiClient';
+import { apiGet, apiPost } from '../lib/apiClient';
 import { printReceipt } from '../lib/printReceipt';
-import { getApiHeaders } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useWarehouse } from '../contexts/WarehouseContext';
 import { PERMISSIONS } from '../types/permissions';
 
 interface SalesHistoryPageProps { apiBaseUrl?: string; }
@@ -134,16 +134,29 @@ const IconRefresh = () => (
 
 // ── Payment badge ──────────────────────────────────────────────────────────
 
+/** Normalize API payment_method (cash, card, mobile_money, mixed) to display label. */
+function paymentMethodDisplay(method: string): string {
+  const m = (method ?? '').trim().toLowerCase();
+  if (m === 'cash') return 'Cash';
+  if (m === 'card') return 'Card';
+  if (m === 'mobile_money' || m === 'momo') return 'MoMo';
+  if (m === 'mixed') return 'Mixed';
+  return method || '—';
+}
+
 const PAY_COLORS: Record<string, string> = {
   Cash: 'bg-emerald-100 text-emerald-800',
   MoMo: 'bg-amber-100  text-amber-800',
   Card: 'bg-blue-100   text-blue-800',
+  Mixed: 'bg-violet-100 text-violet-800',
 };
 
 function PayBadge({ method }: { method: string }) {
+  const label = paymentMethodDisplay(method);
+  const emoji = label === 'Cash' ? '💵' : label === 'MoMo' ? '📱' : label === 'Card' ? '💳' : '💼';
   return (
-    <span className={`inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-bold ${PAY_COLORS[method] ?? 'bg-slate-100 text-slate-600'}`}>
-      {method === 'Cash' ? '💵' : method === 'MoMo' ? '📱' : '💳'} {method}
+    <span className={`inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-bold ${PAY_COLORS[label] ?? 'bg-slate-100 text-slate-600'}`}>
+      {emoji} {label}
     </span>
   );
 }
@@ -291,23 +304,23 @@ function SaleRow({
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────
-
-const WAREHOUSES = [
+/** Fallback when WarehouseContext has not yet loaded warehouses (same ids as migration defaults). */
+const FALLBACK_WAREHOUSES = [
   { id: '00000000-0000-0000-0000-000000000001', name: 'Main Store' },
-  { id: '00000000-0000-0000-0000-000000000002', name: 'Main Town'  },
+  { id: '00000000-0000-0000-0000-000000000002', name: 'Main Town' },
 ];
 
 export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPageProps) {
-
   const { hasPermission, hasRole } = useAuth();
+  const { warehouses: contextWarehouses, currentWarehouseId } = useWarehouse();
   const canVoid = hasPermission(PERMISSIONS.POS.VOID_TRANSACTION);
   const canClearHistory = hasRole(['admin', 'super_admin']);
 
+  const warehouses = contextWarehouses.length > 0 ? contextWarehouses : FALLBACK_WAREHOUSES;
   const [sales, setSales]           = useState<Sale[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
-  const [warehouseId, setWarehouseId] = useState(WAREHOUSES[0].id);
+  const [warehouseId, setWarehouseId] = useState(currentWarehouseId || warehouses[0].id);
   const [dateFilter, setDateFilter] = useState<DateFilter>('today');
   const [search, setSearch]         = useState('');
   const [whDropdown, setWhDropdown] = useState(false);
@@ -340,6 +353,13 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
 
   useEffect(() => { fetchSales(); }, [fetchSales]);
 
+  // Keep warehouse filter in sync with global warehouse selection when it changes
+  useEffect(() => {
+    if (currentWarehouseId && warehouses.some(w => w.id === currentWarehouseId)) {
+      setWarehouseId(currentWarehouseId);
+    }
+  }, [currentWarehouseId, warehouses]);
+
   // ── Filter by search ──────────────────────────────────────────────────────
 
   const displayed = sales.filter(s => {
@@ -358,11 +378,12 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
 
   const totalRevenue    = displayed.reduce((s, x) => s + x.total, 0);
   const totalItems      = displayed.reduce((s, x) => s + x.itemCount, 0);
-  const cashTotal       = displayed.filter(s => s.paymentMethod === 'Cash').reduce((s, x) => s + x.total, 0);
-  const momoTotal       = displayed.filter(s => s.paymentMethod === 'MoMo').reduce((s, x) => s + x.total, 0);
-  const cardTotal       = displayed.filter(s => s.paymentMethod === 'Card').reduce((s, x) => s + x.total, 0);
+  const pm = (s: Sale) => (s.paymentMethod ?? '').trim().toLowerCase();
+  const cashTotal       = displayed.filter(s => pm(s) === 'cash').reduce((s, x) => s + x.total, 0);
+  const momoTotal       = displayed.filter(s => pm(s) === 'mobile_money' || pm(s) === 'momo').reduce((s, x) => s + x.total, 0);
+  const cardTotal       = displayed.filter(s => pm(s) === 'card').reduce((s, x) => s + x.total, 0);
   const avgSale         = displayed.length > 0 ? totalRevenue / displayed.length : 0;
-  const currentWh       = WAREHOUSES.find(w => w.id === warehouseId) ?? WAREHOUSES[0];
+  const currentWh       = warehouses.find(w => w.id === warehouseId) ?? warehouses[0];
 
   // ── Print ─────────────────────────────────────────────────────────────────
 
@@ -372,22 +393,13 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
     setError(null);
     try {
       const base = apiBaseUrl.replace(/\/$/, '');
-      const res = await fetch(`${base}/api/sales/void`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiHeaders() as Record<string, string> },
-        credentials: 'include',
-        body: JSON.stringify({ saleId: sale.id, warehouseId: sale.warehouseId }),
-      });
-      const json = await res.json().catch(() => ({}));
-      const errBody = json as { error?: string; detail?: string };
-      if (!res.ok) {
-        const msg = errBody.detail ?? errBody.error ?? `Void failed (${res.status})`;
-        setError(msg);
-        return;
-      }
+      await apiPost<unknown>(base, '/api/sales/void', { saleId: sale.id, warehouseId: sale.warehouseId });
       setSales(prev =>
         prev.map(s => (s.id === sale.id ? { ...s, voidedAt: new Date().toISOString() } : s))
       );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : `Void failed`;
+      setError(msg);
     } finally {
       setVoidingId(null);
     }
@@ -425,19 +437,11 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
     setError(null);
     try {
       const base = apiBaseUrl.replace(/\/$/, '');
-      const res = await fetch(`${base}/api/admin/clear-sales-history`, {
-        method: 'POST',
-        headers: { ...getApiHeaders() as Record<string, string>, 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ confirm: 'CLEAR_ALL_SALES' }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError((json as { error?: string }).error ?? `Clear failed (${res.status})`);
-        return;
-      }
+      await apiPost<unknown>(base, '/api/admin/clear-sales-history', { confirm: 'CLEAR_ALL_SALES' });
       setSales([]);
       fetchSales();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Clear failed');
     } finally {
       setClearHistoryLoading(false);
     }
@@ -502,7 +506,7 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setWhDropdown(false)}/>
                   <div className="absolute left-0 top-6 z-20 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 w-40">
-                    {WAREHOUSES.map(w => (
+                    {warehouses.map(w => (
                       <button key={w.id} type="button"
                               onClick={() => { setWarehouseId(w.id); setWhDropdown(false); }}
                               className={`w-full px-4 py-2.5 text-left text-[13px] font-medium transition-colors

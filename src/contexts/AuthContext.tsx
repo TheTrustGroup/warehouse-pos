@@ -316,11 +316,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) headers['Authorization'] = token;
       const opts = { method: 'GET' as const, headers, credentials: 'include' as const };
 
-      // Validate session: /admin/api/me first; only try /api/auth/user on 404/403 (not on 401 to avoid second 401 in console).
-      let response = await fetch(`${API_BASE_URL}/admin/api/me`, opts);
-      if (response.status === 404 || response.status === 403) {
-        response = await fetch(`${API_BASE_URL}/api/auth/user`, opts);
-      }
+      // Validate session: use /api/auth/user only (inventory-server has no /admin/api/me).
+      const response = await fetch(`${API_BASE_URL}/api/auth/user`, opts);
 
       if (response.ok) {
         const userData = await handleApiResponse<User>(response);
