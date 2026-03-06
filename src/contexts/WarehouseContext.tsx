@@ -51,6 +51,8 @@ interface WarehouseContextType {
   setCurrentWarehouseId: (id: string) => void;
   currentWarehouse: Warehouse | null;
   isLoading: boolean;
+  /** Set when GET /api/warehouses failed (network, 404, 500). Clear on successful refresh. */
+  loadError: string | null;
   refreshWarehouses: (options?: { timeoutMs?: number }) => Promise<void>;
   /** True when POS can sell (single warehouse auto-selected, or user selected when multiple). No silent default. */
   isWarehouseSelectedForPOS: boolean;
@@ -75,8 +77,10 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
     return '';
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const refreshWarehouses = useCallback(async (options?: { timeoutMs?: number }) => {
+    setLoadError(null);
     try {
       const list = await apiGet<Warehouse[]>(API_BASE_URL, '/api/warehouses', {
         timeoutMs: options?.timeoutMs,
@@ -95,7 +99,9 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
       } else {
         setCurrentWarehouseIdState('');
       }
-    } catch {
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not load warehouses';
+      setLoadError(message);
       setWarehouses([]);
       setCurrentWarehouseIdState('');
     } finally {
@@ -151,6 +157,7 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
         setCurrentWarehouseId,
         currentWarehouse,
         isLoading,
+        loadError,
         refreshWarehouses,
         isWarehouseSelectedForPOS,
         isWarehouseBoundToSession,

@@ -169,3 +169,9 @@ WHERE us.user_email = (auth.jwt() ->> 'email');
 -- FROM user_scopes us
 -- JOIN warehouses w ON w.id = us.warehouse_id
 -- ORDER BY us.user_email, us.warehouse_id;
+
+/* Step 4 verify: recent sales — warehouse_id must be real UUIDs (not placeholder) after fix */
+SELECT id, warehouse_id, total, created_at
+FROM sales
+ORDER BY created_at DESC
+LIMIT 5;

@@ -134,7 +134,7 @@ function useToast() {
 
 export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const queryClient = useQueryClient();
-  const { currentWarehouse, warehouses, currentWarehouseId } = useWarehouse();
+  const { currentWarehouse, warehouses, currentWarehouseId, loadError: warehouseLoadError, refreshWarehouses } = useWarehouse();
   const { user, tryRefreshSession } = useAuth();
   const { products: inventoryProducts } = useInventory();
   const triedRefreshRef = useRef(false);
@@ -803,9 +803,25 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         <div className="flex-1 overflow-y-auto min-h-0 pb-20 lg:pb-0">
           {!isWarehouseLoaded ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-              <div className="w-10 h-10 border-2 border-[var(--edk-red)] border-t-transparent rounded-full animate-spin" aria-hidden />
-              <p className="text-[var(--edk-ink-2)] font-medium">Loading warehouse…</p>
-              <p className="text-sm text-[var(--edk-ink-3)]">Location must be set before you can sell.</p>
+              {warehouseLoadError ? (
+                <>
+                  <p className="text-[var(--edk-ink-2)] font-medium">Could not load warehouse</p>
+                  <p className="text-sm text-[var(--edk-ink-3)] max-w-md">{warehouseLoadError}</p>
+                  <button
+                    type="button"
+                    onClick={() => refreshWarehouses()}
+                    className="rounded-lg bg-[var(--edk-red)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+                  >
+                    Retry
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="w-10 h-10 border-2 border-[var(--edk-red)] border-t-transparent rounded-full animate-spin" aria-hidden />
+                  <p className="text-[var(--edk-ink-2)] font-medium">Loading warehouse…</p>
+                  <p className="text-sm text-[var(--edk-ink-3)]">Location must be set before you can sell.</p>
+                </>
+              )}
             </div>
           ) : productsLoadError ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
