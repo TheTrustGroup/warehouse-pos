@@ -100,6 +100,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         }
         const singleRes = NextResponse.json(product, { headers: h });
         singleRes.headers.set('Cache-Control', 'private, no-store, max-age=0');
+        singleRes.headers.set('X-Data-Warehouse-Id', warehouseId);
         return logAndReturn(withCors(singleRes, req));
       }
 
@@ -126,6 +127,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const res = NextResponse.json({ data: result.data, total: result.total }, { headers: h });
         res.headers.set('Cache-Control', 'private, no-store, max-age=0');
         res.headers.set('X-Content-Type-Options', 'nosniff');
+        res.headers.set('X-Data-Warehouse-Id', warehouseId);
         return logAndReturn(withCors(res, req));
       } catch (e) {
         const isAbortOrTimeout =

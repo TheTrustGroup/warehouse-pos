@@ -59,6 +59,7 @@ export function corsHeaders(req: NextRequest): Record<string, string> {
       'Content-Type, Authorization, x-request-id, Idempotency-Key, X-Requested-With, Accept',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Max-Age': '86400',
+    'Access-Control-Expose-Headers': 'X-Data-Warehouse-Id',
     'Vary': 'Origin',
   };
 }

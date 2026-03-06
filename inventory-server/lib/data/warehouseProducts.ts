@@ -178,7 +178,7 @@ export async function getWarehouseProducts(
   }
 
   const list = (rows ?? []) as Record<string, unknown>[];
-  const productIds = list.map((r) => r.id as string);
+  const productIds = list.map((r) => String(r.id ?? ''));
   const productIdSet = new Set(productIds);
 
   const invMap: Record<string, number> = {};
@@ -211,8 +211,9 @@ export async function getWarehouseProducts(
     } else {
       const invData = (inventoryResult.data ?? []) as { product_id: string; quantity?: number }[];
       for (const inv of invData) {
-        if (productIdSet.has(inv.product_id)) {
-          invMap[inv.product_id] = Number(inv.quantity ?? 0);
+        const pid = String(inv.product_id ?? '');
+        if (productIdSet.has(pid)) {
+          invMap[pid] = Number(inv.quantity ?? 0);
         }
       }
     }
@@ -229,11 +230,12 @@ export async function getWarehouseProducts(
       else console.error('[warehouseProducts] warehouse_inventory_by_size query failed:', (withoutJoin as { error?: { message?: string } }).error?.message ?? sizesResult.error.message);
     } else {
       const sizeData = (sizesResult.data ?? []) as SizeRow[];
-      sizeRows = sizeData.filter((r) => productIdSet.has(r.product_id));
+      sizeRows = sizeData.filter((r) => productIdSet.has(String(r.product_id ?? '')));
     }
     for (const r of sizeRows) {
-      if (!sizeMap[r.product_id]) sizeMap[r.product_id] = [];
-      sizeMap[r.product_id].push({
+      const pid = String(r.product_id ?? '');
+      if (!sizeMap[pid]) sizeMap[pid] = [];
+      sizeMap[pid].push({
         sizeCode: String(r.size_code),
         sizeLabel: r.size_codes?.size_label ?? r.size_code,
         quantity: Number(r.quantity ?? 0),
@@ -242,7 +244,7 @@ export async function getWarehouseProducts(
 
     // Fallback: sized products with no by_size rows in this warehouse may have sizes in another warehouse — show those size codes with 0 so we don't show "No sizes recorded".
     const sizedProductIdsWithNoSizes = productIds.filter(
-      (id) => (list.find((r) => r.id === id) as Record<string, unknown>)?.size_kind === 'sized' && (sizeMap[id]?.length ?? 0) === 0
+      (id) => (list.find((r) => String(r.id ?? '') === id) as Record<string, unknown>)?.size_kind === 'sized' && (sizeMap[id]?.length ?? 0) === 0
     );
     if (sizedProductIdsWithNoSizes.length > 0) {
       const { data: fallbackRows } = await db
@@ -252,17 +254,18 @@ export async function getWarehouseProducts(
       const fallbackList = (fallbackRows ?? []) as Array<{ product_id: string; size_code: string; size_codes?: { size_label?: string } | null }>;
       const seenPerProduct = new Map<string, Set<string>>();
       for (const r of fallbackList) {
-        if (!productIdSet.has(r.product_id)) continue;
-        let set = seenPerProduct.get(r.product_id);
+        const pid = String(r.product_id ?? '');
+        if (!productIdSet.has(pid)) continue;
+        let set = seenPerProduct.get(pid);
         if (!set) {
           set = new Set<string>();
-          seenPerProduct.set(r.product_id, set);
+          seenPerProduct.set(pid, set);
         }
         const code = String(r.size_code);
         if (set.has(code)) continue;
         set.add(code);
-        if (!sizeMap[r.product_id]) sizeMap[r.product_id] = [];
-        sizeMap[r.product_id].push({
+        if (!sizeMap[pid]) sizeMap[pid] = [];
+        sizeMap[pid].push({
           sizeCode: code,
           sizeLabel: r.size_codes?.size_label ?? code,
           quantity: 0,
@@ -272,13 +275,14 @@ export async function getWarehouseProducts(
   }
 
   const data = list.map((row) => {
-    const sizes = (sizeMap[row.id as string] ?? []).sort((a, b) =>
+    const rowId = String(row.id ?? '');
+    const sizes = (sizeMap[rowId] ?? []).sort((a, b) =>
       a.sizeCode.localeCompare(b.sizeCode)
     );
     const hasSizeRows = sizes.length > 0;
     const quantity = hasSizeRows
       ? sizes.reduce((s, r) => s + r.quantity, 0)
-      : invMap[row.id as string] ?? 0;
+      : invMap[rowId] ?? 0;
 
     if (options.lowStock && quantity > (Number(row.reorder_level ?? 0) || 3)) return null;
     if (options.outOfStock && quantity > 0) return null;
