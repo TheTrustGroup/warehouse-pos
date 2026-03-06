@@ -27,7 +27,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (auth instanceof NextResponse) return withCors(auth, req);
 
   // Only bind warehouse when user has exactly one in scope (cashier/POS). Multi-warehouse (admin) gets no warehouse_id so selector shows.
-  const warehouseId = auth.warehouse_id ?? await getSingleWarehouseIdForUser(auth.email);
+  // Ignore session warehouse_id so that even stale sessions get correct behavior (dropdown for info@).
+  const warehouseId = await getSingleWarehouseIdForUser(auth.email);
 
   const userPayload = {
     ...sessionUserToJson(auth),
