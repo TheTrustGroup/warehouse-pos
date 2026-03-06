@@ -1,5 +1,4 @@
-# CI: lint, test, and build frontend + backend on every push/PR to main.
-# Deploy: frontend and API are deployed separately (e.g. Vercel from main); see docs/ENGINEERING_RULES.md.
+# CI: unit tests, build, and optional E2E (Playwright). P3#22.
 name: CI
 on:
   push:
@@ -7,27 +6,26 @@ on:
   pull_request:
     branches: [main]
 jobs:
-  check:
+  unit-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Lint frontend
-        run: npm run lint
-
-      - name: Test and build frontend
-        run: npm run ci
-
-      - name: Install backend dependencies
-        run: cd inventory-server && npm ci
-
-      - name: Build backend
-        run: cd inventory-server && npm run build
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run ci
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+      - name: Run E2E tests
+        run: npm run test:e2e
