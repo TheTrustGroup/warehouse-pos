@@ -1151,8 +1151,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries({ queryKey: queryKeys.products(dataWarehouseId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(dataWarehouseId, today) });
       queryClient.refetchQueries({ queryKey: queryKeys.dashboard(dataWarehouseId, today) });
-      await loadProductsRef.current(undefined, { bypassCache: true, silent: true, postSaveRefetch: true }).catch(() => {});
       showToast('success', 'Product updated.');
+      // Delay refetch so backend has time to commit; avoids refetch overwriting with stale empty sizes
+      const postSaveDelayMs = isSized ? 2000 : 500;
+      await new Promise((r) => setTimeout(r, postSaveDelayMs));
+      await loadProductsRef.current(undefined, { bypassCache: true, silent: true, postSaveRefetch: true }).catch(() => {});
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update (update)');
         console.timeEnd('Total Update Time');
