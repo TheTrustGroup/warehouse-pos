@@ -9,8 +9,8 @@ import { getSupabase } from '@/lib/supabase';
 import { getCached, setCached } from '@/lib/cache/dashboardStatsCache';
 
 const LOW_STOCK_ALERTS_LIMIT = 10;
-/** Cap aligned with getWarehouseProducts (250) to avoid timeouts; stats are over this sample. */
-const PRODUCTS_LIMIT = 250;
+/** When we have view stats we only need products for lowStockItems + categorySummary; smaller fetch finishes under timeout. */
+const DASHBOARD_PRODUCTS_LIMIT = 100;
 
 /** Derive quantity from actual data: sum of quantityBySize when present, else quantity. */
 function getProductQty(p: ProductRecord): number {
@@ -131,6 +131,25 @@ async function getTodaySalesTotal(warehouseId: string, date: string): Promise<nu
  */
 export async function getTodaySalesByWarehouse(date: string): Promise<Record<string, number>> {
   const supabase = getSupabase();
+  // Prefer SQL aggregation (fast + low bandwidth). Fallback is row-scan (can be slow on big tables).
+  const { data: agg, error: aggError } = await supabase.rpc('get_today_sales_by_warehouse', {
+    p_date: date,
+  });
+
+  if (!aggError && Array.isArray(agg)) {
+    const out: Record<string, number> = {};
+    for (const row of agg as Array<{ warehouse_id?: string; revenue?: number | string }>) {
+      const wid = row.warehouse_id ?? '';
+      const revenue = Number(row.revenue ?? 0);
+      if (wid) out[wid] = revenue;
+    }
+    return out;
+  }
+
+  if (aggError) {
+    console.warn('[dashboardStats] get_today_sales_by_warehouse RPC failed, falling back:', aggError.message);
+  }
+
   const start = `${date}T00:00:00.000Z`;
   const end = `${date}T23:59:59.999Z`;
   const { data, error } = await supabase
@@ -174,8 +193,14 @@ function isDashboardStatsResult(v: unknown): v is DashboardStatsResult {
  * Compute only the low-stock alerts list from a fresh product fetch.
  * Used when serving from cache so Stock Alerts always reflect current inventory (data integrity).
  */
-async function computeLowStockItemsFresh(warehouseId: string): Promise<DashboardLowStockItem[]> {
-  const productsResult = await getWarehouseProducts(warehouseId, { limit: PRODUCTS_LIMIT });
+async function computeLowStockItemsFresh(
+  warehouseId: string,
+  signal?: AbortSignal | null
+): Promise<DashboardLowStockItem[]> {
+  const productsResult = await getWarehouseProducts(warehouseId, {
+    limit: DASHBOARD_PRODUCTS_LIMIT,
+    signal: signal ?? undefined,
+  });
   const products = productsResult.data;
   const lowStockCandidates: ProductRecord[] = [];
   for (const p of products) {
@@ -201,11 +226,12 @@ async function computeLowStockItemsFresh(warehouseId: string): Promise<Dashboard
  */
 async function computeDashboardStatsUncached(
   warehouseId: string,
-  date: string
+  date: string,
+  signal?: AbortSignal | null
 ): Promise<DashboardStatsResult> {
   const [viewStats, productsResult, todaySales] = await Promise.all([
     getWarehouseStatsFromView(warehouseId),
-    getWarehouseProducts(warehouseId, { limit: PRODUCTS_LIMIT }),
+    getWarehouseProducts(warehouseId, { limit: DASHBOARD_PRODUCTS_LIMIT, signal: signal ?? undefined }),
     getTodaySalesTotal(warehouseId, date),
   ]);
   const products = productsResult.data;
@@ -296,20 +322,21 @@ async function computeDashboardStatsUncached(
  */
 export async function getDashboardStats(
   warehouseId: string,
-  options: { date?: string } = {}
+  options: { date?: string; signal?: AbortSignal | null } = {}
 ): Promise<DashboardStatsResult> {
   const date = options.date ?? new Date().toISOString().split('T')[0];
+  const signal = options.signal ?? null;
   const useCache = isToday(date);
 
   if (useCache) {
     const cached = await getCached(warehouseId);
     if (isDashboardStatsResult(cached)) {
-      const lowStockItems = await computeLowStockItemsFresh(warehouseId);
+      const lowStockItems = await computeLowStockItemsFresh(warehouseId, signal);
       return { ...cached, lowStockItems };
     }
   }
 
-  const result = await computeDashboardStatsUncached(warehouseId, date);
+  const result = await computeDashboardStatsUncached(warehouseId, date, signal);
   if (useCache) {
     await setCached(warehouseId, result);
   }

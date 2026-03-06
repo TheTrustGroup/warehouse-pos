@@ -10,7 +10,8 @@ import { requireAuth } from '@/lib/auth/session';
 import { getTodaySalesByWarehouse } from '@/lib/data/dashboardStats';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 20;
+/** Match dashboard headroom; RPC keeps work short. */
+export const maxDuration = 30;
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   Object.entries(corsHeaders(req)).forEach(([k, v]) => res.headers.set(k, v));
@@ -33,9 +34,8 @@ export async function GET(req: NextRequest) {
     return withCors(NextResponse.json(data), req);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Internal error';
-    return withCors(
-      NextResponse.json({ error: message }, { status: 500 }),
-      req
-    );
+    console.error('[api/dashboard/today-by-warehouse GET]', message);
+    // Return 200 with empty object so client does not retry storm.
+    return withCors(NextResponse.json({}), req);
   }
 }

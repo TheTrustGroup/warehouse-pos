@@ -1,16 +1,15 @@
 /**
  * React Query hooks for dashboard data.
  * Dashboard query: staleTime 0 so Stock Alerts refetch when Dashboard is shown/focused.
- * Server always returns fresh lowStockItems (merged on cache hit); client refetch ensures UI updates.
- * Uses apiGet so dashboard GET gets retries, timeout, and circuit breaker (fewer "Failed to load data" from transient 503).
+ * Uses dashboardApi (dedupe + exponential backoff + dashboard-only circuit) so dashboard
+ * failures do not open the global circuit or disable sales/POS.
  */
 import { useQueries } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/api';
-import { apiGet } from '../lib/apiClient';
+import { dashboardGet } from '../lib/dashboardApi';
 import { queryKeys } from '../lib/queryKeys';
 import { isValidWarehouseId } from '../lib/warehouseId';
 
-const FETCH_TIMEOUT_MS = 35_000;
 const STALE_MS_DASHBOARD = 0;        // Always refetch when Dashboard is used (alerts must be current)
 const STALE_MS_TODAY_BY_WAREHOUSE = 60 * 1000;
 const GC_MS = 5 * 60 * 1000;  // 5 minutes
@@ -37,6 +36,8 @@ export interface DashboardData {
   todaySales: number;
   lowStockItems: DashboardLowStockItem[];
   categorySummary: DashboardCategorySummary;
+  /** Set when API returns 200 with empty stats (e.g. backend error). */
+  error?: string;
 }
 
 async function fetchDashboard(
@@ -46,10 +47,7 @@ async function fetchDashboard(
 ): Promise<DashboardData> {
   const path = `/api/dashboard?warehouse_id=${encodeURIComponent(warehouseId)}&date=${date}`;
   try {
-    const data = await apiGet<DashboardData>(API_BASE_URL, path, {
-      timeoutMs: FETCH_TIMEOUT_MS,
-      signal,
-    });
+    const data = await dashboardGet<DashboardData>(API_BASE_URL, path, { signal });
     if (data == null || typeof data !== 'object') {
       throw new Error('Invalid dashboard response');
     }
@@ -60,12 +58,10 @@ async function fetchDashboard(
   }
 }
 
-async function fetchTodayByWarehouse(date: string): Promise<Record<string, number>> {
+async function fetchTodayByWarehouse(date: string, signal?: AbortSignal | null): Promise<Record<string, number>> {
   const path = `/api/dashboard/today-by-warehouse?date=${date}`;
   try {
-    const data = await apiGet<Record<string, number>>(API_BASE_URL, path, {
-      timeoutMs: FETCH_TIMEOUT_MS,
-    });
+    const data = await dashboardGet<Record<string, number>>(API_BASE_URL, path, { signal });
     return data != null && typeof data === 'object' ? data : {};
   } catch {
     return {};
@@ -86,7 +82,7 @@ export function useDashboardQuery(warehouseId: string) {
       },
       {
         queryKey: queryKeys.todayByWarehouse(today),
-        queryFn: () => fetchTodayByWarehouse(today),
+        queryFn: ({ signal }) => fetchTodayByWarehouse(today, signal),
         staleTime: STALE_MS_TODAY_BY_WAREHOUSE,
         gcTime: GC_MS,
         enabled: true,

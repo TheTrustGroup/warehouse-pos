@@ -12,7 +12,6 @@ import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle,
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { usePresence } from '../contexts/PresenceContext';
-import { getApiCircuitBreaker } from '../lib/circuit';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { useDashboardQuery, type DashboardLowStockItem } from '../hooks/useDashboardQuery';
 
@@ -260,17 +259,31 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Error ── */}
-        {error && !loading && (
+        {/* ── Soft notice when API returned 200 with empty stats (no circuit; sales/POS still work) ── */}
+        {dashboard?.error && !loading && (
+          <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-100">
+            <AlertTriangle className="w-6 h-6 flex-shrink-0 text-amber-600" aria-hidden />
+            <div>
+              <p className="text-[14px] font-bold text-amber-800">Stats temporarily unavailable</p>
+              <p className="text-[12px] text-amber-700 mt-0.5">{dashboard.error}</p>
+              <p className="text-[11px] text-slate-500 mt-1">Dashboard stats only — sales and inventory are unaffected.</p>
+            </div>
+            <button onClick={() => refetch()} className="ml-auto px-4 py-2 rounded-xl bg-amber-500 text-white text-[12px] font-bold hover:bg-amber-600">
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* ── Hard error (query failed after retries or dashboard circuit open) ── */}
+        {error && !loading && !dashboard?.error && (
           <div className="flex items-center gap-3 p-4 rounded-2xl bg-red-50 border border-red-100">
             <AlertTriangle className="w-6 h-6 flex-shrink-0 text-red-500" aria-hidden />
             <div>
               <p className="text-[14px] font-bold text-red-700">Failed to load data</p>
               <p className="text-[12px] text-red-500 mt-0.5">{error}</p>
-              <p className="text-[11px] text-slate-500 mt-1">After the server is fixed, click Retry to reset the circuit and try again.</p>
+              <p className="text-[11px] text-slate-500 mt-1">Dashboard only — sales and POS still work. Click Retry to try again.</p>
             </div>
-            <button onClick={() => { getApiCircuitBreaker().reset(); refetch(); }}
-                    className="ml-auto px-4 py-2 rounded-xl bg-red-500 text-white text-[12px] font-bold hover:bg-red-600">
+            <button onClick={() => refetch()} className="ml-auto px-4 py-2 rounded-xl bg-red-500 text-white text-[12px] font-bold hover:bg-red-600">
               Retry
             </button>
           </div>
