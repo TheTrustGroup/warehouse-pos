@@ -8,7 +8,7 @@ import { jsonError } from '@/lib/apiResponse';
 import { checkLoginRateLimit } from '@/lib/ratelimit';
 import { validateCredentials } from '@/lib/auth/credentials';
 import { createSessionToken, setSessionCookieWithToken } from '@/lib/auth/session';
-import { getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
+import { getScopeForUser, getSingleWarehouseIdForUser } from '@/lib/data/userScopes';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 15;
@@ -39,7 +39,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return withCors(jsonError(401, 'Email and password required', { headers: h }), req);
     }
     const user = validateCredentials(email, password);
-    const warehouseId = await getSingleWarehouseIdForUser(user.email);
+    const singleWarehouse = await getSingleWarehouseIdForUser(user.email);
+    const scope = await getScopeForUser(user.email);
+    const warehouseId = singleWarehouse ?? scope.allowedWarehouseIds[0];
     const token = await createSessionToken(user.email, user.role, warehouseId ? { warehouse_id: warehouseId } : undefined);
     const userPayload = {
       id: 'api-session-user',
