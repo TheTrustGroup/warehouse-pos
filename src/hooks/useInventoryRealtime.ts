@@ -1,7 +1,8 @@
 /**
  * Supabase Realtime subscription for instant cross-device inventory and sales updates.
  * Subscribes to warehouse_inventory_by_size, sales, and warehouse_products; on any change
- * invalidates React Query caches so the app refetches clean data (never uses event payload as source of truth).
+ * invalidates React Query caches and calls onRefetch so the product list state is updated
+ * (InventoryContext uses loadProducts(), not useQuery, so invalidation alone does not update UI).
  *
  * Requires: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY. Enable Replication in Supabase for the three tables.
  */
@@ -14,14 +15,36 @@ import { isValidWarehouseId } from '../lib/warehouseId';
 import { useRealtimeContext } from '../contexts/RealtimeContext';
 import type { RealtimeStatus } from '../contexts/RealtimeContext';
 
-export function useInventoryRealtime(warehouseId: string | null | undefined): void {
+export interface UseInventoryRealtimeOptions {
+  /** When provided, called on every inventory/products/sales change so the app can refetch and update state (required for cross-tab/cross-device sync). */
+  onRefetch?: () => void;
+}
+
+function runRefetch(onRefetch: (() => void) | undefined): void {
+  if (typeof onRefetch === 'function') {
+    try {
+      onRefetch();
+    } catch (e) {
+      if (import.meta.env?.DEV) console.warn('[Realtime] onRefetch error:', e);
+    }
+  }
+}
+
+export function useInventoryRealtime(
+  warehouseId: string | null | undefined,
+  options: UseInventoryRealtimeOptions = {}
+): void {
+  const { onRefetch } = options;
   const queryClient = useQueryClient();
   const realtimeContext = useRealtimeContext();
   const setStatusRef = useRef(realtimeContext?.setStatus);
   setStatusRef.current = realtimeContext?.setStatus;
+  const onRefetchRef = useRef(onRefetch);
+  onRefetchRef.current = onRefetch;
 
   useEffect(() => {
     const setStatus = (s: RealtimeStatus) => setStatusRef.current?.(s);
+    const refetch = () => runRefetch(onRefetchRef.current);
 
     if (!warehouseId || !isValidWarehouseId(warehouseId)) {
       setStatus('disconnected');
@@ -56,6 +79,7 @@ export function useInventoryRealtime(warehouseId: string | null | undefined): vo
           queryClient.invalidateQueries({ queryKey: queryKeys.products(warehouseId) });
           queryClient.invalidateQueries({ queryKey: ['dashboard', warehouseId] });
           queryClient.invalidateQueries({ queryKey: queryKeys.posProducts(warehouseId) });
+          refetch();
         }
       )
       .on(
@@ -70,6 +94,7 @@ export function useInventoryRealtime(warehouseId: string | null | undefined): vo
           queryClient.invalidateQueries({ queryKey: ['sales', warehouseId] });
           queryClient.invalidateQueries({ queryKey: ['dashboard', warehouseId] });
           queryClient.invalidateQueries({ queryKey: queryKeys.reports(warehouseId) });
+          refetch();
         }
       )
       .on(
@@ -84,6 +109,7 @@ export function useInventoryRealtime(warehouseId: string | null | undefined): vo
           queryClient.invalidateQueries({ queryKey: ['sales', warehouseId] });
           queryClient.invalidateQueries({ queryKey: ['dashboard', warehouseId] });
           queryClient.invalidateQueries({ queryKey: queryKeys.reports(warehouseId) });
+          refetch();
         }
       )
       .on(
@@ -98,6 +124,7 @@ export function useInventoryRealtime(warehouseId: string | null | undefined): vo
           queryClient.invalidateQueries({ queryKey: ['sales', warehouseId] });
           queryClient.invalidateQueries({ queryKey: ['dashboard', warehouseId] });
           queryClient.invalidateQueries({ queryKey: queryKeys.reports(warehouseId) });
+          refetch();
         }
       )
       .on(
@@ -111,6 +138,7 @@ export function useInventoryRealtime(warehouseId: string | null | undefined): vo
           queryClient.invalidateQueries({ queryKey: queryKeys.products(warehouseId) });
           queryClient.invalidateQueries({ queryKey: ['dashboard', warehouseId] });
           queryClient.invalidateQueries({ queryKey: queryKeys.posProducts(warehouseId) });
+          refetch();
         }
       )
       .subscribe((subscriptionStatus) => {
@@ -119,6 +147,7 @@ export function useInventoryRealtime(warehouseId: string | null | undefined): vo
           queryClient.invalidateQueries({ queryKey: queryKeys.products(warehouseId) });
           queryClient.invalidateQueries({ queryKey: ['dashboard', warehouseId] });
           queryClient.invalidateQueries({ queryKey: ['sales', warehouseId] });
+          refetch();
         }
         if (subscriptionStatus === 'CHANNEL_ERROR') setStatus('error');
         if (subscriptionStatus === 'TIMED_OUT') setStatus('connecting');

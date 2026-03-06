@@ -172,10 +172,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /** Refs for loadProducts so request uses current selection; when true, use sentinel id so we never load Main Store data for a "Main Town" selection. */
   const effectiveWarehouseIdRef = useRef(effectiveWarehouseId) as React.MutableRefObject<string>;
   const useSentinelForProductsRef = useRef<boolean>(isMainStoreIdWithWrongLabel) as React.MutableRefObject<boolean>;
+  /** When sentinel is used, this is the real warehouse id (e.g. placeholder); use for post-save refetch so we get back sizes instead of empty. */
+  const rawWarehouseIdRef = useRef(rawWarehouseId) as React.MutableRefObject<string>;
   useEffect(() => {
     effectiveWarehouseIdRef.current = effectiveWarehouseId;
     useSentinelForProductsRef.current = Boolean(isMainStoreIdWithWrongLabel);
-  }, [effectiveWarehouseId, isMainStoreIdWithWrongLabel]);
+    rawWarehouseIdRef.current = rawWarehouseId;
+  }, [effectiveWarehouseId, isMainStoreIdWithWrongLabel, rawWarehouseId]);
   /** Throttle silent refresh so poll + visibility + mount don't cause back-to-back requests (reduces list jitter). */
   const lastSilentRefreshAtRef = useRef<number>(0);
   const SILENT_REFRESH_THROTTLE_MS = 2000;
@@ -355,6 +358,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const postSaveRefetch = options?.postSaveRefetch === true;
     const timeoutMs = options?.timeoutMs;
     const wid = useSentinelForProductsRef.current ? SENTINEL_EMPTY_WAREHOUSE_ID : effectiveWarehouseIdRef.current;
+    // When refetching after a save, request the real warehouse so we get back quantityBySize (sentinel returns empty sizes).
+    const fetchWid = postSaveRefetch && useSentinelForProductsRef.current
+      ? (rawWarehouseIdRef.current || wid)
+      : wid;
 
     const now = Date.now();
     if (!isValidWarehouseId(wid)) {
@@ -407,11 +414,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       try {
         if (bypassCache) {
-          await queryClient.invalidateQueries({ queryKey: queryKeys.products(wid) });
+          await queryClient.invalidateQueries({ queryKey: queryKeys.products(fetchWid) });
         }
         const pathForWid = (base: string, opts?: { limit?: number; offset?: number }) => {
           const params = new URLSearchParams();
-          params.set('warehouse_id', wid);
+          params.set('warehouse_id', fetchWid);
           if (opts?.limit != null) params.set('limit', String(opts.limit));
           if (opts?.offset != null) params.set('offset', String(opts.offset));
           const qs = params.toString();
@@ -423,7 +430,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const PRODUCTS_REQUEST_TIMEOUT_MS = 55_000;
         const getOpts = { signal, timeoutMs: timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 3 };
         const result = await queryClient.fetchQuery({
-          queryKey: queryKeys.products(wid),
+          queryKey: queryKeys.products(fetchWid),
           queryFn: async (): Promise<{ list: Product[]; total?: number }> => {
             const allItems: Product[] = [];
             let totalFromApi: number | undefined;
@@ -732,12 +739,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   }, [currentWarehouseId]);
 
   // Real-time: Supabase Realtime so changes appear on all devices in 1–2s.
-  useInventoryRealtime(effectiveWarehouseId);
+  // onRefetch runs loadProducts so product list state updates (invalidation alone does not; state is not from useQuery).
+  const onRealtimeRefetch = useCallback(() => {
+    loadProductsRef.current?.(undefined, { silent: true, bypassCache: true });
+  }, []);
+  useInventoryRealtime(effectiveWarehouseId, { onRefetch: onRealtimeRefetch });
 
-  // Fallback: 5-minute poll when Realtime drops (belt-and-suspenders).
+  // Fallback: 60s poll when Realtime is disconnected or not configured so other tabs/devices still see updates.
   useRealtimeSync({
     onSync: () => loadProducts(undefined, { silent: true, bypassCache: true }),
-    intervalMs: 300_000,
+    intervalMs: 60_000,
   });
 
   // When user returns to this tab, full refetch (products + dashboard + sales) so we don't show stale data after background.
