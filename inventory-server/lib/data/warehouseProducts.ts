@@ -184,10 +184,12 @@ export async function getWarehouseProducts(
   const invMap: Record<string, number> = {};
   const sizeMap: Record<string, Array<{ sizeCode: string; sizeLabel?: string; quantity: number }>> = {};
 
-  // Fetch inventory and by_size only for this page's product IDs (bounded; no unbounded full-warehouse read).
-  type SizeRow = { product_id: string; size_code: string; quantity: number; size_codes?: { size_label?: string } | null };
+  // Fetch inventory and by_size only for this page's product IDs (bounded).
+  // Phase 4: Always query warehouse_inventory_by_size WITHOUT size_codes join so we never drop products
+  // (e.g. Amiri) when the join fails or size_codes relation is missing. quantityBySize uses size_code as label.
+  type SizeRow = { product_id: string; size_code: string; quantity: number };
   let inventoryResult: { data: { product_id: string; quantity?: number }[] | null; error: { message: string } | null } = { data: [], error: null };
-  let sizesResult: { data: SizeRow[] | null; error: { message: string } | null } = { data: [], error: null };
+  let sizeRows: SizeRow[] = [];
   if (effectiveWarehouseId && productIds.length > 0) {
     const [invRes, sizeRes] = await Promise.all([
       db
@@ -197,12 +199,16 @@ export async function getWarehouseProducts(
         .in('product_id', productIds),
       db
         .from('warehouse_inventory_by_size')
-        .select('product_id, size_code, quantity, size_codes!left(size_label)', selectOpts())
+        .select('product_id, size_code, quantity', selectOpts())
         .eq('warehouse_id', effectiveWarehouseId)
         .in('product_id', productIds),
     ]);
     inventoryResult = invRes as typeof inventoryResult;
-    sizesResult = { data: (sizeRes.data ?? []) as SizeRow[], error: sizeRes.error };
+    const sizeData = (sizeRes as { data?: SizeRow[] | null }).data;
+    sizeRows = Array.isArray(sizeData) ? sizeData.filter((r) => productIdSet.has(String(r.product_id ?? ''))) : [];
+    if ((sizeRes as { error?: { message?: string } }).error) {
+      console.error('[warehouseProducts] warehouse_inventory_by_size query failed:', (sizeRes as { error?: { message?: string } }).error?.message);
+    }
   }
 
   if (effectiveWarehouseId && productIds.length > 0) {
@@ -218,40 +224,26 @@ export async function getWarehouseProducts(
       }
     }
 
-    let sizeRows: SizeRow[] = [];
-    if (sizesResult.error) {
-      // Any error (join missing, timeout, etc.): retry without size_codes join so we still get quantities and don't drop products.
-      const withoutJoin = await db
-        .from('warehouse_inventory_by_size')
-        .select('product_id, size_code, quantity', selectOpts())
-        .eq('warehouse_id', effectiveWarehouseId)
-        .in('product_id', productIds);
-      if (!withoutJoin.error) sizeRows = (withoutJoin.data ?? []) as SizeRow[];
-      else console.error('[warehouseProducts] warehouse_inventory_by_size query failed:', (withoutJoin as { error?: { message?: string } }).error?.message ?? sizesResult.error.message);
-    } else {
-      const sizeData = (sizesResult.data ?? []) as SizeRow[];
-      sizeRows = sizeData.filter((r) => productIdSet.has(String(r.product_id ?? '')));
-    }
     for (const r of sizeRows) {
       const pid = String(r.product_id ?? '');
       if (!sizeMap[pid]) sizeMap[pid] = [];
       sizeMap[pid].push({
         sizeCode: String(r.size_code),
-        sizeLabel: r.size_codes?.size_label ?? r.size_code,
+        sizeLabel: String(r.size_code),
         quantity: Number(r.quantity ?? 0),
       });
     }
 
-    // Fallback: sized products with no by_size rows in this warehouse may have sizes in another warehouse — show those size codes with 0 so we don't show "No sizes recorded".
+    // Sized products with no by_size rows in this warehouse: show size codes from other warehouses with 0 qty (no join).
     const sizedProductIdsWithNoSizes = productIds.filter(
       (id) => (list.find((r) => String(r.id ?? '') === id) as Record<string, unknown>)?.size_kind === 'sized' && (sizeMap[id]?.length ?? 0) === 0
     );
     if (sizedProductIdsWithNoSizes.length > 0) {
       const { data: fallbackRows } = await db
         .from('warehouse_inventory_by_size')
-        .select('product_id, size_code, size_codes!left(size_label)', selectOpts())
+        .select('product_id, size_code', selectOpts())
         .in('product_id', sizedProductIdsWithNoSizes);
-      const fallbackList = (fallbackRows ?? []) as Array<{ product_id: string; size_code: string; size_codes?: { size_label?: string } | null }>;
+      const fallbackList = (fallbackRows ?? []) as Array<{ product_id: string; size_code: string }>;
       const seenPerProduct = new Map<string, Set<string>>();
       for (const r of fallbackList) {
         const pid = String(r.product_id ?? '');
@@ -265,11 +257,7 @@ export async function getWarehouseProducts(
         if (set.has(code)) continue;
         set.add(code);
         if (!sizeMap[pid]) sizeMap[pid] = [];
-        sizeMap[pid].push({
-          sizeCode: code,
-          sizeLabel: r.size_codes?.size_label ?? code,
-          quantity: 0,
-        });
+        sizeMap[pid].push({ sizeCode: code, sizeLabel: code, quantity: 0 });
       }
     }
   }
@@ -352,25 +340,16 @@ export async function getProductById(
     .eq('warehouse_id', warehouseId)
     .eq('product_id', productId)
     .maybeSingle();
-  let sizeRows: Array<{ size_code: string; quantity: number; size_codes?: { size_label?: string } | null }> | null = null;
-  const { data: sizeData, error: sizeErr } = await db
+  // Phase 4: query sizes without size_codes join so we always get quantities (no drop when join fails).
+  const { data: sizeData } = await db
     .from('warehouse_inventory_by_size')
-    .select('size_code, quantity, size_codes!left(size_label)')
+    .select('size_code, quantity')
     .eq('warehouse_id', warehouseId)
     .eq('product_id', productId);
-  if (sizeErr && (String(sizeErr.message ?? '').includes('relation') || String(sizeErr.message ?? '').includes('size_codes'))) {
-    const { data: fallback } = await db
-      .from('warehouse_inventory_by_size')
-      .select('size_code, quantity')
-      .eq('warehouse_id', warehouseId)
-      .eq('product_id', productId);
-    sizeRows = (fallback ?? []) as Array<{ size_code: string; quantity: number }>;
-  } else {
-    sizeRows = (sizeData ?? []) as Array<{ size_code: string; quantity: number; size_codes?: { size_label?: string } | null }>;
-  }
-  const sizes = (sizeRows ?? []).map((s) => ({
+  const sizeRows = (sizeData ?? []) as Array<{ size_code: string; quantity: number }>;
+  const sizes = sizeRows.map((s) => ({
     sizeCode: String(s.size_code),
-    sizeLabel: (s as { size_codes?: { size_label?: string } | null }).size_codes?.size_label ?? s.size_code,
+    sizeLabel: String(s.size_code),
     quantity: Number(s.quantity ?? 0),
   })).sort((a, b) => a.sizeCode.localeCompare(b.sizeCode));
   const hasSizeRows = sizes.length > 0;
