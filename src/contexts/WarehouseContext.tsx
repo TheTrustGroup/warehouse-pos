@@ -89,9 +89,10 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
       if (deduped.length > 0) {
         setCurrentWarehouseIdState((prev) => {
           const bound = boundWarehouseId && deduped.some((w) => w.id === boundWarehouseId) ? boundWarehouseId : null;
-          if (bound) return bound;
+          if (bound && isValidWarehouseId(bound)) return bound;
           if (isValidWarehouseId(prev) && deduped.some((w) => w.id === prev)) return prev;
-          return deduped[0].id;
+          const first = deduped[0]?.id;
+          return first && isValidWarehouseId(first) ? first : '';
         });
       } else {
         setCurrentWarehouseIdState('');

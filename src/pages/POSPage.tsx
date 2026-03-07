@@ -155,22 +155,22 @@ function useToast() {
 
 export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const queryClient = useQueryClient();
-  const { currentWarehouse, warehouses, currentWarehouseId, loadError: warehouseLoadError, refreshWarehouses } = useWarehouse();
+  const { currentWarehouse, currentWarehouseId, loadError: warehouseLoadError, refreshWarehouses } = useWarehouse();
   const { user, tryRefreshSession } = useAuth();
   const { products: inventoryProducts } = useInventory();
   const triedRefreshRef = useRef(false);
 
-  // Defensive: context can be empty before first load; avoid .length/.map on undefined (root cause of "Something went wrong in POS").
+  // Defensive: context can be empty before first load; avoid .length/.map on undefined.
   const safeInventoryProducts = Array.isArray(inventoryProducts) ? inventoryProducts : [];
-  const safeWarehouses = Array.isArray(warehouses) ? warehouses : [];
 
   const warehouse: Warehouse = currentWarehouse ?? {
     id: currentWarehouseId,
     name: 'Loading...',
     code: '',
   };
-  const effectiveWarehouseId = warehouse?.id ?? currentWarehouseId ?? safeWarehouses[0]?.id ?? '';
-  const isWarehouseLoaded = isValidWarehouseId(effectiveWarehouseId);
+  /** Only use warehouse ID from context; never fall back to first in list (could be placeholder). */
+  const warehouseId = (warehouse?.id ?? currentWarehouseId ?? '').trim();
+  const isWarehouseLoaded = isValidWarehouseId(warehouseId);
 
   /** POS never shows location selection; warehouse comes from auth (cashier) or context only. */
 
@@ -197,6 +197,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   const { toast, show: showToast } = useToast();
   const { sendLowStockAlert, receivedLowStockAlerts, dismissLowStockAlert } = usePresence();
+  const safeReceivedLowStockAlerts = Array.isArray(receivedLowStockAlerts) ? receivedLowStockAlerts : [];
   const isMounted = useRef(true);
   const lastLowStockBroadcastRef = useRef<{ key: string; at: number } | null>(null);
 
@@ -393,7 +394,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   // NEXT 4: show toast when another cashier broadcasts low-stock, then dismiss
   const processedAlertCountRef = useRef(0);
   useEffect(() => {
-    const list = receivedLowStockAlerts;
+    const list = safeReceivedLowStockAlerts;
     if (list.length <= processedAlertCountRef.current) return;
     for (let i = processedAlertCountRef.current; i < list.length; i++) {
       const a = list[i];
@@ -405,7 +406,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       dismissLowStockAlert(a.id);
     }
     processedAlertCountRef.current = list.length;
-  }, [receivedLowStockAlerts, showToast, dismissLowStockAlert]);
+  }, [safeReceivedLowStockAlerts, showToast, dismissLowStockAlert]);
 
   type SaleMutationVars = {
     payload: SalePayload;
@@ -948,7 +949,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       <CartSheet
         isOpen={cartOpen}
         lines={cart}
-        warehouseId={effectiveWarehouseId}
+        warehouseId={warehouseId}
         isWarehouseReady={isWarehouseLoaded}
         onUpdateQty={handleUpdateQty}
         onRemoveLine={handleRemoveLine}
