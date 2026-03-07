@@ -151,31 +151,40 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
   if (internal.isCriticalDataLoading) {
     return (
       <div
-        className="flex min-h-[var(--min-h-viewport)] w-full flex-col items-center justify-center gap-4"
-        style={{ background: 'var(--edk-bg)' }}
+        style={{
+          background: 'var(--edk-bg)',
+          minHeight: 'var(--min-h-viewport)',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 16,
+        }}
       >
         <div
-          className="rounded-full border-[3px] border-[var(--edk-border)]"
           style={{
             width: 40,
             height: 40,
+            borderRadius: '50%',
+            border: '3px solid var(--edk-border)',
             borderTopColor: 'var(--edk-red)',
-            animation: 'spin 0.8s linear infinite',
+            animation: 'edk-spin 0.8s linear infinite',
           }}
         />
         <p
-          className="uppercase tracking-wider"
           style={{
             fontFamily: "'Barlow Condensed', sans-serif",
             fontWeight: 700,
             fontSize: 14,
             letterSpacing: '0.08em',
             color: 'var(--edk-ink-3)',
+            textTransform: 'uppercase',
+            margin: 0,
           }}
         >
           Loading warehouse...
         </p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }

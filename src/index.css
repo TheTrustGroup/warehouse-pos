@@ -99,6 +99,11 @@
   }
 }
 
+/* Loading screen spinner: single keyframes so Layout banner and full-screen loader match */
+@keyframes edk-spin {
+  to { transform: rotate(360deg); }
+}
+
 @layer base {
   body {
     background: var(--edk-bg);

@@ -18,32 +18,40 @@ export function WarehouseGuard({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return (
       <div
-        className="flex items-center justify-center min-h-screen w-full flex-col gap-4"
         style={{
-          background: 'var(--edk-bg, #0A0A0A)',
+          background: 'var(--edk-bg)',
+          minHeight: 'var(--min-h-viewport)',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 16,
         }}
       >
         <div
-          className="rounded-full border-[3px] border-[var(--edk-border)] border-t-[var(--edk-red)]"
           style={{
             width: 40,
             height: 40,
-            animation: 'spin 0.8s linear infinite',
+            borderRadius: '50%',
+            border: '3px solid var(--edk-border)',
+            borderTopColor: 'var(--edk-red)',
+            animation: 'edk-spin 0.8s linear infinite',
           }}
         />
         <p
-          className="uppercase tracking-wider text-[var(--edk-ink-3)]"
           style={{
             fontFamily: "'Barlow Condensed', sans-serif",
             fontWeight: 700,
             fontSize: 14,
             letterSpacing: '0.08em',
-            color: 'var(--edk-ink-3, #52525B)',
+            color: 'var(--edk-ink-3)',
+            textTransform: 'uppercase',
+            margin: 0,
           }}
         >
           Loading warehouse...
         </p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }

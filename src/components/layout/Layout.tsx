@@ -136,17 +136,43 @@ function LayoutContent() {
       {isMobile && (
         <MobileBottomNav onMoreClick={() => setMoreMenuOpen(true)} />
       )}
-      {/* Banners: syncing, reconnecting, server unavailable — same strip height and tokens */}
+      {/* Banners: syncing matches loading screen (red ring + Barlow); others keep tokens */}
       {(isSyncingCriticalData || criticalDataError || showReconnectingBanner || showDegradedBanner) && (
-        <div className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] min-h-[2.75rem] flex items-stretch border-b border-[var(--edk-border)] bg-[var(--edk-amber-bg)]">
+        <div
+          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] min-h-[2.75rem] flex items-stretch border-b border-[var(--edk-border)]"
+          style={{ background: isSyncingCriticalData ? 'var(--edk-bg)' : 'var(--edk-amber-bg)' }}
+        >
           {isSyncingCriticalData && (
             <div
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium text-[var(--edk-amber)]"
+              className="w-full flex items-center justify-center gap-3 py-2.5 px-4"
               role="status"
               aria-live="polite"
             >
-              <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-[var(--edk-amber)] border-t-transparent animate-spin shrink-0" aria-hidden />
-              <span>Syncing inventory & orders…</span>
+              <span
+                className="rounded-full shrink-0"
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderWidth: 3,
+                  borderStyle: 'solid',
+                  borderColor: 'var(--edk-border)',
+                  borderTopColor: 'var(--edk-red)',
+                  animation: 'edk-spin 0.8s linear infinite',
+                }}
+                aria-hidden
+              />
+              <span
+                style={{
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontWeight: 700,
+                  fontSize: 14,
+                  letterSpacing: '0.08em',
+                  color: 'var(--edk-ink-3)',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Syncing inventory & orders…
+              </span>
             </div>
           )}
           {criticalDataError && !isSyncingCriticalData && (
