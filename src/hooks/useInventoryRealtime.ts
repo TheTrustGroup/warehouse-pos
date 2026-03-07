@@ -1,8 +1,9 @@
 /**
  * Supabase Realtime subscription for instant cross-device inventory and sales updates.
- * Subscribes to warehouse_inventory_by_size, sales, and warehouse_products; on any change
- * invalidates React Query caches and calls onRefetch so the product list state is updated
- * (InventoryContext uses loadProducts(), not useQuery, so invalidation alone does not update UI).
+ * Phase 7: Uses real warehouse ID only (currentWarehouseId). No sentinel or placeholder subscription.
+ * Call with useInventoryRealtime(warehouseId, { onRefetch }) where warehouseId is the current warehouse UUID.
+ * Subscribes to warehouse_inventory_by_size and sales filtered by warehouse_id; warehouse_products (all changes).
+ * On any change, invalidates React Query caches and calls onRefetch (InventoryContext passes invalidateProducts).
  *
  * Requires: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY. Enable Replication in Supabase for the three tables.
  */
