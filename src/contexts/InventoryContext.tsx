@@ -10,7 +10,7 @@
  * server response on success; on failure remove temp and show error. No full refetch after add.
  * No "saved" without confirmed 2xx. Offline path still uses local-first; ADD_PRODUCT_SAVED_LOCALLY for that flow.
  */
-import React, { createContext, useContext, useState, useRef, ReactNode, useEffect, useMemo, useCallback } from 'react';
+import { createContext, useContext, useState, useRef, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Product } from '../types';
 import { getStoredData, setStoredData, isStorageAvailable } from '../lib/storage';
@@ -19,7 +19,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from '../lib/apiClient';
 import { getApiCircuitBreaker } from '../lib/circuit';
 import { queryKeys } from '../lib/queryKeys';
 import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
-import { isValidWarehouseId, PLACEHOLDER_WAREHOUSE_ID } from '../lib/warehouseId';
+import { isValidWarehouseId } from '../lib/warehouseId';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
 import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
@@ -137,31 +137,17 @@ const InventoryContext = createContext<InventoryContextType | undefined>(undefin
 export const ADD_PRODUCT_SAVED_LOCALLY =
   'Product saved locally. It will sync to the server when connection is available.';
 
-/** No longer used for data fetches: we always use the real warehouse ID so sizes and list are correct (Phase 3 fix). */
-const SENTINEL_EMPTY_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000099';
-
-/** Warehouse ID to use for all data fetches, cache, and Realtime. When "Main Town" label is wrong, use real ID so API returns correct sizes. */
-function getDataWarehouseId(useSentinel: boolean, rawId: string, effectiveId: string): string {
-  return useSentinel && rawId ? rawId : effectiveId;
-}
-
+/** Phase 6: Single warehouse ID only. No sentinel, no placeholder logic. */
 const PRODUCTS_STALE_MS = 2 * 60 * 1000;  // 2 minutes
 const PRODUCTS_GC_MS = 10 * 60 * 1000;   // 10 minutes
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const { currentWarehouseId, currentWarehouse } = useWarehouse();
+  const { currentWarehouseId } = useWarehouse();
   const { showToast } = useToast();
   const { tryRefreshSession } = useAuth();
-  /** Only use placeholder when API has actually returned it as the selected warehouse; otherwise avoid sending it so we don't trigger blocked/cors requests. */
-  const rawWarehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId : '';
-  const mainStoreNameNorm = 'main store';
-  const isMainStoreIdWithWrongLabel =
-    rawWarehouseId === PLACEHOLDER_WAREHOUSE_ID &&
-    currentWarehouse &&
-    (currentWarehouse.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ') !== mainStoreNameNorm;
-  const effectiveWarehouseId = isMainStoreIdWithWrongLabel ? SENTINEL_EMPTY_WAREHOUSE_ID : rawWarehouseId;
-  const dataWarehouseId = getDataWarehouseId(Boolean(isMainStoreIdWithWrongLabel), rawWarehouseId, effectiveWarehouseId);
+  /** Phase 6: Single warehouse ID. No sentinel, no placeholder, no label checks. */
+  const warehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId.trim() : '';
 
   // Feature flag: when off, use API-only (state); when on, use offline hook (Dexie). INTEGRATION_PLAN Phase 5/7.
   const offlineEnabled = isOfflineEnabled();
@@ -175,18 +161,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   offlineRef.current = offline;
   /** Mirror of current products for equivalence check during silent refresh (avoids setState when nothing changed → no jitter). */
   const productsRef = useRef<Product[]>([]);
-  /** Refs for loadProducts so request uses current selection; when true, use sentinel id so we never load Main Store data for a "Main Town" selection. */
-  const effectiveWarehouseIdRef = useRef(effectiveWarehouseId) as React.MutableRefObject<string>;
-  const useSentinelForProductsRef = useRef<boolean>(isMainStoreIdWithWrongLabel) as React.MutableRefObject<boolean>;
-  /** When sentinel is used, this is the real warehouse id (e.g. placeholder); use for post-save refetch so we get back sizes instead of empty. */
-  const rawWarehouseIdRef = useRef(rawWarehouseId) as React.MutableRefObject<string>;
-  const dataWarehouseIdRef = useRef(dataWarehouseId) as React.MutableRefObject<string>;
+  const warehouseIdRef = useRef(warehouseId);
   useEffect(() => {
-    effectiveWarehouseIdRef.current = effectiveWarehouseId;
-    useSentinelForProductsRef.current = Boolean(isMainStoreIdWithWrongLabel);
-    rawWarehouseIdRef.current = rawWarehouseId;
-    dataWarehouseIdRef.current = dataWarehouseId;
-  }, [effectiveWarehouseId, isMainStoreIdWithWrongLabel, rawWarehouseId, dataWarehouseId]);
+    warehouseIdRef.current = warehouseId;
+  }, [warehouseId]);
   /** Throttle silent refresh so poll + visibility + mount don't cause back-to-back requests (reduces list jitter). */
   const lastSilentRefreshAtRef = useRef<number>(0);
   const SILENT_REFRESH_THROTTLE_MS = 2000;
@@ -250,13 +228,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     (next: Product[]) => {
       if (!isStorageAvailable() || !next?.length) return;
       try {
-        const ok = setStoredData(productsCacheKey(dataWarehouseId), next);
+        const ok = setStoredData(productsCacheKey(warehouseId), next);
         if (!ok) setStoragePersistFailed(true);
       } catch (e) {
         reportError(e instanceof Error ? e : new Error(String(e)), { context: 'persistProducts', listLength: next.length });
       }
     },
-    [dataWarehouseId]
+    [warehouseId]
   );
   useEffect(() => {
     if (products.length > 0) persistProducts(products);
@@ -283,7 +261,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const productsPath = (base: string, opts?: { limit?: number; offset?: number; q?: string; category?: string; low_stock?: boolean; out_of_stock?: boolean }) => {
     const params = new URLSearchParams();
-    params.set('warehouse_id', dataWarehouseId);
+    params.set('warehouse_id', warehouseId);
     if (opts?.limit != null) params.set('limit', String(opts.limit));
     if (opts?.offset != null) params.set('offset', String(opts.offset));
     if (opts?.q) params.set('q', opts.q);
@@ -367,19 +345,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const postSaveRefetch = options?.postSaveRefetch === true;
     const timeoutMs = options?.timeoutMs;
     // When switching warehouse, call with options.warehouseId so fetch always uses the selected warehouse (no ref race).
-    const wid = options?.warehouseId?.trim() && isValidWarehouseId(options.warehouseId) ? options.warehouseId.trim() : dataWarehouseIdRef.current;
-    const fetchWid = wid;
+    const wid = options?.warehouseId?.trim() && isValidWarehouseId(options.warehouseId) ? options.warehouseId.trim() : warehouseIdRef.current;
 
     const now = Date.now();
     if (!isValidWarehouseId(wid)) {
       setBackgroundRefreshing(false);
       setIsLoading(false);
       if (!silent) setProducts([]);
-      return;
-    }
-    if (wid === PLACEHOLDER_WAREHOUSE_ID && (!currentWarehouse || currentWarehouse.id !== wid)) {
-      setBackgroundRefreshing(false);
-      setIsLoading(false);
       return;
     }
     if (silent) {
@@ -421,11 +393,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       try {
         if (bypassCache) {
-          await queryClient.invalidateQueries({ queryKey: queryKeys.products(fetchWid) });
+          await queryClient.invalidateQueries({ queryKey: queryKeys.products(wid) });
         }
         const pathForWid = (base: string, opts?: { limit?: number; offset?: number }) => {
           const params = new URLSearchParams();
-          params.set('warehouse_id', fetchWid);
+          params.set('warehouse_id', wid);
           if (opts?.limit != null) params.set('limit', String(opts.limit));
           if (opts?.offset != null) params.set('offset', String(opts.offset));
           const qs = params.toString();
@@ -437,7 +409,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const PRODUCTS_REQUEST_TIMEOUT_MS = 55_000;
         const getOpts = { signal, timeoutMs: timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 3 };
         const result = await queryClient.fetchQuery({
-          queryKey: queryKeys.products(fetchWid),
+          queryKey: queryKeys.products(wid),
           queryFn: async (): Promise<{ list: Product[]; total?: number }> => {
             const allItems: Product[] = [];
             let totalFromApi: number | undefined;
@@ -541,7 +513,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         // Fallback only when API returned empty: use only this warehouse's cache so we never show another warehouse's data (e.g. Main Store stats when Main Town is selected).
         if (merged.length === 0 && isStorageAvailable()) {
-          if (dataWarehouseIdRef.current !== wid) {
+          if (warehouseIdRef.current !== wid) {
             setBackgroundRefreshing(false);
             setIsLoading(false);
             return;
@@ -579,7 +551,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
         listToSet = listToSet.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
         // Do not apply if user switched warehouse (avoids overwriting with in-flight request for different warehouse).
-        if (dataWarehouseIdRef.current !== wid) {
+        if (warehouseIdRef.current !== wid) {
           setBackgroundRefreshing(false);
           setIsLoading(false);
           return;
@@ -656,7 +628,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         showToast('error', 'Access denied (403). Check your login and permissions.');
       }
       // On failure, only show this warehouse's cache so we never display another warehouse's stats.
-      const localRaw = getStoredData<any[]>(productsCacheKey(dataWarehouseIdRef.current), []);
+      const localRaw = getStoredData<any[]>(productsCacheKey(warehouseIdRef.current), []);
       const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
       setProducts(localProducts);
       if (localProducts.length > 0 && !silent) {
@@ -724,7 +696,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     clearMockData();
     mountedRef.current = true;
     const ac = new AbortController();
-    const productsFromCache = getCachedProductsForWarehouse(dataWarehouseId);
+    const productsFromCache = getCachedProductsForWarehouse(warehouseId);
     const hadCache = productsFromCache.length > 0;
 
     if (hadCache) {
@@ -742,7 +714,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     (async () => {
       await loadProducts(ac.signal, {
         bypassCache: true,
-        warehouseId: dataWarehouseId,
+        warehouseId: warehouseId,
         ...(hadCache ? { silent: true } : {}),
       });
     })();
@@ -758,7 +730,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const onRealtimeRefetch = useCallback(() => {
     loadProductsRef.current?.(undefined, { silent: true, bypassCache: true });
   }, []);
-  useInventoryRealtime(dataWarehouseId, { onRefetch: onRealtimeRefetch });
+  useInventoryRealtime(warehouseId, { onRefetch: onRealtimeRefetch });
 
   // Fallback: 30s poll when Realtime is disconnected or not configured so other tabs/devices see updates within 30s.
   useRealtimeSync({
@@ -792,16 +764,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   // Persist inventory per warehouse so list shows immediately on next login/refresh.
   useEffect(() => {
     if (!isLoading && products.length > 0 && isStorageAvailable()) {
-      const ok = setStoredData(productsCacheKey(dataWarehouseId), products);
+      const ok = setStoredData(productsCacheKey(warehouseId), products);
       setStoragePersistFailed(!ok);
     }
-  }, [products, isLoading, dataWarehouseId]);
+  }, [products, isLoading, warehouseId]);
 
   /** Single-product path for GET/DELETE: query params (Vercel-safe; path /api/products/:id not routed). */
   const productByIdPath = (base: string, productId: string) => {
     const params = new URLSearchParams();
     params.set('id', productId);
-    params.set('warehouse_id', dataWarehouseId);
+    params.set('warehouse_id', warehouseId);
     return `${base}?${params.toString()}`;
   };
 
@@ -862,7 +834,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       return { synced: 0, failed: 0, total: 0, syncedIds: [] };
     }
 
-    let localRaw = getStoredData<any[]>(productsCacheKey(dataWarehouseId), []);
+    let localRaw = getStoredData<any[]>(productsCacheKey(warehouseId), []);
     if (!Array.isArray(localRaw) || localRaw.length === 0) localRaw = getStoredData<any[]>('warehouse_products', []);
     const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
     const localOnly = localProducts.filter((p) => !apiIds.has(p.id));
@@ -1020,11 +992,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (Array.isArray(normalized.images) && normalized.images.length > 0) setProductImages(resolvedId, normalized.images);
       lastAddedProductRef.current = { product: normalized, at: Date.now() };
       setApiOnlyProductsState((prev) => prev.map((p) => (p.id === tempId ? normalized : p)));
-      cacheRef.current[dataWarehouseId] = { data: [normalized, ...apiOnlyProducts.filter((p) => p.id !== tempId)], ts: Date.now() };
+      cacheRef.current[warehouseId] = { data: [normalized, ...apiOnlyProducts.filter((p) => p.id !== tempId)], ts: Date.now() };
       setLastSyncAt(new Date());
       if (isStorageAvailable()) {
         const nextList = [normalized, ...apiOnlyProducts.filter((p) => p.id !== tempId)];
-        setStoredData(productsCacheKey(dataWarehouseId), nextList);
+        setStoredData(productsCacheKey(warehouseId), nextList);
       }
       if (isIndexedDBAvailable()) {
         const nextList = [normalized, ...apiOnlyProducts.filter((p) => p.id !== tempId)];
@@ -1034,9 +1006,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       logInventoryCreate({ productId: resolvedId, sku: productData.sku ?? '', listLength: apiOnlyProducts.length + 1 });
       const today = new Date().toISOString().split('T')[0];
-      queryClient.invalidateQueries({ queryKey: queryKeys.products(dataWarehouseId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(dataWarehouseId, today) });
-      queryClient.refetchQueries({ queryKey: queryKeys.dashboard(dataWarehouseId, today) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.products(warehouseId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
+      queryClient.refetchQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
       await loadProductsRef.current(undefined, { bypassCache: true, silent: true }).catch(() => {});
       showToast('success', 'Product saved.');
       if (import.meta.env?.DEV) {
@@ -1084,7 +1056,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
       const isSized = updates.sizeKind === 'sized' || updated.sizeKind === 'sized';
-      const payload = { ...productToPayload(updated), warehouseId: (updates.warehouseId ?? dataWarehouseId) || DEFAULT_WAREHOUSE_ID } as Record<string, unknown>;
+      const payload = { ...productToPayload(updated), warehouseId: (updates.warehouseId ?? warehouseId) || DEFAULT_WAREHOUSE_ID } as Record<string, unknown>;
       // Always send quantityBySize when product is sized so the server applies the new sizes (add/change/clear).
       if (isSized) {
         payload.quantityBySize = Array.isArray(updates.quantityBySize)
@@ -1139,11 +1111,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const newList = products.map((p) => (p.id === id ? finalProduct : p));
       if (payloadImages.length > 0) setProductImages(id, payloadImages);
       setApiOnlyProductsState(newList);
-      cacheRef.current[dataWarehouseId] = { data: newList, ts: Date.now() };
+      cacheRef.current[warehouseId] = { data: newList, ts: Date.now() };
       const at = Date.now();
       lastUpdatedProductRef.current = { product: finalProduct, at };
       if (isSized) lastSizeUpdateAtRef.current = at;
-      if (isStorageAvailable()) setStoredData(productsCacheKey(dataWarehouseId), newList);
+      if (isStorageAvailable()) setStoredData(productsCacheKey(warehouseId), newList);
       if (isIndexedDBAvailable()) {
         saveProductsToDb(newList).catch((e) => {
           reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: newList.length });
@@ -1152,9 +1124,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setLastSyncAt(new Date());
       logInventoryUpdate({ productId: id, sku: product.sku });
       const today = new Date().toISOString().split('T')[0];
-      queryClient.invalidateQueries({ queryKey: queryKeys.products(dataWarehouseId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(dataWarehouseId, today) });
-      queryClient.refetchQueries({ queryKey: queryKeys.dashboard(dataWarehouseId, today) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.products(warehouseId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
+      queryClient.refetchQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
       showToast('success', 'Product updated.');
       // Delay refetch so backend has time to commit; avoids refetch overwriting with stale empty sizes
       const postSaveDelayMs = isSized ? 2000 : 500;
@@ -1202,9 +1174,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setTimeout(() => recentlyDeletedIdsRef.current.delete(id), RECENT_DELETE_WINDOW_MS);
       setProducts((prev) => prev.filter((p) => p.id !== id));
       const today = new Date().toISOString().split('T')[0];
-      queryClient.invalidateQueries({ queryKey: queryKeys.products(dataWarehouseId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(dataWarehouseId, today) });
-      queryClient.refetchQueries({ queryKey: queryKeys.dashboard(dataWarehouseId, today) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.products(warehouseId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
+      queryClient.refetchQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
       loadProducts(undefined, { bypassCache: true, silent: true }).catch((e) => {
         reportError(e instanceof Error ? e : new Error(String(e)), { context: 'deleteProduct-refresh' });
       });
@@ -1273,9 +1245,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     });
     setProducts((prev) => prev.filter((p) => !idSet.has(p.id)));
     const today = new Date().toISOString().split('T')[0];
-    queryClient.invalidateQueries({ queryKey: queryKeys.products(dataWarehouseId) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(dataWarehouseId, today) });
-    queryClient.refetchQueries({ queryKey: queryKeys.dashboard(dataWarehouseId, today) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.products(warehouseId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
+    queryClient.refetchQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
     loadProducts(undefined, { bypassCache: true, silent: true }).catch((e) => {
       reportError(e instanceof Error ? e : new Error(String(e)), { context: 'deleteProducts-refresh' });
     });
