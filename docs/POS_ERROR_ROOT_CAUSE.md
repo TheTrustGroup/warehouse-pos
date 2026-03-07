@@ -17,6 +17,20 @@ Redeploy the frontend after changing env vars (Vite bakes them into the build).
 
 ---
 
+## Minified React error #310 ("Couldn't load POS")
+
+**Symptom:** POS shows "Couldn't load POS" with a minified React error #310 in the gray box.
+
+**Meaning:** React #310 = "Rendered more hooks than during the previous render." It happens when the first time POS content renders it throws (or is interrupted) after only some hooks run; when the user clicks "Try again", the same component runs again and runs more hooks, so React reports a hook-count mismatch.
+
+**Fix (in code):**  
+1. **POSContentBoundary** remounts POS content on Retry (`key={retryKey}`) so #310 does not recur after Retry.  
+2. **CartSheet** had an early return `if (!isOpen) return null` **before** a `useRef` call, so when the user opened the cart (or added an item and the cart opened), the component ran more hooks than on the previous render → #310 again. The `useRef` is now declared **before** the early return so the same number of hooks run every time.
+
+**If the underlying error keeps happening:** Check the raw error in the gray box or console (e.g. missing context, API throw, or network). Ensure `VITE_API_BASE_URL` is set and that POS is not rendered outside `WarehouseProvider` / `InventoryProvider` / `PresenceProvider`.
+
+---
+
 ## Other possible causes (less common)
 
 - **Rendering before providers:** POS uses `useWarehouse()` and `useInventory()`. If either context were missing, you’d see "useWarehouse must be used within WarehouseProvider" (or the Inventory equivalent). The app tree already wraps POS in both providers, so this only happens if the route tree is changed and POS is rendered outside them.

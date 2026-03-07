@@ -111,6 +111,8 @@ export default function CartSheet({
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryNotes, setDeliveryNotes] = useState('');
 
+  const lastChargeTapRef = useRef(0);
+
   if (!isOpen) return null;
 
   const subtotal = lines.reduce((s, l) => s + l.unitPrice * l.qty, 0);
@@ -133,7 +135,6 @@ export default function CartSheet({
         ].filter((p) => p.amount > 0) as Array<{ method: PaymentMethodType; amount: number }>)
       : [];
 
-  const lastChargeTapRef = useRef(0);
   const handleCharge = async () => {
     const now = Date.now();
     if (now - lastChargeTapRef.current < 1000) return;

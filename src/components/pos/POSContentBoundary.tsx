@@ -4,7 +4,7 @@
  * an inline "Couldn't load POS" + Retry instead of the full-route "Something went wrong in POS".
  * The outer RouteErrorBoundary only sees errors if this boundary fails to render its fallback.
  */
-import { Component, ReactNode } from 'react';
+import { Component, Fragment, ReactNode } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { reportError } from '../../lib/errorReporting';
 import { Button } from '../ui/Button';
@@ -16,15 +16,17 @@ interface Props {
 interface State {
   hasError: boolean;
   error?: Error;
+  /** Incremented on Retry so children remount and avoid React #310 (hooks count mismatch after throw). */
+  retryKey: number;
 }
 
 export class POSContentBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, retryKey: 0 };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
 
@@ -35,7 +37,7 @@ export class POSContentBoundary extends Component<Props, State> {
   }
 
   handleRetry = () => {
-    this.setState({ hasError: false, error: undefined });
+    this.setState((s) => ({ hasError: false, error: undefined, retryKey: s.retryKey + 1 }));
   };
 
   render() {
@@ -84,6 +86,7 @@ export class POSContentBoundary extends Component<Props, State> {
         </div>
       );
     }
-    return this.props.children;
+    // Key forces remount on Retry so we never get React #310 (more hooks than previous render).
+    return <Fragment key={this.state.retryKey}>{this.props.children}</Fragment>;
   }
 }
