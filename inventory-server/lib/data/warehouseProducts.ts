@@ -188,6 +188,9 @@ export async function getWarehouseProducts(
     const sizes = (sizeMap[rowId] ?? []).sort((a, b) => a.sizeCode.localeCompare(b.sizeCode, undefined, { numeric: true }));
     const hasSizeRows = sizes.length > 0;
     const totalQuantity = hasSizeRows ? sizes.reduce((s, r) => s + r.quantity, 0) : (invMap[rowId] ?? 0);
+    // When product is marked sized but has no per-size rows (only warehouse_inventory qty), return as one_size so UI shows "One size · N" instead of "No sizes recorded".
+    const rawSizeKind = String(row.size_kind ?? 'na');
+    const sizeKind = rawSizeKind === 'sized' && !hasSizeRows && totalQuantity > 0 ? 'one_size' : rawSizeKind;
 
     if (options.lowStock && totalQuantity > (Number(row.reorder_level ?? 0) || 3)) return null;
     if (options.outOfStock && totalQuantity > 0) return null;
@@ -200,7 +203,7 @@ export async function getWarehouseProducts(
       name: String(row.name ?? ''),
       description: row.description ?? null,
       category: String(row.category ?? ''),
-      sizeKind: String(row.size_kind ?? 'na'),
+      sizeKind,
       sellingPrice: Number(row.selling_price ?? 0),
       costPrice: Number(row.cost_price ?? 0),
       reorderLevel: Number(row.reorder_level ?? 0),
@@ -265,6 +268,8 @@ export async function getProductById(
   })).sort((a, b) => a.sizeCode.localeCompare(b.sizeCode));
   const hasSizeRows = sizes.length > 0;
   quantity = hasSizeRows ? sizes.reduce((s, x) => s + x.quantity, 0) : Number((invRow as { quantity?: number } | null)?.quantity ?? 0);
+  const rawSizeKind = String(r.size_kind ?? 'na');
+  const sizeKind = rawSizeKind === 'sized' && !hasSizeRows && quantity > 0 ? 'one_size' : rawSizeKind;
 
   return {
     id: String(r.id ?? ''),
@@ -274,7 +279,7 @@ export async function getProductById(
     name: String(r.name ?? ''),
     description: r.description != null ? String(r.description) : null,
     category: String(r.category ?? ''),
-    sizeKind: String(r.size_kind ?? 'na'),
+    sizeKind,
     sellingPrice: Number(r.selling_price ?? 0),
     costPrice: Number(r.cost_price ?? 0),
     reorderLevel: Number(r.reorder_level ?? 0),

@@ -124,7 +124,19 @@ function SizePills({ product }: { product: Product }) {
     );
   }
 
-  if ((product.quantityBySize ?? []).length === 0) {
+  const sizeRows = product.quantityBySize ?? [];
+  // When API says sized but returned no size rows, show "One size · N" if we have quantity (avoids "No sizes recorded" when stock exists).
+  if (sizeRows.length === 0) {
+    const qty = product.quantity ?? 0;
+    if (qty > 0) {
+      return (
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className="h-6 px-2 rounded bg-[var(--edk-bg)] border border-[var(--edk-border-mid)] text-[10px] font-semibold text-[var(--edk-ink-2)] flex items-center">
+            One size · {qty}
+          </span>
+        </div>
+      );
+    }
     return (
       <div className="mb-2">
         <span className="text-[11px] text-[var(--edk-ink-3)] italic">No sizes recorded</span>
@@ -136,7 +148,7 @@ function SizePills({ product }: { product: Product }) {
 
   return (
     <div className="flex flex-wrap gap-1 overflow-x-auto pb-2 scrollbar-none">
-      {(product.quantityBySize ?? []).map((row) => {
+      {sizeRows.map((row) => {
         const isLow = row.quantity > 0 && row.quantity <= reorder;
         return (
           <span
