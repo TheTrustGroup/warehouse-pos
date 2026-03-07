@@ -52,6 +52,24 @@ Use this to confirm everything is connected end-to-end.
 
 ---
 
+## 5. Finding the root cause of "Something went wrong in POS"
+
+The POS route is wrapped in `RouteErrorBoundary`. When something in the POS tree throws, the boundary shows that message.
+
+**Likely causes:**
+
+1. **Context data not ready** — POS was reading `inventoryProducts` or `warehouses` before context had a value (e.g. `.length` / `.map` on undefined). This is now guarded: POS uses `safeInventoryProducts` and `safeWarehouses` so it never throws on undefined.
+2. **Missing `VITE_API_BASE_URL`** — In production, `src/lib/api.ts` throws at app load if unset (whole app fails, not just POS). In dev it falls back to a default.
+3. **Migration not applied** — If `20260306000000_sales_delivery_reserve_and_deduct.sql` is not run, POST /api/sales can fail (RPC signature). The error appears as a toast on Charge, not necessarily as a route crash.
+4. **Provider order** — POS uses `useWarehouse`, `useAuth`, `useInventory`, `usePresence`. It is rendered inside all of them; if one were missing, that hook would throw.
+
+**How to see the real error:**
+
+- **Dev:** Run `npm run dev`, go to POS, trigger the error. The boundary shows the error message and stack in a gray box on the page, and logs `[RouteErrorBoundary] POS: <message>` and stack to the console.
+- **Prod:** Check your error reporting (e.g. Sentry); `reportError` is called with the error and route name.
+
+---
+
 ## Summary
 
 | Area | Wired |

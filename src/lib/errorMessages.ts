@@ -57,6 +57,11 @@ export function getUserFriendlyMessage(error: unknown): string {
     return 'Storage is full. Free some space or clear old data and try again.';
   }
 
+  // App config (e.g. POS crashes on load in production)
+  if (str.includes('vite_api_base_url') || str.includes('[api]')) {
+    return 'App is misconfigured. Set VITE_API_BASE_URL in your deployment (e.g. Vercel env). Use empty string for same-origin or your API URL.';
+  }
+
   // Auth
   if (str.includes('invalid credentials') || str.includes('wrong password')) {
     return 'Invalid email or password. Please try again.';

@@ -20,6 +20,7 @@ import { QUOTA_EVENT } from './lib/offlineQuota';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { WarehouseGuard } from './components/WarehouseGuard';
 import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
+import { POSContentBoundary } from './components/pos/POSContentBoundary';
 import { Button } from './components/ui/Button';
 import { Layout } from './components/layout/Layout';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
@@ -373,7 +374,9 @@ function App() {
                           element={
                             <ProtectedRoute permission={PERMISSIONS.POS.ACCESS}>
                               <RouteErrorBoundary routeName="POS">
-                                <POSPageRoute />
+                                <POSContentBoundary>
+                                  <POSPageRoute />
+                                </POSContentBoundary>
                               </RouteErrorBoundary>
                             </ProtectedRoute>
                           }
