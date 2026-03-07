@@ -36,9 +36,10 @@ export class RouteErrorBoundary extends Component<Props, State> {
       route: this.props.routeName,
     });
     // Always log so the root cause is visible in DevTools (dev and production).
-    // On production we don't show the gray box in the UI, but console still has the trace.
     const label = this.props.routeName ?? 'Route';
     console.error(`[RouteErrorBoundary] ${label}:`, error?.message ?? String(error), error?.stack ?? '');
+    console.error('[POS ERROR BOUNDARY CAUGHT]', error);
+    console.error('[POS ERROR BOUNDARY INFO]', errorInfo);
   }
 
   handleRetry = () => {
@@ -60,13 +61,25 @@ export class RouteErrorBoundary extends Component<Props, State> {
             <p className="text-slate-600 mb-6 text-sm">
               {friendlyMessage}
             </p>
-            {typeof import.meta !== 'undefined' && import.meta.env?.DEV && this.state.error && (
-              <div className="text-left text-xs text-slate-500 mb-4 p-3 bg-slate-100 rounded font-mono break-all space-y-1" role="log">
-                <p className="font-semibold">{this.state.error.message}</p>
-                {this.state.error.stack && (
-                  <pre className="whitespace-pre-wrap mt-2 text-[10px] opacity-90">{this.state.error.stack}</pre>
-                )}
-              </div>
+            {this.state.error && (
+              <pre
+                style={{
+                  background: '#1a1a1a',
+                  color: '#ef4444',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  overflow: 'auto',
+                  maxHeight: '200px',
+                  textAlign: 'left',
+                  marginTop: '12px',
+                }}
+                role="log"
+              >
+                {this.state.error?.message}
+                {'\n'}
+                {this.state.error?.stack}
+              </pre>
             )}
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button variant="primary" onClick={this.handleRetry} className="inline-flex items-center justify-center gap-2">
