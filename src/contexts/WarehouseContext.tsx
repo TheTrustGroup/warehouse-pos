@@ -175,3 +175,40 @@ export function useWarehouse() {
   }
   return context;
 }
+
+/** Phase 5: Single hook for "current warehouse" — real UUID only. Use in every page that needs warehouse-scoped data. */
+export interface UseCurrentWarehouseResult {
+  /** Effective warehouse ID (bound or selected). Real UUID; use for all API calls. */
+  warehouseId: string;
+  /** Resolved warehouse object or null. */
+  warehouse: Warehouse | null;
+  /** True while warehouse list is loading. */
+  isLoading: boolean;
+  /** True when loading finished and we have a valid selection (or no warehouses). Use to show content vs loading. */
+  isReady: boolean;
+}
+
+export function useCurrentWarehouse(): UseCurrentWarehouseResult {
+  const { currentWarehouseId, currentWarehouse, isLoading, warehouses } = useWarehouse();
+  const isReady = !isLoading && (warehouses.length === 0 || (currentWarehouseId?.trim()?.length ?? 0) > 0);
+  return {
+    warehouseId: currentWarehouseId ?? '',
+    warehouse: currentWarehouse ?? null,
+    isLoading,
+    isReady,
+  };
+}
+
+/** Phase 5: Guard that renders children only when warehouse is ready; shows fallback while loading. */
+export function CurrentWarehouseGuard({
+  children,
+  fallback = null,
+}: {
+  children: ReactNode;
+  /** Shown while warehouse is loading. Default: null (nothing). */
+  fallback?: ReactNode;
+}) {
+  const { isReady } = useCurrentWarehouse();
+  if (!isReady) return <>{fallback}</>;
+  return <>{children}</>;
+}

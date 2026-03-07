@@ -233,7 +233,7 @@ Phases in order:
 |-------|--------|
 | **Phase 3** | Fix data root cause. Identify why Main Town user gets 001. Fix user_scopes or auth resolution. Verify each user resolves to correct warehouse UUID. No new features; only fix resolution. |
 | **Phase 4** | Fix backend query. Replace INNER JOIN with LEFT JOIN; add jsonb_object_agg for quantityBySize; remove fallback query logic. Deploy. Confirm Amiri shows EU40:8. |
-| **Phase 5** | Add **useCurrentWarehouse** hook. Single hook, real UUID only. Every page uses it. Guard component for loading state. |
+| **Phase 5** | Add **useCurrentWarehouse** hook. Single hook, real UUID only. Every page uses it. Guard component for loading state. **DONE:** `useCurrentWarehouse()` and `CurrentWarehouseGuard` in `WarehouseContext.tsx`. |
 | **Phase 6** | Replace InventoryContext data layer. Remove 6 caches → React Query only. Remove all sentinel/placeholder logic and extra warehouse ID variables. |
 | **Phase 7** | Wire Realtime to real IDs. useWarehouseRealtime(currentWarehouseId). Remove sentinel subscription. |
 | **Phase 8** | Delete dead code. Remove SENTINEL_EMPTY_WAREHOUSE_ID, PLACEHOLDER_WAREHOUSE_ID, isMainStoreIdWithWrongLabel, rawWarehouseId, effectiveWarehouseId, cacheRef, localStorage product cache, conditional fallback queries. |

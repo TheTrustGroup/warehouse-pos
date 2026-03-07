@@ -32,6 +32,8 @@ Fill this in:
 
 Use these exactly; this project’s **warehouse_products** table has **no** `warehouse_id`, `total_quantity`, `is_active`, or `is_deleted` columns.
 
+**Tip:** If you get `syntax error at or near "ELECT"`, the S was dropped when copying—each query must start with **SELECT**.
+
 ```sql
 -- 1. Amiri in warehouse_products (one row per product, no warehouse_id)
 SELECT id, sku, name, size_kind

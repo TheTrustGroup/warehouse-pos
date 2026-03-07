@@ -170,7 +170,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const offline = useOfflineInventory();
   /** Refs to keep refreshProducts stable and avoid re-run loops when server is down (prevents list jitter). */
-  const loadProductsRef = useRef<(signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number; postSaveRefetch?: boolean }) => Promise<void>>(() => Promise.resolve());
+  const loadProductsRef = useRef<(signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number; postSaveRefetch?: boolean; warehouseId?: string }) => Promise<void>>(() => Promise.resolve());
   const offlineRef = useRef(offline);
   offlineRef.current = offline;
   /** Mirror of current products for equivalence check during silent refresh (avoids setState when nothing changed → no jitter). */
@@ -361,13 +361,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    * @param options.silent - If true, do not show full-page loading (for background refresh). Default false.
    * @param options.bypassCache - If true, always fetch from server (e.g. when opening Inventory page for fresh data).
    */
-  const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number; postSaveRefetch?: boolean }) => {
+  const loadProducts = async (signal?: AbortSignal, options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number; postSaveRefetch?: boolean; warehouseId?: string }) => {
     const silent = options?.silent === true;
     const bypassCache = options?.bypassCache === true;
     const postSaveRefetch = options?.postSaveRefetch === true;
     const timeoutMs = options?.timeoutMs;
-    // Always use real warehouse ID for fetch and cache so sizes and list are correct (Phase 3 fix).
-    const wid = dataWarehouseIdRef.current;
+    // When switching warehouse, call with options.warehouseId so fetch always uses the selected warehouse (no ref race).
+    const wid = options?.warehouseId?.trim() && isValidWarehouseId(options.warehouseId) ? options.warehouseId.trim() : dataWarehouseIdRef.current;
     const fetchWid = wid;
 
     const now = Date.now();
@@ -719,7 +719,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const hasMore = !offlineEnabled && (productsTotal === null || products.length < productsTotal);
 
-  // On mount: first paint from cache when available (no empty flash), then refresh from API. Never clear to [] when we have cache for this warehouse.
+  // On warehouse change: clear list for new warehouse and fetch with explicit warehouseId so Main Store and Main Town stay independent.
   useEffect(() => {
     clearMockData();
     mountedRef.current = true;
@@ -740,7 +740,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
 
     (async () => {
-      await loadProducts(ac.signal, hadCache ? { silent: true, bypassCache: true } : { bypassCache: true });
+      await loadProducts(ac.signal, {
+        bypassCache: true,
+        warehouseId: dataWarehouseId,
+        ...(hadCache ? { silent: true } : {}),
+      });
     })();
 
     return () => {
