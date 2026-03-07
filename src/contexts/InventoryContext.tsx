@@ -22,7 +22,7 @@ import { useWarehouse } from './WarehouseContext';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
-import { getCategoryDisplay, normalizeProductLocation } from '../lib/utils';
+import { getCategoryDisplay, normalizeProductLocation, normalizeQuantityBySize } from '../lib/utils';
 import { parseProductsResponse } from '../lib/apiSchemas';
 import { useInventory as useOfflineInventory } from '../hooks/useInventory';
 import { getProductImages, setProductImages } from '../lib/productImagesStore';
@@ -31,6 +31,7 @@ import { getProductImages, setProductImages } from '../lib/productImagesStore';
 
 /** Normalize API row to Product (for use in fetchProductsForWarehouse). */
 function normalizeProductRow(p: any): Product {
+  const rawSizes = p.quantityBySize ?? p.quantity_by_size;
   return normalizeProductLocation({
     ...p,
     images: Array.isArray(p.images) ? p.images : [],
@@ -42,7 +43,7 @@ function normalizeProductRow(p: any): Product {
     updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
     expiryDate: p.expiryDate ? new Date(p.expiryDate) : null,
     sizeKind: (p.sizeKind ?? p.size_kind ?? 'na') as 'na' | 'one_size' | 'sized',
-    quantityBySize: Array.isArray(p.quantityBySize) ? p.quantityBySize : [],
+    quantityBySize: normalizeQuantityBySize(rawSizes),
   });
 }
 
@@ -341,8 +342,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   /** Normalize product from API or localStorage: dates, location, images array, and numeric fields so list and totals are accurate. */
   /** Always set sizeKind and quantityBySize so Sizes column/card never show blank for One size / Multiple sizes. */
-  const normalizeProduct = (p: any): Product =>
-    normalizeProductLocation({
+  const normalizeProduct = (p: any): Product => {
+    const rawSizes = p.quantityBySize ?? p.quantity_by_size;
+    return normalizeProductLocation({
       ...p,
       images: Array.isArray(p.images) ? p.images : [],
       quantity: Number(p.quantity ?? 0) || 0,
@@ -353,8 +355,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
       expiryDate: p.expiryDate ? new Date(p.expiryDate) : null,
       sizeKind: (p.sizeKind ?? p.size_kind ?? 'na') as 'na' | 'one_size' | 'sized',
-      quantityBySize: Array.isArray(p.quantityBySize) ? p.quantityBySize : [],
+      quantityBySize: normalizeQuantityBySize(rawSizes),
     });
+  };
 
   const LOAD_MORE_PAGE_SIZE = 250;
 

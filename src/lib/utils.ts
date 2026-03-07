@@ -65,6 +65,26 @@ export function getLocationDisplay(location: { aisle?: string; rack?: string; bi
 }
 
 /**
+ * Normalize raw sizes from API (camelCase or snake_case) to { sizeCode, sizeLabel?, quantity }[].
+ * Use when building Product from API so "No sizes recorded" does not show for sized products.
+ */
+export function normalizeQuantityBySize(raw: unknown): { sizeCode: string; sizeLabel?: string; quantity: number }[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  return raw
+    .map((row: Record<string, unknown>) => {
+      const sizeCode = (row?.sizeCode ?? row?.size_code ?? '') as string;
+      const quantity = Number(row?.quantity ?? 0);
+      if (sizeCode === '' && quantity === 0) return null;
+      return {
+        sizeCode: String(sizeCode),
+        sizeLabel: (row?.sizeLabel ?? row?.size_label) as string | undefined,
+        quantity: Number.isFinite(quantity) ? quantity : 0,
+      };
+    })
+    .filter((r): r is { sizeCode: string; sizeLabel?: string; quantity: number } => r != null);
+}
+
+/**
  * Ensure product has a location object (for API responses that omit it).
  */
 export function normalizeProductLocation<T extends { location?: unknown }>(p: T): T & { location: { warehouse: string; aisle: string; rack: string; bin: string } } {

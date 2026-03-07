@@ -25,6 +25,7 @@ import { getApiCircuitBreaker } from '../lib/circuit';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { getProductImageDisplayUrl } from '../lib/imageUpload';
 import { isValidWarehouseId } from '../lib/warehouseId';
+import { normalizeQuantityBySize } from '../lib/utils';
 import { onUnauthorized } from '../lib/onUnauthorized';
 import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
@@ -271,12 +272,25 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const PRODUCTS_PAGE_LIMIT = 250;
 
   function normalizeProductItem(item: unknown): POSProduct {
-    const row = item as unknown as { color?: string; variants?: { color?: string }; barcode?: string | null };
+    const row = item as unknown as {
+      color?: string;
+      variants?: { color?: string };
+      barcode?: string | null;
+      quantityBySize?: unknown;
+      quantity_by_size?: unknown;
+      sizeKind?: string;
+      size_kind?: string;
+    };
     const color = (row.color != null ? String(row.color).trim() : '') || (row.variants?.color ?? '') || '';
+    const rawSizes = row.quantityBySize ?? row.quantity_by_size;
+    const quantityBySize = normalizeQuantityBySize(rawSizes);
+    const base = item as POSProduct;
     return {
-      ...(item as POSProduct),
+      ...base,
       color: color || null,
       barcode: row.barcode != null ? String(row.barcode) : null,
+      sizeKind: (row.sizeKind ?? row.size_kind ?? base.sizeKind) as 'na' | 'one_size' | 'sized' | undefined,
+      quantityBySize: quantityBySize.length > 0 ? quantityBySize : base.quantityBySize,
     };
   }
 
