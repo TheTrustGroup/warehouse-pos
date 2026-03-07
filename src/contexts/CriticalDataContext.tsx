@@ -19,6 +19,7 @@ import { reportError } from '../lib/errorReporting';
 import { apiRequest } from '../lib/apiClient';
 import { API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 const is401 = (e: unknown) => (e as { status?: number })?.status === 401;
 
@@ -150,10 +151,10 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
 
   if (internal.isCriticalDataLoading) {
     return (
-      <div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4" />
-        <p className="text-slate-600 font-medium">Loading your data...</p>
-        <p className="text-slate-500 text-sm mt-1">Stores, warehouses, inventory, orders</p>
+      <div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-[var(--edk-bg)] p-4">
+        <LoadingSpinner size="lg" />
+        <p className="mt-4 font-medium text-[var(--edk-ink-2)]">Loading your data...</p>
+        <p className="text-sm mt-1 text-[var(--edk-ink-3)]">Stores, warehouses, inventory, orders</p>
       </div>
     );
   }

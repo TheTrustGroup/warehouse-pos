@@ -101,8 +101,11 @@
 
 @layer base {
   body {
-    @apply bg-gradient-to-br from-slate-50 via-white to-slate-50 text-slate-900 antialiased;
+    background: var(--edk-bg);
+    color: var(--edk-ink);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'cv11', 'ss01';
     /* Reduced font-weight noise: hierarchy via size/spacing, not bold overload */
   }

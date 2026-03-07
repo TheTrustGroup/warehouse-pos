@@ -433,19 +433,19 @@ export default function ProductCard({
 
 export function ProductCardSkeleton() {
   return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.06)]">
-      <div className="w-full pt-[56.25%] bg-slate-100 animate-pulse" />
-      <div className="px-4 pt-3.5 pb-4 flex flex-col gap-2.5">
-        <div className="h-4 w-3/4 bg-slate-100 rounded-lg animate-pulse" />
-        <div className="h-3 w-1/2 bg-slate-100 rounded-lg animate-pulse" />
-        <div className="h-5 w-1/3 bg-slate-100 rounded-lg animate-pulse" />
+    <div className="overflow-hidden rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] shadow-sm">
+      <div className="w-full pt-[56.25%] bg-[var(--edk-border-mid)] animate-pulse" />
+      <div className="flex flex-col gap-2.5 px-4 pt-3.5 pb-4">
+        <div className="h-4 w-3/4 rounded-lg bg-[var(--edk-border-mid)] animate-pulse" />
+        <div className="h-3 w-1/2 rounded-lg bg-[var(--edk-border-mid)] animate-pulse" />
+        <div className="h-5 w-1/3 rounded-lg bg-[var(--edk-border-mid)] animate-pulse" />
         <div className="flex gap-1.5">
-          {[1,2,3].map(i => (
-            <div key={i} className="h-7 w-16 bg-slate-100 rounded-lg animate-pulse" />
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-7 w-16 rounded-lg bg-[var(--edk-border-mid)] animate-pulse" />
           ))}
         </div>
       </div>
-      <div className="h-12 border-t border-slate-100 bg-slate-50 animate-pulse" />
+      <div className="h-12 border-t border-[var(--edk-border)] bg-[var(--edk-surface-2)] animate-pulse" />
     </div>
   );
 }
