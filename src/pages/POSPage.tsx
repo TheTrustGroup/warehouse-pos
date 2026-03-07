@@ -504,8 +504,10 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       const status = (err as { status?: number })?.status;
       const message = (err as Error)?.message ?? '';
       const detail = (err as { detail?: string })?.detail;
-      if (context) {
+      if (context && Array.isArray(context.previousProducts)) {
         setProducts(context.previousProducts);
+      }
+      if (context && Array.isArray(context.previousCart)) {
         setCart(context.previousCart);
       }
       setSaleResult(null);
@@ -808,6 +810,12 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         cartSnapshot: cart,
         productsSnapshot: products,
       });
+    } catch (err) {
+      // Mutation already ran onError (toast + rollback); prevent unhandled rejection / error boundary
+      const msg = getUserFriendlyMessage(err);
+      if (msg && !/sale didn't reach|session expired|insufficient stock|not found|connection/i.test(msg)) {
+        showToast(msg, 'err');
+      }
     } finally {
       setCharging(false);
     }
