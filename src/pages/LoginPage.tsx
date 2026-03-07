@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { validateLoginForm } from '../lib/validationSchemas';
 import { BrandLockup } from '../components/ui/BrandLockup';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 const IconMail = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -284,18 +285,7 @@ export default function LoginPage() {
               >
                 {loading ? (
                   <>
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      className="animate-spin"
-                    >
-                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                    </svg>
+                    <LoadingSpinner size="sm" />
                     Signing in…
                   </>
                 ) : (

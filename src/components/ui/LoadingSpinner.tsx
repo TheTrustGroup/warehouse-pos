@@ -1,19 +1,21 @@
 const sizePx = { sm: 16, md: 32, lg: 48 };
 
+/** Single loading spinner used app-wide: red ring (--edk-border + --edk-red), edk-spin. */
 export function LoadingSpinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   const px = sizePx[size];
 
   return (
-    <div className="flex items-center justify-center" aria-hidden>
+    <div className="flex items-center justify-center shrink-0" aria-hidden>
       <div
-        className="rounded-full animate-spin"
+        className="rounded-full"
         style={{
           width: px,
           height: px,
           borderWidth: 3,
           borderStyle: 'solid',
-          borderColor: 'var(--edk-border-mid)',
+          borderColor: 'var(--edk-border)',
           borderTopColor: 'var(--edk-red)',
+          animation: 'edk-spin 0.8s linear infinite',
         }}
       />
     </div>
