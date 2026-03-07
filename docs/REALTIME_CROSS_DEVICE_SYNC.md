@@ -55,3 +55,15 @@ If you need faster sync without Realtime, you can temporarily lower `intervalMs`
 | UI | Header shows a live sync indicator when Realtime is connected (green dot). When disconnected, 30s polling still runs. |
 
 After 1 and 2 are done, saving an inventory update on one device should appear on the other within a few seconds (Realtime) or within 30s (polling).
+
+## 5. Mobile and desktop parity (cross-device / cross-browser)
+
+Updates and data are kept in sync across devices and browsers:
+
+- **Realtime (when configured):** Inventory, sales, and product changes are pushed to all open tabs/devices via Supabase Realtime. The header shows a green “Live” indicator when connected.
+- **Polling:** When Realtime is off, products and dashboard refresh every **30s** while the tab is visible; **orders** also refresh every **30s** when the tab is visible.
+- **Tab visible:** When you switch back to the app tab (or open it on another device), the app immediately invalidates and refetches:
+  - Products, dashboard, sales, POS product list, and reports (React Query)
+  - Orders (OrderContext)
+  So any change made on another device or browser appears as soon as the tab is visible again.
+- **Same build:** Use the same deployment (same `VITE_SUPABASE_*` env) on all devices so Realtime and behavior match.

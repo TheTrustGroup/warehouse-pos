@@ -420,12 +420,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   useInventoryRealtime(warehouseId, { onRefetch: invalidateProducts });
   useRealtimeSync({ onSync: invalidateProducts, intervalMs: 30_000 });
 
+  // When tab becomes visible (e.g. user returns from another device/browser), invalidate all list caches so mobile/desktop stay in sync.
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         queryClient.invalidateQueries({ queryKey: ['products'] });
         queryClient.invalidateQueries({ queryKey: ['dashboard'] });
         queryClient.invalidateQueries({ queryKey: ['sales'] });
+        queryClient.invalidateQueries({ queryKey: ['pos-products'] });
+        queryClient.invalidateQueries({ queryKey: ['reports'] });
       }
     };
     document.addEventListener('visibilitychange', onVisible);

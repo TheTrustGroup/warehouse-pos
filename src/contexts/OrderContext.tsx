@@ -102,7 +102,17 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loadOrders]);
 
-  useRealtimeSync({ onSync: loadOrders, intervalMs: 60_000, disabled: !user });
+  useRealtimeSync({ onSync: loadOrders, intervalMs: 30_000, disabled: !user });
+
+  // Refetch orders when tab becomes visible so cross-device / cross-browser changes appear immediately.
+  useEffect(() => {
+    if (!user) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadOrders();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [user, loadOrders]);
 
   // Save orders to localStorage for offline support (only real API data)
   useEffect(() => {
