@@ -183,16 +183,22 @@ export interface UseCurrentWarehouseResult {
   isLoading: boolean;
   /** True when loading finished and we have a valid selection (or no warehouses). Use to show content vs loading. */
   isReady: boolean;
+  /** Set when GET /api/warehouses failed or user has no warehouse assigned. Used by WarehouseGuard for error UI. */
+  error: string | null;
 }
 
 export function useCurrentWarehouse(): UseCurrentWarehouseResult {
-  const { currentWarehouseId, currentWarehouse, isLoading, warehouses } = useWarehouse();
-  const isReady = !isLoading && (warehouses.length === 0 || (currentWarehouseId?.trim()?.length ?? 0) > 0);
+  const { currentWarehouseId, currentWarehouse, isLoading, loadError, warehouses } = useWarehouse();
+  const hasValidId = (currentWarehouseId?.trim()?.length ?? 0) > 0;
+  const isReady = !isLoading && (warehouses.length === 0 || hasValidId);
+  const noWarehouseAssigned =
+    !isLoading && !hasValidId && warehouses.length === 0 ? 'No warehouse assigned' : null;
   return {
     warehouseId: currentWarehouseId ?? '',
     warehouse: currentWarehouse ?? null,
     isLoading,
     isReady,
+    error: loadError ?? noWarehouseAssigned,
   };
 }
 

@@ -18,6 +18,7 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { NetworkStatusProvider } from './contexts/NetworkStatusContext';
 import { QUOTA_EVENT } from './lib/offlineQuota';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { WarehouseGuard } from './components/WarehouseGuard';
 import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
 import { Button } from './components/ui/Button';
 import { Layout } from './components/layout/Layout';
@@ -288,20 +289,22 @@ function ProtectedRoutes() {
       <RealtimeProvider>
         <StoreProvider>
           <WarehouseProvider>
-            <PresenceProviderInner>
-            <InventoryProvider>
-            <POSProvider>
-              <OrderProvider>
-                <CriticalDataGate>
-                  <Layout />
-                </CriticalDataGate>
-              </OrderProvider>
-            </POSProvider>
-          </InventoryProvider>
-            </PresenceProviderInner>
-        </WarehouseProvider>
-      </StoreProvider>
-    </RealtimeProvider>
+            <WarehouseGuard>
+              <PresenceProviderInner>
+                <InventoryProvider>
+                  <POSProvider>
+                    <OrderProvider>
+                      <CriticalDataGate>
+                        <Layout />
+                      </CriticalDataGate>
+                    </OrderProvider>
+                  </POSProvider>
+                </InventoryProvider>
+              </PresenceProviderInner>
+            </WarehouseGuard>
+          </WarehouseProvider>
+        </StoreProvider>
+      </RealtimeProvider>
     </CriticalDataProvider>
   );
 }

@@ -1,7 +1,7 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
-interface EmptyStateProps {
+export interface EmptyStateProps {
   icon: LucideIcon;
   title: string;
   description?: string;
@@ -10,22 +10,44 @@ interface EmptyStateProps {
 }
 
 /**
- * Consistent empty state for lists and data views.
+ * Phase 3: Empty state using --edk-* tokens and Barlow Condensed for title.
  * Use when there are no items to show (e.g. no orders, no products).
  */
-export function EmptyState({ icon: Icon, title, description, action, className = '' }: EmptyStateProps) {
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  className = '',
+}: EmptyStateProps) {
   return (
     <div
-      className={`flex flex-col items-center justify-center text-center p-8 solid-card max-w-md mx-auto ${className}`}
+      className={`
+        flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto
+        rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)]
+        ${className}
+      `.trim()}
       role="status"
       aria-live="polite"
     >
-      <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-        <Icon className="w-7 h-7 text-slate-400" aria-hidden />
+      <div
+        className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+        style={{ background: 'var(--edk-surface-2)', color: 'var(--edk-ink-3)' }}
+      >
+        <Icon className="w-7 h-7" strokeWidth={2} aria-hidden />
       </div>
-      <h2 className="text-lg font-semibold text-slate-900 mb-2">{title}</h2>
-      {description && <p className="text-slate-600 text-sm mb-6">{description}</p>}
-      {action && <div className="flex justify-center">{action}</div>}
+      <h2
+        className="text-lg font-semibold mb-2"
+        style={{ color: 'var(--edk-ink)', fontFamily: "'Barlow Condensed', sans-serif" }}
+      >
+        {title}
+      </h2>
+      {description && (
+        <p className="text-sm mb-6" style={{ color: 'var(--edk-ink-2)' }}>
+          {description}
+        </p>
+      )}
+      {action != null && <div className="flex justify-center">{action}</div>}
     </div>
   );
 }
