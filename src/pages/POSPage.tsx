@@ -160,12 +160,16 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const { products: inventoryProducts } = useInventory();
   const triedRefreshRef = useRef(false);
 
+  // Defensive: context can be empty before first load; avoid .length/.map on undefined (root cause of "Something went wrong in POS").
+  const safeInventoryProducts = Array.isArray(inventoryProducts) ? inventoryProducts : [];
+  const safeWarehouses = Array.isArray(warehouses) ? warehouses : [];
+
   const warehouse: Warehouse = currentWarehouse ?? {
     id: currentWarehouseId,
     name: 'Loading...',
     code: '',
   };
-  const effectiveWarehouseId = warehouse?.id ?? currentWarehouseId ?? warehouses[0]?.id ?? '';
+  const effectiveWarehouseId = warehouse?.id ?? currentWarehouseId ?? safeWarehouses[0]?.id ?? '';
   const isWarehouseLoaded = isValidWarehouseId(effectiveWarehouseId);
 
   /** POS never shows location selection; warehouse comes from auth (cashier) or context only. */
@@ -323,7 +327,12 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         }
       } catch (e: unknown) {
         if (signal?.aborted) return;
-        const message = getUserFriendlyMessage(e);
+        let message: string;
+        try {
+          message = getUserFriendlyMessage(e);
+        } catch {
+          message = 'Connection problem. Check your network and try again.';
+        }
         if (!silent && isMounted.current) {
           setProductsLoadError(message);
           showToast(message, 'err');
@@ -340,7 +349,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     const onVisible = () => {
       if (document.visibilityState === 'visible' && isValidWarehouseId(warehouse.id)) {
         productsCacheRef.current = null;
-        loadProducts(warehouse.id, true);
+        loadProducts(warehouse.id, true).catch(() => {
+          // Never let background revalidate crash the app; error state already shown if needed.
+        });
       }
     };
     document.addEventListener('visibilitychange', onVisible);
@@ -360,20 +371,24 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     setColorFilter('');
     // Reuse InventoryContext products when already loaded (CriticalData phase-2 or cache) to avoid duplicate fetch and spinner.
     const hasInventoryForWarehouse =
-      currentWarehouseId === wid && inventoryProducts.length > 0;
+      currentWarehouseId === wid && safeInventoryProducts.length > 0;
     if (hasInventoryForWarehouse) {
-      setProducts(inventoryProducts.map(productToPOSProduct));
+      setProducts(safeInventoryProducts.map(productToPOSProduct));
       setProductsLoadError(null);
       setLoading(false);
-      loadProducts(wid, true, ctrl.signal);
+      loadProducts(wid, true, ctrl.signal).catch(() => {
+        if (isMounted.current) setLoading(false);
+      });
     } else {
-      loadProducts(wid, false, ctrl.signal);
+      loadProducts(wid, false, ctrl.signal).catch(() => {
+        if (isMounted.current) setLoading(false);
+      });
     }
     return () => {
       ctrl.abort();
       if (loadProductsAbortRef.current === ctrl) loadProductsAbortRef.current = null;
     };
-  }, [warehouse.id, currentWarehouseId, loadProducts]);
+  }, [warehouse.id, currentWarehouseId, loadProducts, safeInventoryProducts]);
 
   // NEXT 4: show toast when another cashier broadcasts low-stock, then dismiss
   const processedAlertCountRef = useRef(0);
