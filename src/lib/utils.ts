@@ -64,24 +64,29 @@ export function getLocationDisplay(location: { aisle?: string; rack?: string; bi
   return s || '—';
 }
 
+/** One size row for normalizeQuantityBySize result. */
+type NormalizedSizeRow = { sizeCode: string; sizeLabel?: string; quantity: number };
+
 /**
  * Normalize raw sizes from API (camelCase or snake_case) to { sizeCode, sizeLabel?, quantity }[].
  * Use when building Product from API so "No sizes recorded" does not show for sized products.
  */
-export function normalizeQuantityBySize(raw: unknown): { sizeCode: string; sizeLabel?: string; quantity: number }[] {
+export function normalizeQuantityBySize(raw: unknown): NormalizedSizeRow[] {
   if (!Array.isArray(raw) || raw.length === 0) return [];
-  return raw
-    .map((row: Record<string, unknown>) => {
-      const sizeCode = (row?.sizeCode ?? row?.size_code ?? '') as string;
-      const quantity = Number(row?.quantity ?? 0);
-      if (sizeCode === '' && quantity === 0) return null;
-      return {
-        sizeCode: String(sizeCode),
-        sizeLabel: (row?.sizeLabel ?? row?.size_label) as string | undefined,
-        quantity: Number.isFinite(quantity) ? quantity : 0,
-      };
-    })
-    .filter((r): r is { sizeCode: string; sizeLabel?: string; quantity: number } => r != null);
+  const out: NormalizedSizeRow[] = [];
+  for (const row of raw) {
+    const r = row as Record<string, unknown>;
+    const sizeCode = (r?.sizeCode ?? r?.size_code ?? '') as string;
+    const quantity = Number(r?.quantity ?? 0);
+    if (sizeCode === '' && quantity === 0) continue;
+    const label = r?.sizeLabel ?? r?.size_label;
+    out.push({
+      sizeCode: String(sizeCode),
+      ...(label != null && label !== '' ? { sizeLabel: String(label) } : undefined),
+      quantity: Number.isFinite(quantity) ? quantity : 0,
+    });
+  }
+  return out;
 }
 
 /**
