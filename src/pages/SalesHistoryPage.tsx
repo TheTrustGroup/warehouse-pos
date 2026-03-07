@@ -11,12 +11,16 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
+import { Receipt } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/apiClient';
 import { printReceipt } from '../lib/printReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { PERMISSIONS } from '../types/permissions';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
 
 interface SalesHistoryPageProps { apiBaseUrl?: string; }
 
@@ -168,12 +172,12 @@ function SummaryCard({ label, value, sub, accent }: {
   label: string; value: string; sub?: string; accent?: string;
 }) {
   return (
-    <div className="bg-white rounded-2xl px-4 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] flex flex-col gap-1">
-      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-      <p className={`text-[20px] font-extrabold tabular-nums leading-tight ${accent ?? 'text-slate-900'}`}>
+    <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] px-4 py-4 flex flex-col gap-1">
+      <p className="text-[11px] font-bold text-[var(--edk-ink-3)] uppercase tracking-wider">{label}</p>
+      <p className={`text-[20px] font-extrabold tabular-nums leading-tight ${accent ?? 'text-[var(--edk-ink)]'}`}>
         {value}
       </p>
-      {sub && <p className="text-[11px] text-slate-400">{sub}</p>}
+      {sub != null && <p className="text-[11px] text-[var(--edk-ink-3)]">{sub}</p>}
     </div>
   );
 }
@@ -197,106 +201,93 @@ function SaleRow({
   const isVoided = Boolean(sale.voidedAt);
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)] border border-slate-100">
-      {/* Main row */}
+    <div className="rounded-[var(--edk-radius)] overflow-hidden border border-[var(--edk-border)] bg-[var(--edk-surface)]">
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-slate-50 transition-colors text-left"
+        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-[var(--edk-bg)] transition-colors text-left"
       >
         <div className="flex items-start gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[var(--edk-surface-2)] flex items-center justify-center text-[var(--edk-ink-3)] flex-shrink-0">
             <IconReceipt />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[13px] font-bold text-slate-900">{sale.receiptId}</span>
+              <span className="text-[13px] font-bold text-[var(--edk-ink)]">{sale.receiptId}</span>
               <PayBadge method={sale.paymentMethod} />
-              {isVoided && (
-                <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">
-                  Voided
-                </span>
-              )}
+              {isVoided && <Badge variant="gray" size="sm">Voided</Badge>}
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-[11px] text-[var(--edk-ink-3)] mt-0.5">
               {fmtDate(sale.createdAt)}
-              {sale.customerName && <> · {sale.customerName}</>}
+              {sale.customerName != null && sale.customerName !== '' && <> · {sale.customerName}</>}
             </p>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-[var(--edk-ink-3)]">
               {sale.itemCount} item{sale.itemCount !== 1 ? 's' : ''}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-          <span className="text-[15px] font-extrabold text-slate-900 tabular-nums">{fmt(sale.total)}</span>
-          <span className="text-slate-400">
+          <span className="text-[15px] font-extrabold text-[var(--edk-ink)] tabular-nums">{fmt(sale.total)}</span>
+          <span className="text-[var(--edk-ink-3)]">
             <IconChevron down={expanded} />
           </span>
         </div>
       </button>
 
-      {/* Expanded lines */}
       {expanded && (
-        <div className="border-t border-slate-100 bg-slate-50">
-          {/* Line items */}
+        <div className="border-t border-[var(--edk-border)] bg-[var(--edk-surface-2)]">
           <div className="px-4 py-3 space-y-2">
             {sale.lines.map(l => (
               <div key={l.id} className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-[13px] font-semibold text-slate-800 truncate">
+                  <p className="text-[13px] font-semibold text-[var(--edk-ink)] truncate">
                     {l.name}
-                    {l.sizeCode && <span className="text-slate-400 font-normal"> · {l.sizeCode}</span>}
+                    {l.sizeCode != null && l.sizeCode !== '' && <span className="text-[var(--edk-ink-3)] font-normal"> · {l.sizeCode}</span>}
                   </p>
-                  <p className="text-[11px] text-slate-400">{l.qty} × {fmt(l.unitPrice)}</p>
+                  <p className="text-[11px] text-[var(--edk-ink-3)]">{l.qty} × {fmt(l.unitPrice)}</p>
                 </div>
-                <span className="text-[13px] font-bold text-slate-700 tabular-nums flex-shrink-0">
+                <span className="text-[13px] font-bold text-[var(--edk-ink)] tabular-nums flex-shrink-0">
                   {fmt(l.lineTotal)}
                 </span>
               </div>
             ))}
           </div>
 
-          {/* Totals */}
-          <div className="px-4 py-3 border-t border-slate-200 space-y-1">
+          <div className="px-4 py-3 border-t border-[var(--edk-border-mid)] space-y-1">
             {sale.discountPct > 0 && (
               <div className="flex justify-between text-[12px]">
-                <span className="text-slate-500">Subtotal</span>
-                <span className="text-slate-600 tabular-nums">{fmt(sale.subtotal)}</span>
+                <span className="text-[var(--edk-ink-2)]">Subtotal</span>
+                <span className="text-[var(--edk-ink-2)] tabular-nums">{fmt(sale.subtotal)}</span>
               </div>
             )}
             {sale.discountPct > 0 && (
               <div className="flex justify-between text-[12px]">
-                <span className="text-emerald-600">Discount ({sale.discountPct}%)</span>
-                <span className="text-emerald-600 tabular-nums">−{fmt(sale.discountAmt)}</span>
+                <span className="text-[var(--edk-green)]">Discount ({sale.discountPct}%)</span>
+                <span className="text-[var(--edk-green)] tabular-nums">−{fmt(sale.discountAmt)}</span>
               </div>
             )}
             <div className="flex justify-between text-[13px] font-bold pt-1">
-              <span className="text-slate-900">Total</span>
-              <span className="text-slate-900 tabular-nums">{fmt(sale.total)}</span>
+              <span className="text-[var(--edk-ink)]">Total</span>
+              <span className="text-[var(--edk-ink)] tabular-nums">{fmt(sale.total)}</span>
             </div>
           </div>
 
-          {/* Print / Void */}
           <div className="px-4 pb-3 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => onPrint(sale)}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-slate-200 hover:bg-slate-300
-                         text-[12px] font-semibold text-slate-700 transition-colors"
-            >
-              <IconPrint /> Print receipt
-            </button>
-            {canVoid && !isVoided && onVoid && (
-              <button
+            <Button type="button" variant="secondary" size="sm" onClick={() => onPrint(sale)} leftIcon={<IconPrint />}>
+              Print receipt
+            </Button>
+            {canVoid && !isVoided && onVoid != null && (
+              <Button
                 type="button"
+                variant="danger"
+                size="sm"
                 onClick={() => onVoid(sale)}
                 disabled={voiding}
-                className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-red-100 hover:bg-red-200
-                           text-[12px] font-semibold text-red-700 transition-colors disabled:opacity-50"
+                loading={voiding}
               >
-                {voiding ? 'Voiding…' : 'Void sale'}
-              </button>
+                Void sale
+              </Button>
             )}
           </div>
         </div>
@@ -493,31 +484,29 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100 pb-12">
+    <div className="min-h-screen bg-[var(--edk-bg)] pb-12">
 
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-20 bg-white border-b border-slate-100 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+      <header className="sticky top-0 z-20 bg-[var(--edk-surface)] border-b border-[var(--edk-border)]">
         <div className="flex items-center justify-between px-4 pt-4 pb-3">
           <div>
-            <h1 className="text-[20px] font-bold text-slate-900">Sales History</h1>
-            {/* Warehouse selector */}
+            <h1 className="text-[20px] font-bold text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+              Sales History
+            </h1>
             <div className="relative mt-0.5">
               <button type="button" onClick={() => setWhDropdown(v => !v)}
-                      className="flex items-center gap-1 text-[12px] font-semibold text-slate-500 hover:text-slate-700 transition-colors">
+                      className="flex items-center gap-1 text-[12px] font-semibold text-[var(--edk-ink-2)] hover:text-[var(--edk-ink)] transition-colors">
                 {currentWh.name}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
               {whDropdown && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setWhDropdown(false)}/>
-                  <div className="absolute left-0 top-6 z-20 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 w-40">
+                  <div className="fixed inset-0 z-10" onClick={() => setWhDropdown(false)} aria-hidden />
+                  <div className="absolute left-0 top-6 z-20 bg-[var(--edk-surface)] rounded-xl shadow-xl border border-[var(--edk-border)] py-1.5 w-40">
                     {warehouses.map(w => (
                       <button key={w.id} type="button"
                               onClick={() => { setWarehouseId(w.id); setWhDropdown(false); }}
                               className={`w-full px-4 py-2.5 text-left text-[13px] font-medium transition-colors
-                                ${warehouseId === w.id ? 'text-red-500 bg-red-50' : 'text-slate-700 hover:bg-slate-50'}`}>
+                                ${warehouseId === w.id ? 'text-[var(--edk-red)] bg-[var(--edk-red-soft)]' : 'text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)]'}`}>
                         {warehouseId === w.id && '✓ '}{w.name}
                       </button>
                     ))}
@@ -528,30 +517,26 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
           </div>
           <div className="flex items-center gap-2">
             {canClearHistory && (
-              <button type="button" onClick={handleClearHistory} disabled={clearHistoryLoading}
-                      className="h-9 px-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-[13px] font-semibold flex items-center gap-1.5 hover:bg-red-100 disabled:opacity-50 transition-colors">
-                {clearHistoryLoading ? 'Clearing…' : 'Clear history'}
-              </button>
+              <Button type="button" variant="danger" size="sm" onClick={handleClearHistory} disabled={clearHistoryLoading} loading={clearHistoryLoading}>
+                Clear history
+              </Button>
             )}
-            <button type="button" onClick={fetchSales}
-                    className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-500 flex items-center justify-center hover:bg-slate-50 transition-colors">
-              <IconRefresh/>
-            </button>
-            <button type="button" onClick={handleExport} disabled={displayed.length === 0}
-                    className="h-9 px-3 rounded-xl bg-slate-900 text-white text-[13px] font-semibold flex items-center gap-1.5 hover:bg-slate-700 disabled:opacity-40 transition-colors">
-              <IconDownload/> Export
-            </button>
+            <Button type="button" variant="secondary" size="sm" onClick={fetchSales} className="min-w-[36px] h-9 px-0" aria-label="Refresh">
+              <IconRefresh />
+            </Button>
+            <Button type="button" variant="primary" size="sm" onClick={handleExport} disabled={displayed.length === 0} leftIcon={<IconDownload />}>
+              Export
+            </Button>
           </div>
         </div>
 
-        {/* Date filter tabs */}
         <div className="flex gap-1 px-4 pb-3">
           {DATE_TABS.map(t => (
             <button key={t.key} type="button" onClick={() => setDateFilter(t.key)}
                     className={`flex-1 h-8 rounded-xl text-[12px] font-bold transition-all duration-150
                       ${dateFilter === t.key
-                        ? 'bg-red-500 text-white shadow-[0_2px_8px_rgba(239,68,68,0.3)]'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                        ? 'bg-[var(--edk-red)] text-white shadow-[0_2px_8px_var(--edk-red-soft)]'
+                        : 'bg-[var(--edk-surface-2)] text-[var(--edk-ink-3)] hover:bg-[var(--edk-border-mid)]'}`}>
               {t.label}
             </button>
           ))}
@@ -562,7 +547,7 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
 
         {/* ── Summary cards ── */}
         <div className="grid grid-cols-2 gap-3">
-          <SummaryCard label="Revenue" value={fmt(totalRevenue)} sub={`${displayed.length} transactions`} accent="text-red-500" />
+          <SummaryCard label="Revenue" value={fmt(totalRevenue)} sub={`${displayed.length} transactions`} accent="text-[var(--edk-red)]" />
           <SummaryCard label="Items sold" value={totalItems.toLocaleString()} sub={`Avg ${fmt(avgSale)}/sale`} />
           <SummaryCard label="Cash" value={fmt(cashTotal)} />
           <SummaryCard label="MoMo" value={fmt(momoTotal)} />
@@ -572,52 +557,46 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
           <SummaryCard label="Card" value={fmt(cardTotal)} />
         )}
 
-        {/* ── Search ── */}
         <div className="relative">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-            <IconSearch/>
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--edk-ink-3)] pointer-events-none">
+            <IconSearch />
           </span>
           <input type="search" value={search} onChange={e => setSearch(e.target.value)}
                  placeholder="Search receipt, customer, product…"
-                 className="w-full h-11 pl-10 pr-4 rounded-xl border-[1.5px] border-slate-200 bg-white
-                            text-[14px] text-slate-900 placeholder:text-slate-300
-                            focus:outline-none focus:border-red-400 focus:ring-[3px] focus:ring-red-100
-                            transition-all duration-150"/>
+                 className="w-full h-11 pl-10 pr-4 rounded-xl border-[1.5px] border-[var(--edk-border-mid)] bg-[var(--edk-surface)]
+                            text-[14px] text-[var(--edk-ink)] placeholder:text-[var(--edk-ink-3)]
+                            focus:outline-none focus:border-[var(--edk-red)] focus:ring-[3px] focus:ring-[var(--edk-red-soft)]
+                            transition-all duration-150"
+          />
         </div>
 
-        {/* ── Results count ── */}
-        <p className="text-[12px] font-medium text-slate-400">
+        <p className="text-[12px] font-medium text-[var(--edk-ink-3)]">
           {loading ? 'Loading…' : `${displayed.length} transaction${displayed.length !== 1 ? 's' : ''}`}
         </p>
 
-        {/* ── Error ── */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-4 text-center">
-            <p className="text-[14px] font-semibold text-red-700">{error}</p>
-            <button type="button" onClick={fetchSales} className="mt-2 text-[13px] font-bold text-red-500 hover:text-red-700">
+        {error != null && error !== '' && (
+          <div className="rounded-[var(--edk-radius)] border border-[var(--edk-red-border)] bg-[var(--edk-red-soft)] px-4 py-4 text-center">
+            <p className="text-[14px] font-semibold text-[var(--edk-ink)]">{error}</p>
+            <Button type="button" variant="primary" size="sm" onClick={fetchSales} className="mt-2">
               Retry
-            </button>
+            </Button>
           </div>
         )}
 
-        {/* ── Loading skeletons ── */}
         {loading && (
           <div className="space-y-3">
-            {[1,2,3,4].map(i => (
-              <div key={i} className="h-20 bg-white rounded-2xl animate-pulse"/>
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-20 bg-[var(--edk-surface)] rounded-[var(--edk-radius)] border border-[var(--edk-border)] animate-pulse" />
             ))}
           </div>
         )}
 
-        {/* ── Empty state ── */}
         {!loading && !error && displayed.length === 0 && (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-300">
-              <IconReceipt/>
-            </div>
-            <p className="text-[15px] font-bold text-slate-700">No sales {dateFilter === 'today' ? 'today' : 'found'}</p>
-            <p className="text-[13px] text-slate-400">Complete a checkout to see sales here.</p>
-          </div>
+          <EmptyState
+            icon={Receipt}
+            title={dateFilter === 'today' ? 'No sales today' : 'No sales found'}
+            description="Complete a checkout to see sales here."
+          />
         )}
 
         {/* ── Sale rows ── */}

@@ -267,8 +267,7 @@ export function Reports() {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
+    <div className="space-y-8 min-h-screen bg-[var(--edk-bg)]">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fade-in-up">
         <PageHeader title="Reports & Analytics" description="Comprehensive business insights" />
         <Button
@@ -307,15 +306,15 @@ export function Reports() {
       {/* Sales Report */}
       {reportType === 'sales' && (
         <div className="space-y-6">
-          <div className="solid-card animate-fade-in-up">
-            <h3 className="font-semibold text-slate-900 mb-3">Period</h3>
+          <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-4 animate-fade-in-up">
+            <h3 className="font-semibold text-[var(--edk-ink)] mb-3">Period</h3>
             <div className="flex flex-wrap gap-2 mb-4">
               {(['today', 'week', 'month', 'last_month', 'quarter', 'year'] as const).map((preset) => (
                 <button
                   key={preset}
                   type="button"
                   onClick={() => setPeriod(preset)}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--edk-surface-2)] text-[var(--edk-ink-2)] hover:bg-[var(--edk-border-mid)] transition-colors"
                 >
                   {preset === 'today' ? 'Today' : preset === 'week' ? 'This Week' : preset === 'month' ? 'This Month' : preset === 'last_month' ? 'Last Month' : preset === 'quarter' ? 'Last 3 Months' : 'This Year'}
                 </button>
@@ -329,17 +328,17 @@ export function Reports() {
             />
           </div>
           {(salesReportLoading || transactionsLoading) && (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[var(--edk-ink-3)]">
               {salesReportLoading ? 'Loading sales report…' : 'Loading sales from server…'}
             </p>
           )}
           {serverReportUnavailable && reportType === 'sales' && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+            <div className="rounded-[var(--edk-radius)] border border-[var(--edk-amber)]/30 bg-[var(--edk-amber-bg)] px-4 py-2.5 text-sm text-[var(--edk-ink)]">
               Report is from local data; server report unavailable.
             </div>
           )}
           {!salesReportLoading && !transactionsLoading && reportType === 'sales' && (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[var(--edk-ink-3)]">
               {salesReportFromApi != null
                 ? 'Sales from POS (revenue, COGS, profit from sale records).'
                 : transactionsSource === 'server'
@@ -352,20 +351,20 @@ export function Reports() {
             <>
               <SalesMetrics report={displayedSalesReport} />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="solid-card p-4">
-                  <p className="text-sm font-medium text-slate-600 mb-1">Stock value (at cost)</p>
-                  <p className="text-xl font-bold text-slate-900">{formatCurrency(inventorySnapshot.stockValueAtCost)}</p>
-                  <p className="text-xs text-slate-500 mt-1">{inventorySnapshot.skuCount} SKUs · {inventorySnapshot.totalUnits} units</p>
+                <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-4">
+                  <p className="text-sm font-medium text-[var(--edk-ink-2)] mb-1">Stock value (at cost)</p>
+                  <p className="text-xl font-bold text-[var(--edk-ink)]">{formatCurrency(inventorySnapshot.stockValueAtCost)}</p>
+                  <p className="text-xs text-[var(--edk-ink-3)] mt-1">{inventorySnapshot.skuCount} SKUs · {inventorySnapshot.totalUnits} units</p>
                 </div>
-                <div className="solid-card p-4">
-                  <p className="text-sm font-medium text-slate-600 mb-1">Stock value (at selling price)</p>
-                  <p className="text-xl font-bold text-slate-900">{formatCurrency(inventorySnapshot.stockValueAtSelling)}</p>
-                  <p className="text-xs text-slate-500 mt-1">Potential revenue if all sold</p>
+                <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-4">
+                  <p className="text-sm font-medium text-[var(--edk-ink-2)] mb-1">Stock value (at selling price)</p>
+                  <p className="text-xl font-bold text-[var(--edk-ink)]">{formatCurrency(inventorySnapshot.stockValueAtSelling)}</p>
+                  <p className="text-xs text-[var(--edk-ink-3)] mt-1">Potential revenue if all sold</p>
                 </div>
-                <div className="solid-card p-4">
-                  <p className="text-sm font-medium text-slate-600 mb-1">Potential profit in stock</p>
-                  <p className="text-xl font-bold text-slate-900">{formatCurrency(inventorySnapshot.potentialProfit)}</p>
-                  <p className="text-xs text-slate-500 mt-1">
+                <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-4">
+                  <p className="text-sm font-medium text-[var(--edk-ink-2)] mb-1">Potential profit in stock</p>
+                  <p className="text-xl font-bold text-[var(--edk-ink)]">{formatCurrency(inventorySnapshot.potentialProfit)}</p>
+                  <p className="text-xs text-[var(--edk-ink-3)] mt-1">
                     {inventorySnapshot.stockValueAtSelling > 0
                       ? `${((inventorySnapshot.potentialProfit / inventorySnapshot.stockValueAtSelling) * 100).toFixed(1)}% potential margin`
                       : '—'}
@@ -374,28 +373,27 @@ export function Reports() {
               </div>
               <SalesChart report={displayedSalesReport} />
               <TopProductsTable report={displayedSalesReport} />
-              {/* Category Performance */}
-              <div className="table-container">
-                <h3 className="text-lg font-semibold text-slate-900 mb-6 px-6 pt-6">Category Performance</h3>
+              <div className="table-container rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
+                <h3 className="text-lg font-semibold text-[var(--edk-ink)] mb-6 px-6 pt-6">Category Performance</h3>
             <div className="table-scroll-wrap">
               <table className="w-full min-w-[320px]">
-                <thead className="table-header">
+                <thead className="table-header bg-[var(--edk-surface-2)] border-b border-[var(--edk-border)]">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Category</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Quantity Sold</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Revenue</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">% of Total</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--edk-ink-3)] uppercase">Category</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--edk-ink-3)] uppercase">Quantity Sold</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--edk-ink-3)] uppercase">Revenue</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--edk-ink-3)] uppercase">% of Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {displayedSalesReport.salesByCategory.map((cat, idx) => (
-                    <tr key={idx} className="table-row">
-                      <td className="px-4 py-3 font-medium text-slate-900">{cat.category}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{cat.quantity}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                    <tr key={idx} className="table-row border-b border-[var(--edk-border)]">
+                      <td className="px-4 py-3 font-medium text-[var(--edk-ink)]">{cat.category}</td>
+                      <td className="px-4 py-3 text-right text-[var(--edk-ink-2)]">{cat.quantity}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-[var(--edk-ink)]">
                         {formatCurrency(cat.revenue)}
                       </td>
-                      <td className="px-4 py-3 text-right text-slate-600">
+                      <td className="px-4 py-3 text-right text-[var(--edk-ink-2)]">
                         {displayedSalesReport.totalRevenue > 0 ? ((cat.revenue / displayedSalesReport.totalRevenue) * 100).toFixed(1) : '0.0'}%
                       </td>
                     </tr>
@@ -404,26 +402,26 @@ export function Reports() {
               </table>
             </div>
           </div>
-              <div className="solid-card p-4">
-                <h3 className="font-semibold text-slate-900 mb-3">Alerts</h3>
+              <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-4">
+                <h3 className="font-semibold text-[var(--edk-ink)] mb-3">Alerts</h3>
                 <ul className="space-y-1.5 text-sm">
                   <li className="flex items-center justify-between">
-                    <span className="text-slate-600">Out of stock</span>
-                    <span className="font-semibold text-red-600">{inventorySnapshot.outOfStock}</span>
+                    <span className="text-[var(--edk-ink-2)]">Out of stock</span>
+                    <span className="font-semibold text-[var(--edk-red)]">{inventorySnapshot.outOfStock}</span>
                   </li>
                   <li className="flex items-center justify-between">
-                    <span className="text-slate-600">Low stock (at or below reorder level)</span>
-                    <span className="font-semibold text-amber-600">{inventorySnapshot.lowStock}</span>
+                    <span className="text-[var(--edk-ink-2)]">Low stock (at or below reorder level)</span>
+                    <span className="font-semibold text-[var(--edk-amber)]">{inventorySnapshot.lowStock}</span>
                   </li>
                   <li className="flex items-center justify-between">
-                    <span className="text-slate-600">Products with no cost price</span>
-                    <span className="font-semibold text-slate-600">{inventorySnapshot.noCostPrice}</span>
+                    <span className="text-[var(--edk-ink-2)]">Products with no cost price</span>
+                    <span className="font-semibold text-[var(--edk-ink-2)]">{inventorySnapshot.noCostPrice}</span>
                   </li>
                 </ul>
-                <p className="text-xs text-slate-500 mt-2">Cost price is required for accurate profit in reports.</p>
+                <p className="text-xs text-[var(--edk-ink-3)] mt-2">Cost price is required for accurate profit in reports.</p>
               </div>
               <div className="flex justify-end">
-                <Link to="/sales" className="text-sm font-semibold text-primary-600 hover:underline">
+                <Link to="/sales" className="text-sm font-semibold text-[var(--edk-red)] hover:underline">
                   View full sales history →
                 </Link>
               </div>
@@ -437,24 +435,23 @@ export function Reports() {
         <div className="space-y-6">
           <InventoryMetrics report={inventoryReport} />
 
-          {/* Top Value Products */}
-          <div className="table-container">
-            <h3 className="text-lg font-semibold text-slate-900 mb-6 px-6 pt-6">Highest Value Inventory</h3>
+          <div className="table-container rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
+            <h3 className="text-lg font-semibold text-[var(--edk-ink)] mb-6 px-6 pt-6">Highest Value Inventory</h3>
             <div className="table-scroll-wrap">
               <table className="w-full min-w-[280px]">
-                <thead className="table-header">
+                <thead className="table-header bg-[var(--edk-surface-2)] border-b border-[var(--edk-border)]">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Product</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Quantity</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Total Value</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--edk-ink-3)] uppercase">Product</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--edk-ink-3)] uppercase">Quantity</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--edk-ink-3)] uppercase">Total Value</th>
                   </tr>
                 </thead>
                 <tbody>
                   {inventoryReport.topValueProducts.map((product, idx) => (
-                    <tr key={idx} className="table-row">
-                      <td className="px-4 py-3 font-medium text-slate-900">{product.name}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{product.quantity}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                    <tr key={idx} className="table-row border-b border-[var(--edk-border)]">
+                      <td className="px-4 py-3 font-medium text-[var(--edk-ink)]">{product.name}</td>
+                      <td className="px-4 py-3 text-right text-[var(--edk-ink-2)]">{product.quantity}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-[var(--edk-ink)]">
                         {formatCurrency(product.value)}
                       </td>
                     </tr>
@@ -464,28 +461,27 @@ export function Reports() {
             </div>
           </div>
 
-          {/* Category Breakdown */}
-          <div className="table-container">
-            <h3 className="text-lg font-semibold text-slate-900 mb-6 px-6 pt-6">Inventory by Category</h3>
+          <div className="table-container rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
+            <h3 className="text-lg font-semibold text-[var(--edk-ink)] mb-6 px-6 pt-6">Inventory by Category</h3>
             <div className="table-scroll-wrap">
               <table className="w-full min-w-[320px]">
-                <thead className="table-header">
+                <thead className="table-header bg-[var(--edk-surface-2)] border-b border-[var(--edk-border)]">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Category</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Product Count</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Total Value</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">% of Total</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--edk-ink-3)] uppercase">Category</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--edk-ink-3)] uppercase">Product Count</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--edk-ink-3)] uppercase">Total Value</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--edk-ink-3)] uppercase">% of Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {inventoryReport.productsByCategory.map((cat, idx) => (
-                    <tr key={idx} className="table-row">
-                      <td className="px-4 py-3 font-medium text-slate-900">{cat.category}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{cat.count}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                    <tr key={idx} className="table-row border-b border-[var(--edk-border)]">
+                      <td className="px-4 py-3 font-medium text-[var(--edk-ink)]">{cat.category}</td>
+                      <td className="px-4 py-3 text-right text-[var(--edk-ink-2)]">{cat.count}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-[var(--edk-ink)]">
                         {formatCurrency(cat.value)}
                       </td>
-                      <td className="px-4 py-3 text-right text-slate-600">
+                      <td className="px-4 py-3 text-right text-[var(--edk-ink-2)]">
                         {inventoryReport.totalStockValue > 0 ? ((cat.value / inventoryReport.totalStockValue) * 100).toFixed(1) : '0.0'}%
                       </td>
                     </tr>

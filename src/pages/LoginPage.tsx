@@ -172,28 +172,28 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* —— Right: Light form panel —— */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 px-6 py-12 md:py-0 md:px-12 min-h-[50vh] md:min-h-0">
+      {/* Right: Light form panel */}
+      <div className="flex-1 flex items-center justify-center bg-[var(--edk-bg)] px-6 py-12 md:py-0 md:px-12 min-h-[50vh] md:min-h-0">
         <div
           className={`w-full max-w-[400px] transition-all duration-500 ${ready ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
           style={{ transitionTimingFunction: 'cubic-bezier(0.22,1,0.36,1)' }}
         >
           <header className="mb-8">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
               Welcome back
             </h1>
-            <p className="text-sm mt-1.5 font-medium text-slate-500">
+            <p className="text-sm mt-1.5 font-medium text-[var(--edk-ink-2)]">
               Sign in to your workspace
             </p>
           </header>
 
           {bannerError && (
             <div
-              className="mb-6 px-4 py-3.5 rounded-xl flex gap-3 items-start bg-primary-50/80 border border-primary-200 text-primary-700"
+              className="mb-6 px-4 py-3.5 rounded-xl flex gap-3 items-start bg-[var(--edk-red-soft)] border border-[var(--edk-red-border)] text-[var(--edk-ink)]"
               role="alert"
               style={{ animation: 'loginSlideDown 0.25s ease' }}
             >
-              <svg className="flex-shrink-0 mt-0.5 text-primary-600" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <svg className="flex-shrink-0 mt-0.5 text-[var(--edk-red)]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -206,12 +206,12 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="login-email"
-                className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2"
+                className="block text-xs font-semibold text-[var(--edk-ink-2)] uppercase tracking-wide mb-2"
               >
                 Email address
               </label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--edk-ink-3)]">
                   <IconMail />
                 </span>
                 <input
@@ -227,9 +227,9 @@ export default function LoginPage() {
                   placeholder="you@extremedeptkidz.com"
                   autoComplete="email"
                   disabled={loading}
-                  className="input-field w-full pl-11 pr-4 text-sm font-medium text-slate-900 placeholder:text-slate-400
-                             border-slate-200 focus:border-primary-400 focus:ring-primary-500/20
-                             disabled:opacity-50 transition-all duration-150 bg-white"
+                  className="input-field w-full pl-11 pr-4 text-sm font-medium text-[var(--edk-ink)] placeholder:text-[var(--edk-ink-3)]
+                             border-[var(--edk-border-mid)] focus:border-[var(--edk-red)] focus:ring-[var(--edk-red-soft)]
+                             disabled:opacity-50 transition-all duration-150 bg-[var(--edk-surface)]"
                   style={{ minHeight: 44 }}
                 />
               </div>
@@ -238,12 +238,12 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="login-password"
-                className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2"
+                className="block text-xs font-semibold text-[var(--edk-ink-2)] uppercase tracking-wide mb-2"
               >
                 Password
               </label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--edk-ink-3)]">
                   <IconLock />
                 </span>
                 <input
@@ -259,16 +259,16 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   autoComplete="current-password"
                   disabled={loading}
-                  className="input-field w-full pl-11 pr-12 text-sm font-medium text-slate-900 placeholder:text-slate-400
-                             border-slate-200 focus:border-primary-400 focus:ring-primary-500/20
-                             disabled:opacity-50 transition-all duration-150 bg-white"
+                  className="input-field w-full pl-11 pr-12 text-sm font-medium text-[var(--edk-ink)] placeholder:text-[var(--edk-ink-3)]
+                             border-[var(--edk-border-mid)] focus:border-[var(--edk-red)] focus:ring-[var(--edk-red-soft)]
+                             disabled:opacity-50 transition-all duration-150 bg-[var(--edk-surface)]"
                   style={{ minHeight: 44 }}
                 />
                 <button
                   type="button"
                   tabIndex={-1}
                   onClick={() => setShowPw((v) => !v)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-lg text-[var(--edk-ink-3)] hover:text-[var(--edk-ink-2)] transition-colors"
                   aria-label={showPw ? 'Hide password' : 'Show password'}
                 >
                   {showPw ? <IconEyeOff /> : <IconEyeOn />}
@@ -323,11 +323,11 @@ export default function LoginPage() {
             )}
           </form>
 
-          <footer className="mt-8 pt-6 border-t border-slate-200 text-center space-y-1">
-            <p className="text-xs font-medium text-slate-500">
+          <footer className="mt-8 pt-6 border-t border-[var(--edk-border)] text-center space-y-1">
+            <p className="text-xs font-medium text-[var(--edk-ink-2)]">
               Warehouse Management System
             </p>
-            <p className="text-[11px] font-mono text-slate-400">
+            <p className="text-[11px] font-mono text-[var(--edk-ink-3)]">
               v2.0 · extremedeptkidz.com
             </p>
           </footer>

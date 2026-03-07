@@ -52,35 +52,33 @@ export function Settings() {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
+    <div className="space-y-8 min-h-screen bg-[var(--edk-bg)]">
       <div className="flex items-center justify-between animate-fade-in-up">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">Settings</h1>
-          <p className="text-slate-500 text-sm">Manage your store configuration</p>
+          <h1 className="text-3xl font-bold text-[var(--edk-ink)] tracking-tight mb-2" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>Settings</h1>
+          <p className="text-[var(--edk-ink-2)] text-sm">Manage your store configuration</p>
         </div>
         <Button
           type="button"
           variant="secondary"
           onClick={handleReset}
           className="flex items-center gap-2"
+          leftIcon={<RotateCcw className="w-5 h-5" strokeWidth={2} />}
         >
-          <RotateCcw className="w-5 h-5" strokeWidth={2} />
           Reset to Defaults
         </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="solid-card p-0 overflow-hidden animate-fade-in-up">
-        <nav className="flex gap-2 px-6 border-b border-slate-200/50">
+      <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-0 overflow-hidden animate-fade-in-up">
+        <nav className="flex gap-2 px-6 border-b border-[var(--edk-border)]">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-2 px-4 py-4 border-b-2 font-semibold transition-all duration-200 ${
                 activeTab === tab.id
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
+                  ? 'border-[var(--edk-red)] text-[var(--edk-red)]'
+                  : 'border-transparent text-[var(--edk-ink-2)] hover:text-[var(--edk-ink)]'
               }`}
             >
               <tab.icon className="w-5 h-5" strokeWidth={2} />
@@ -89,7 +87,6 @@ export function Settings() {
           ))}
         </nav>
 
-        {/* Tab Content */}
         <div className="p-6">
           {activeTab === 'business' && <BusinessProfile />}
           {activeTab === 'system' && <SystemPreferences />}

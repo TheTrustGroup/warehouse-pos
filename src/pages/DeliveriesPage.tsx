@@ -11,10 +11,14 @@
 // ============================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Truck } from 'lucide-react';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPatch } from '../lib/apiClient';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { isValidWarehouseId } from '../lib/warehouseId';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -81,20 +85,17 @@ const IconRefresh    = () => (<svg width="15" height="15" viewBox="0 0 24 24" fi
 const IconSpinner    = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'del-spin .8s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>);
 const IconClock      = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>);
 
-// ── Status Badge ──────────────────────────────────────────────────────────
-
 function StatusBadge({ status, overdue }: { status: Delivery['deliveryStatus']; overdue?: boolean }) {
   if (overdue && status !== 'delivered' && status !== 'cancelled') {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600">⚠ Overdue</span>;
+    return <Badge variant="danger" size="sm">⚠ Overdue</Badge>;
   }
-  const cfg: Record<Delivery['deliveryStatus'], { bg: string; text: string; label: string }> = {
-    pending:    { bg: 'bg-amber-100',   text: 'text-amber-700',    label: 'Pending'    },
-    dispatched: { bg: 'bg-blue-100',    text: 'text-blue-700',     label: 'Dispatched' },
-    delivered:  { bg: 'bg-emerald-100', text: 'text-emerald-700',  label: 'Delivered'  },
-    cancelled:  { bg: 'bg-slate-100',   text: 'text-slate-600',    label: 'Cancelled'  },
+  const variantMap: Record<Delivery['deliveryStatus'], 'warning' | 'blue' | 'success' | 'gray'> = {
+    pending: 'warning',
+    dispatched: 'blue',
+    delivered: 'success',
+    cancelled: 'gray',
   };
-  const c = cfg[status];
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${c.bg} ${c.text}`}>{c.label}</span>;
+  return <Badge variant={variantMap[status]} size="sm">{status.charAt(0).toUpperCase() + status.slice(1)}</Badge>;
 }
 
 // ── Delivery Card ─────────────────────────────────────────────────────────
@@ -114,34 +115,44 @@ function DeliveryCard({
   const displayName = delivery.recipientName ?? delivery.customerName ?? 'Unknown';
   const isCancelled = delivery.deliveryStatus === 'cancelled';
 
+  const cardBorder = isCancelled
+    ? 'border-[var(--edk-border)] opacity-90'
+    : overdue
+      ? 'border-[var(--edk-red-border)] shadow-[0_0_0_3px_var(--edk-red-soft)]'
+      : 'border-[var(--edk-border)]';
+  const iconBg = isCancelled
+    ? 'bg-[var(--edk-surface-2)] text-[var(--edk-ink-3)]'
+    : delivery.deliveryStatus === 'dispatched'
+      ? 'bg-blue-50 text-blue-600'
+      : overdue
+        ? 'bg-[var(--edk-red-soft)] text-[var(--edk-red)]'
+        : 'bg-[var(--edk-amber-bg)] text-[var(--edk-amber)]';
+
   return (
-    <div className={`bg-white rounded-2xl border-[1.5px] overflow-hidden transition-all duration-200 ${isCancelled ? 'border-slate-200 opacity-90' : overdue ? 'border-red-200 shadow-[0_0_0_3px_rgba(239,68,68,0.08)]' : 'border-slate-200'}`}>
+    <div className={`bg-[var(--edk-surface)] rounded-[var(--edk-radius)] border-[1.5px] overflow-hidden transition-all duration-200 ${cardBorder}`}>
 
-      {/* Card header */}
       <button type="button" onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-start gap-3 px-4 py-4 text-left hover:bg-slate-50/50 transition-colors">
+        className="w-full flex items-start gap-3 px-4 py-4 text-left hover:bg-[var(--edk-bg)] transition-colors">
 
-        {/* Delivery icon */}
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${isCancelled ? 'bg-slate-100 text-slate-400' : delivery.deliveryStatus === 'dispatched' ? 'bg-blue-100 text-blue-600' : overdue ? 'bg-red-100 text-red-500' : 'bg-amber-100 text-amber-600'}`}>
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${iconBg}`}>
           <IconTruck />
         </div>
 
-        {/* Main info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-[14px] font-bold text-slate-900 truncate">{displayName}</p>
+            <p className="text-[14px] font-bold text-[var(--edk-ink)] truncate">{displayName}</p>
             <StatusBadge status={delivery.deliveryStatus} overdue={overdue} />
           </div>
-          <p className="text-[12px] text-slate-400 mt-0.5 font-medium">{delivery.receiptId}</p>
+          <p className="text-[12px] text-[var(--edk-ink-3)] mt-0.5 font-medium">{delivery.receiptId}</p>
           <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-            <span className="text-[12px] font-bold text-slate-700">{fmt(delivery.total)}</span>
+            <span className="text-[12px] font-bold text-[var(--edk-ink-2)]">{fmt(delivery.total)}</span>
             {delivery.recipientPhone && (
-              <span className="flex items-center gap-1 text-[11px] text-slate-500">
+              <span className="flex items-center gap-1 text-[11px] text-[var(--edk-ink-3)]">
                 <IconPhone />{delivery.recipientPhone}
               </span>
             )}
             {delivery.expectedDate && (
-              <span className={`flex items-center gap-1 text-[11px] font-medium ${overdue ? 'text-red-500' : 'text-slate-500'}`}>
+              <span className={`flex items-center gap-1 text-[11px] font-medium ${overdue ? 'text-[var(--edk-red)]' : 'text-[var(--edk-ink-3)]'}`}>
                 <IconCalendar />{fmtDate(delivery.expectedDate)}
                 {overdue && ' · Overdue'}
               </span>
@@ -149,46 +160,43 @@ function DeliveryCard({
           </div>
         </div>
 
-        <span className="text-slate-300 flex-shrink-0 mt-1"><IconChevron down={expanded} /></span>
+        <span className="text-[var(--edk-ink-3)] flex-shrink-0 mt-1"><IconChevron down={expanded} /></span>
       </button>
 
-      {/* Expanded details */}
       {expanded && (
-        <div className="border-t border-slate-100">
+        <div className="border-t border-[var(--edk-border)]">
 
-          {/* Address + notes */}
           {(delivery.deliveryAddress || delivery.deliveryNotes) && (
-            <div className="px-4 py-3 bg-slate-50/50 border-b border-slate-100 space-y-1.5">
+            <div className="px-4 py-3 bg-[var(--edk-bg)] border-b border-[var(--edk-border)] space-y-1.5">
               {delivery.deliveryAddress && (
-                <div className="flex items-start gap-2 text-[12px] text-slate-600">
-                  <span className="text-slate-400 mt-0.5 flex-shrink-0"><IconMapPin /></span>
+                <div className="flex items-start gap-2 text-[12px] text-[var(--edk-ink-2)]">
+                  <span className="text-[var(--edk-ink-3)] mt-0.5 flex-shrink-0"><IconMapPin /></span>
                   <span>{delivery.deliveryAddress}</span>
                 </div>
               )}
               {delivery.deliveryNotes && (
-                <div className="flex items-start gap-2 text-[12px] text-slate-500 italic">
-                  <span className="text-slate-400 mt-0.5 flex-shrink-0"><IconClock /></span>
+                <div className="flex items-start gap-2 text-[12px] text-[var(--edk-ink-3)] italic">
+                  <span className="text-[var(--edk-ink-3)] mt-0.5 flex-shrink-0"><IconClock /></span>
                   <span>{delivery.deliveryNotes}</span>
                 </div>
               )}
             </div>
           )}
 
-          {/* Line items */}
-          <div className="px-4 py-3 border-b border-slate-100">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Items</p>
+          <div className="px-4 py-3 border-b border-[var(--edk-border)]">
+            <p className="text-[10px] font-bold text-[var(--edk-ink-3)] uppercase tracking-wider mb-2">Items</p>
             <div className="space-y-1.5">
               {delivery.lines.map(l => (
                 <div key={l.id} className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     {l.imageUrl && (
-                      <img src={l.imageUrl} alt={l.name} className="w-7 h-7 rounded-lg object-cover flex-shrink-0 bg-slate-100" />
+                      <img src={l.imageUrl} alt={l.name} className="w-7 h-7 rounded-lg object-cover flex-shrink-0 bg-[var(--edk-surface-2)]" />
                     )}
-                    <span className="text-[12px] text-slate-700 truncate">
+                    <span className="text-[12px] text-[var(--edk-ink-2)] truncate">
                       {l.name}{l.sizeCode ? ` · ${l.sizeCode}` : ''}
                     </span>
                   </div>
-                  <span className="text-[12px] font-semibold text-slate-900 flex-shrink-0 tabular-nums">
+                  <span className="text-[12px] font-semibold text-[var(--edk-ink)] flex-shrink-0 tabular-nums">
                     {l.qty > 1 ? `${l.qty} × ` : ''}{fmt(l.unitPrice)}
                   </span>
                 </div>
@@ -196,58 +204,39 @@ function DeliveryCard({
             </div>
           </div>
 
-          {/* Sale meta */}
-          <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400">Sold {fmtTime(delivery.createdAt)}</span>
-            <span className="text-[11px] font-medium text-slate-500">{delivery.paymentMethod}</span>
+          <div className="px-4 py-2.5 border-b border-[var(--edk-border)] flex items-center justify-between">
+            <span className="text-[11px] text-[var(--edk-ink-3)]">Sold {fmtTime(delivery.createdAt)}</span>
+            <span className="text-[11px] font-medium text-[var(--edk-ink-3)]">{delivery.paymentMethod}</span>
           </div>
 
-          {/* Actions */}
           {!isCancelled && delivery.deliveryStatus !== 'delivered' && (
             <div className="px-4 py-3 flex flex-wrap gap-2">
               {delivery.deliveryStatus === 'pending' && (
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => onMarkDispatched(delivery.id)}
-                  className="flex-1 min-w-[120px] h-10 rounded-xl border-[1.5px] border-blue-200 bg-blue-50 text-blue-700 text-[13px] font-bold flex items-center justify-center gap-1.5 hover:bg-blue-100 disabled:opacity-50 transition-colors"
-                >
-                  {loading ? <IconSpinner /> : <IconTruck />}
+                <Button type="button" variant="secondary" size="sm" disabled={loading} onClick={() => onMarkDispatched(delivery.id)} leftIcon={<IconTruck />} loading={loading}>
                   Mark Dispatched
-                </button>
+                </Button>
               )}
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => onMarkDelivered(delivery.id)}
-                className="flex-1 min-w-[120px] h-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-bold flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors shadow-[0_2px_8px_rgba(16,185,129,0.25)]"
-              >
-                {loading ? <IconSpinner /> : <IconCheck />}
+              <Button type="button" variant="primary" size="sm" disabled={loading} onClick={() => onMarkDelivered(delivery.id)} leftIcon={<IconCheck />} loading={loading} className="bg-emerald-500 hover:bg-emerald-600 border-0">
                 Mark Delivered
-              </button>
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => {
-                  if (window.confirm('Cancel this delivery? The order stays; only the delivery will be marked cancelled.')) {
-                    onMarkCancelled(delivery.id);
-                  }
-                }}
-                className="h-10 px-4 rounded-xl border-[1.5px] border-slate-200 bg-white text-slate-600 text-[13px] font-bold flex items-center justify-center gap-1.5 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-              >
-                {loading ? <IconSpinner /> : 'Cancel delivery'}
-              </button>
+              </Button>
+              <Button type="button" variant="secondary" size="sm" disabled={loading} onClick={() => {
+                if (window.confirm('Cancel this delivery? The order stays; only the delivery will be marked cancelled.')) {
+                  onMarkCancelled(delivery.id);
+                }
+              }} loading={loading}>
+                Cancel delivery
+              </Button>
             </div>
           )}
 
           {isCancelled && (
-            <div className="px-4 py-3 flex items-center gap-2 text-slate-500">
+            <div className="px-4 py-3 flex items-center gap-2 text-[var(--edk-ink-3)]">
               <span className="text-[12px] font-medium">Delivery cancelled. Sale remains recorded.</span>
             </div>
           )}
 
           {delivery.deliveryStatus === 'delivered' && delivery.deliveredAt && (
-            <div className="px-4 py-3 flex items-center gap-2 text-emerald-600">
+            <div className="px-4 py-3 flex items-center gap-2 text-[var(--edk-green)]">
               <IconCheck />
               <span className="text-[12px] font-medium">Delivered {fmtTime(delivery.deliveredAt)}</span>
             </div>
@@ -359,87 +348,78 @@ export default function DeliveriesPage({ warehouseId: propWarehouseId = '', apiB
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  const FILTER_PILLS: { label: string; count: number; color: string; active: boolean; key: Filter }[] = [
-    { label: 'Pending',    count: pendingCount,    color: 'bg-amber-100 text-amber-700',   active: filter === 'pending',    key: 'pending'    },
-    { label: 'Dispatched', count: dispatchedCount, color: 'bg-blue-100 text-blue-700',     active: filter === 'dispatched', key: 'dispatched' },
-    { label: 'Overdue',    count: overdueCount,    color: 'bg-red-100 text-red-600',       active: filter === 'overdue',    key: 'overdue'    },
-    { label: 'Cancelled',  count: cancelledCount,  color: 'bg-slate-100 text-slate-600',   active: filter === 'cancelled',   key: 'cancelled' },
+  const FILTER_PILLS: { label: string; count: number; activeClass: string; inactiveClass: string; active: boolean; key: Filter }[] = [
+    { label: 'Pending',    count: pendingCount,    activeClass: 'bg-[var(--edk-amber-bg)] text-[var(--edk-amber)] border-[var(--edk-amber)]/30',   inactiveClass: 'bg-[var(--edk-surface)] border-[var(--edk-border)] text-[var(--edk-ink-3)] hover:border-[var(--edk-border-mid)]', active: filter === 'pending',    key: 'pending'    },
+    { label: 'Dispatched', count: dispatchedCount, activeClass: 'bg-blue-50 text-blue-600 border-blue-200',   inactiveClass: 'bg-[var(--edk-surface)] border-[var(--edk-border)] text-[var(--edk-ink-3)] hover:border-[var(--edk-border-mid)]', active: filter === 'dispatched', key: 'dispatched' },
+    { label: 'Overdue',    count: overdueCount,    activeClass: 'bg-[var(--edk-red-soft)] text-[var(--edk-red)] border-[var(--edk-red-border)]', inactiveClass: 'bg-[var(--edk-surface)] border-[var(--edk-border)] text-[var(--edk-ink-3)] hover:border-[var(--edk-border-mid)]', active: filter === 'overdue',    key: 'overdue'    },
+    { label: 'Cancelled',  count: cancelledCount,  activeClass: 'bg-[var(--edk-surface-2)] text-[var(--edk-ink-2)] border-[var(--edk-border-mid)]', inactiveClass: 'bg-[var(--edk-surface)] border-[var(--edk-border)] text-[var(--edk-ink-3)] hover:border-[var(--edk-border-mid)]', active: filter === 'cancelled',   key: 'cancelled'  },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
+    <div className="min-h-screen bg-[var(--edk-bg)] pb-20">
 
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl text-[13px] font-semibold shadow-lg text-white transition-all ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`}>
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-[var(--edk-radius)] text-[13px] font-semibold shadow-lg text-white transition-all ${toast.type === 'success' ? 'bg-[var(--edk-green)]' : 'bg-[var(--edk-red)]'}`}>
           {toast.msg}
         </div>
       )}
 
-      {/* Header */}
-      <div className="sticky top-0 z-30 bg-white border-b border-slate-100 px-4 pt-4 pb-3">
+      <div className="sticky top-0 z-30 bg-[var(--edk-surface)] border-b border-[var(--edk-border)] px-4 pt-4 pb-3">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-[20px] font-extrabold text-slate-900 tracking-tight">Deliveries</h1>
-            <p className="text-[12px] text-slate-400 mt-0.5">
+            <h1 className="text-[20px] font-extrabold text-[var(--edk-ink)] tracking-tight" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>Deliveries</h1>
+            <p className="text-[12px] text-[var(--edk-ink-3)] mt-0.5">
               {pendingCount + dispatchedCount} active · {cancelledCount > 0 ? `${cancelledCount} cancelled` : ''} {overdueCount > 0 ? `· ${overdueCount} overdue` : ''}
             </p>
           </div>
-          <button type="button" onClick={() => load(true)} className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors">
+          <Button type="button" variant="secondary" size="sm" onClick={() => load(true)} className="min-w-[36px] h-9 px-0" aria-label="Refresh">
             <IconRefresh />
-          </button>
+          </Button>
         </div>
 
-        {/* Stat pills */}
         <div className="flex gap-2 mb-3 overflow-x-auto pb-0.5 no-scrollbar">
           {FILTER_PILLS.map(s => (
             <button key={s.key} type="button"
               onClick={() => setFilter(current => (current === s.key ? 'all' : s.key))}
-              className={`flex-shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full text-[12px] font-bold transition-all border-[1.5px] ${s.active ? `${s.color} border-current` : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+              className={`flex-shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full text-[12px] font-bold transition-all border-[1.5px] ${s.active ? s.activeClass : s.inactiveClass}`}>
               <span>{s.label}</span>
-              <span className={`w-4.5 h-4.5 rounded-full text-[10px] font-extrabold flex items-center justify-center ${s.active ? 'bg-current/20' : 'bg-slate-100'}`}>{s.count}</span>
+              <span className={`w-4.5 h-4.5 rounded-full text-[10px] font-extrabold flex items-center justify-center ${s.active ? 'bg-current/20' : 'bg-[var(--edk-surface-2)]'}`}>{s.count}</span>
             </button>
           ))}
         </div>
 
-        {/* Search */}
         <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--edk-ink-3)]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search name, receipt, phone…"
-            className="w-full h-10 pl-9 pr-4 bg-slate-100 rounded-xl font-sans text-[13px] text-slate-900 placeholder:text-slate-400 outline-none border-none focus:bg-white focus:ring-[2px] focus:ring-red-200 transition-all" />
+            className="w-full h-10 pl-9 pr-4 bg-[var(--edk-surface-2)] rounded-xl font-sans text-[13px] text-[var(--edk-ink)] placeholder:text-[var(--edk-ink-3)] outline-none border border-transparent focus:bg-[var(--edk-surface)] focus:ring-[2px] focus:ring-[var(--edk-red-soft)] focus:border-[var(--edk-red-border)] transition-all"
+          />
         </div>
       </div>
 
-      {/* Body */}
       <div className="px-4 pt-4 space-y-3">
 
         {loading && (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+          <div className="flex flex-col items-center justify-center py-20 text-[var(--edk-ink-3)]">
             <IconSpinner />
             <p className="text-[13px] mt-3 font-medium">Loading deliveries…</p>
           </div>
         )}
 
-        {!loading && error && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center">
-            <p className="text-[13px] text-red-600 font-medium">{error}</p>
-            <button type="button" onClick={() => load()} className="mt-2 text-[12px] text-red-500 font-bold underline">Retry</button>
+        {!loading && error != null && error !== '' && (
+          <div className="rounded-[var(--edk-radius)] border border-[var(--edk-red-border)] bg-[var(--edk-red-soft)] p-4 text-center">
+            <p className="text-[13px] text-[var(--edk-ink)] font-medium">{error}</p>
+            <Button type="button" variant="primary" size="sm" onClick={() => load()} className="mt-2">Retry</Button>
           </div>
         )}
 
         {!loading && !error && filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4 text-slate-300">
-              <IconTruck />
-            </div>
-            <p className="text-[15px] font-bold text-slate-700 mb-1">
-              {search ? 'No results' : filter === 'cancelled' ? 'No cancelled deliveries' : 'No pending deliveries'}
-            </p>
-            <p className="text-[13px] text-slate-400">
-              {search ? 'Try a different search' : filter === 'cancelled' ? 'Cancelled deliveries will appear here' : 'Deliveries scheduled from the POS will appear here'}
-            </p>
-          </div>
+          <EmptyState
+            icon={Truck}
+            title={search ? 'No results' : filter === 'cancelled' ? 'No cancelled deliveries' : 'No pending deliveries'}
+            description={search ? 'Try a different search' : filter === 'cancelled' ? 'Cancelled deliveries will appear here' : 'Deliveries scheduled from the POS will appear here'}
+          />
         )}
 
         {!loading && !error && filtered.map(d => (
