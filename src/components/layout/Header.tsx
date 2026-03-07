@@ -31,6 +31,7 @@ export function Header() {
       setIsLoggingOut(false);
     }
   };
+  const logoutButtonLabel = isLoggingOut ? 'Signing out…' : 'Log out';
 
   const handleSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -80,17 +81,13 @@ export function Header() {
           type="button"
           variant="secondary"
           onClick={handleLogout}
-          disabled={isLoggingOut}
-          className="flex items-center justify-center gap-1.5 h-[34px] px-3 rounded-lg border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] hover:bg-[var(--edk-bg)] text-[var(--edk-ink-2)] text-[12px] font-medium min-w-[44px] touch-manipulation disabled:opacity-60"
+          loading={isLoggingOut}
+          leftIcon={!isLoggingOut ? <LogOut className="w-4 h-4" strokeWidth={2} /> : undefined}
+          className="h-[34px] px-3 rounded-lg border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] hover:bg-[var(--edk-bg)] text-[var(--edk-ink-2)] text-[12px] font-medium min-w-[44px] touch-manipulation"
           title="Log out"
-          aria-label="Log out"
+          aria-label={logoutButtonLabel}
         >
-          {isLoggingOut ? (
-            <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden />
-          ) : (
-            <LogOut className="w-4 h-4" strokeWidth={2} />
-          )}
-          <span className="hidden sm:inline">{isLoggingOut ? 'Signing out…' : 'Log out'}</span>
+          <span className="hidden sm:inline">{logoutButtonLabel}</span>
         </Button>
         <Button
           type="button"

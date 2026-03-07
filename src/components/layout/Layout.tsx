@@ -139,29 +139,29 @@ function LayoutContent() {
       {/* Slim hint while phase 2 (inventory, orders) syncs in background after login */}
       {isSyncingCriticalData && (
         <div
-          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-primary-50/90 text-primary-900 text-center py-2 px-4 text-sm font-medium flex items-center justify-center gap-2 border-b border-primary-200/50"
+          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-[var(--edk-amber-bg)] text-[var(--edk-amber)] text-center py-2 px-4 text-sm font-medium flex items-center justify-center gap-2 border-b border-[var(--edk-amber)]/20"
           role="status"
           aria-live="polite"
         >
-          <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" aria-hidden />
+          <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-[var(--edk-amber)] border-t-transparent animate-spin" aria-hidden />
           Syncing inventory & orders…
         </div>
       )}
       {/* In-flow banner: reserves layout space so content is never overlapped. Pushes main content down. */}
       {criticalDataError && (
         <div
-          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-amber-600/20"
+          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-[var(--edk-amber)] text-[var(--edk-ink)] text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-[var(--edk-amber)]/80"
           role="alert"
         >
           <span>Initial load had issues: {criticalDataError}</span>
-          <Button type="button" variant="ghost" onClick={() => reloadCriticalData()} className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-amber-800 rounded">
+          <Button type="button" variant="ghost" onClick={() => reloadCriticalData()} className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-[var(--edk-ink)] rounded text-[var(--edk-ink)]">
             Retry
           </Button>
         </div>
       )}
       {showReconnectingBanner && (
         <div
-          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-amber-100 text-amber-900 text-center py-2 px-4 text-sm font-medium border-b border-amber-200"
+          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-[var(--edk-amber-bg)] text-[var(--edk-ink)] text-center py-2 px-4 text-sm font-medium border-b border-[var(--edk-amber)]/20"
           role="status"
           aria-live="polite"
         >
@@ -170,7 +170,7 @@ function LayoutContent() {
       )}
       {showDegradedBanner && (
         <div
-          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-amber-500 text-amber-950 text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-amber-600/20"
+          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-[var(--edk-amber)] text-[var(--edk-ink)] text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-[var(--edk-amber)]/80"
           role="status"
         >
           <span>Server temporarily unavailable. Last saved data — read-only. Add, edit, and sales disabled until server is back.</span>
@@ -178,7 +178,7 @@ function LayoutContent() {
             type="button"
             variant="ghost"
             onClick={handleTryAgain}
-            className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-amber-800 rounded"
+            className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-[var(--edk-ink)] rounded text-[var(--edk-ink)]"
           >
             Try again
           </Button>
@@ -186,7 +186,7 @@ function LayoutContent() {
             type="button"
             variant="ghost"
             onClick={handleDismissBanner}
-            className="text-amber-900/80 hover:text-amber-950 font-medium focus:outline-none focus:ring-2 focus:ring-amber-800 rounded"
+            className="text-[var(--edk-ink)]/80 hover:text-[var(--edk-ink)] font-medium focus:outline-none focus:ring-2 focus:ring-[var(--edk-ink)] rounded"
           >
             Dismiss
           </Button>
