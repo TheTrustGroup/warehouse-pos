@@ -29,6 +29,8 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { PERMISSIONS } from './types/permissions';
 import { initIdbErrorRecovery } from './lib/idbErrorRecovery';
 import { syncService } from './services/syncService';
+/** POS in main bundle so /pos and cart never fail on chunk load (critical path). */
+import POSPage from './pages/POSPage';
 
 /** Default landing: Dashboard if user has permission; otherwise redirect to first allowed route (e.g. POS for cashiers). */
 function DefaultRoute() {
@@ -47,7 +49,6 @@ function DefaultRoute() {
 // Lazy load pages with retry so first load after login doesn't show "Something went wrong" on chunk failure
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const InventoryPage = lazyWithRetry(() => import('./pages/InventoryPage').then(m => ({ default: m.default })));
-const POSPage = lazyWithRetry(() => import('./pages/POSPage').then(m => ({ default: m.default })));
 const SalesHistoryPage = lazyWithRetry(() => import('./pages/SalesHistoryPage').then(m => ({ default: m.default })));
 const DeliveriesPage = lazyWithRetry(() => import('./pages/DeliveriesPage').then(m => ({ default: m.default })));
 const Orders = lazyWithRetry(() => import('./pages/Orders').then(m => ({ default: m.Orders })));

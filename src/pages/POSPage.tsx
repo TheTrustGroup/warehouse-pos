@@ -14,11 +14,8 @@
 //   4. "New sale" button → reloads products from server
 //      → this re-syncs frontend with DB truth after each sale
 //
-// If POST /api/sales fails (API not deployed, network error):
-//   → Amber toast warning: "⚠ Sale not synced — deploy /api/sales"
-//   → Checkout still completes (cashier not blocked)
-//   → Stock IS deducted optimistically in UI
-//   → Next loadProducts() call will restore real server values
+// POS is server-only: no offline queue or local storage. Sales go to POST /api/sales (Supabase).
+// If POST /api/sales fails or device is offline → toast + rollback; sale is not completed.
 // ============================================================
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -49,7 +46,6 @@ import CartSheet, {
   type SalePayload,
 } from '../components/pos/CartSheet';
 import SaleSuccessScreen, { type CompletedSale as SaleSuccessCompletedSale } from '../components/pos/SaleSuccessScreen';
-import { enqueueSaleEvent, getPendingSaleEventsCount } from '../lib/offlineDb';
 import { BRAND } from '../config/branding';
 
 interface POSPageProps {
@@ -61,8 +57,6 @@ export interface CompletedSale extends SalePayload {
   saleId?: string;
   completedAt?: string;
 }
-
-const PENDING_POS_CART_KEY = 'pending_pos_cart';
 
 function buildCartKey(productId: string, sizeCode: string | null): string {
   return `${productId}__${sizeCode ?? 'NA'}`;
@@ -196,8 +190,6 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const [activeProduct, setActiveProduct] = useState<POSProduct | null>(null);
   const [saleResult, setSaleResult] = useState<CompletedSale | null>(null);
   const [charging, setCharging] = useState(false);
-  const [pendingSalesCount, setPendingSalesCount] = useState(0);
-  const [pendingCartRestore, setPendingCartRestore] = useState<{ cart: CartLine[] } | null>(null);
 
   const { toast, show: showToast } = useToast();
   const { sendLowStockAlert, receivedLowStockAlerts, dismissLowStockAlert } = usePresence();
@@ -220,36 +212,6 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       isMounted.current = false;
     };
   }, []);
-
-  // Offer to restore cart saved when session expired during charge
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(PENDING_POS_CART_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { cart: CartLine[]; warehouseId?: string };
-      if (Array.isArray(parsed?.cart) && parsed.cart.length > 0 && isMounted.current) {
-        setPendingCartRestore({ cart: parsed.cart });
-      }
-    } catch {
-      sessionStorage.removeItem(PENDING_POS_CART_KEY);
-    }
-  }, []);
-
-  // Refresh pending offline sales count (for "Pending sync: N" indicator)
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = () => {
-      getPendingSaleEventsCount().then((n) => {
-        if (!cancelled && isMounted.current) setPendingSalesCount(n);
-      });
-    };
-    refresh();
-    const id = setInterval(refresh, 15_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [saleResult]);
 
   const apiFetch = useCallback(
     async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
@@ -513,17 +475,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       setSaleResult(null);
       if (status === 409 || status === 422) {
         showToast('Insufficient stock for one or more items. Adjust the cart and try again.', 'err');
-      } else if (status === 401) {
-        if (context?.previousCart?.length && _vars?.payload) {
-          try {
-            sessionStorage.setItem(
-              PENDING_POS_CART_KEY,
-              JSON.stringify({ cart: context.previousCart, warehouseId: _vars.payload.warehouseId })
-            );
-          } catch {
-            // ignore
-          }
-        }
+      } else       if (status === 401) {
         showToast('Session expired. Please log in again.', 'err');
       } else if (status === 404) {
         showToast('Sales API not found. Ensure the backend is deployed and VITE_API_BASE_URL points to it.', 'warn');
@@ -685,88 +637,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     }
     setCharging(true);
 
-    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-
-    if (isOffline) {
-      const eventId =
-        typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `pos-${payload.warehouseId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const syncPayload = {
-        warehouseId: payload.warehouseId,
-        customerName: payload.customerName || null,
-        customerEmail: payload.customerEmail || null,
-        paymentMethod: payload.paymentMethod,
-        payments: payload.payments ?? null,
-        subtotal: payload.subtotal,
-        discountPct: payload.discountPct,
-        discountAmt: payload.discountAmt,
-        total: payload.total,
-        lines: payload.lines.map((l) => ({
-          productId: l.productId,
-          sizeCode: l.sizeCode || null,
-          qty: l.qty,
-          unitPrice: l.unitPrice,
-          lineTotal: l.unitPrice * l.qty,
-          name: l.name,
-          sku: l.sku ?? '',
-          imageUrl: l.imageUrl ?? null,
-        })),
-        deliverySchedule: payload.deliverySchedule ?? null,
-      };
-      try {
-        await enqueueSaleEvent(syncPayload, eventId);
-      } catch (e) {
-        console.error('[POS] Offline enqueue failed:', e);
-        setCharging(false);
-        showToast('Could not save sale locally. Try again.', 'err');
-        return;
-      }
-      setProducts((prev) =>
-        prev.map((p) => {
-          const saleLines = payload.lines.filter((l) => l.productId === p.id);
-          if (saleLines.length === 0) return p;
-          if (p.sizeKind === 'sized') {
-            const updatedSizes = (p.quantityBySize ?? []).map((row) => {
-              const line = saleLines.find(
-                (l) =>
-                  l.sizeCode &&
-                  row.sizeCode &&
-                  l.sizeCode.toUpperCase() === row.sizeCode.toUpperCase()
-              );
-              return line
-                ? { ...row, quantity: Math.max(0, row.quantity - line.qty) }
-                : row;
-            });
-            return {
-              ...p,
-              quantityBySize: updatedSizes,
-              quantity: updatedSizes.reduce((s, r) => s + r.quantity, 0),
-            };
-          }
-          const totalSold = saleLines.reduce((s, l) => s + l.qty, 0);
-          return { ...p, quantity: Math.max(0, p.quantity - totalSold) };
-        })
-      );
-      setCart([]);
-      setCartOpen(false);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setCharging(false);
-      await new Promise((r) => setTimeout(r, 350));
-      if (!isMounted.current) return;
-      setSaleResult({
-        ...payload,
-        saleId: undefined,
-        receiptId: `Offline-${eventId.slice(0, 8)}`,
-        completedAt: new Date().toISOString(),
-        lines: payload.lines.map((l) => ({
-          ...l,
-          key: buildCartKey(l.productId, l.sizeCode ?? null),
-        })),
-      });
-      showToast('Sale saved locally. Will sync when back online.', 'ok');
-      getPendingSaleEventsCount().then((n) => {
-        if (isMounted.current) setPendingSalesCount(n);
-      });
+      showToast('You’re offline. Connect to the internet to complete the sale.', 'err');
       return;
     }
 
@@ -825,20 +698,6 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     setSaleResult(null);
     setCart([]);
     loadProducts(warehouse.id, true);
-  }
-
-  function handleRestoreCart() {
-    if (pendingCartRestore?.cart?.length) {
-      setCart(pendingCartRestore.cart);
-      setCartOpen(true);
-    }
-    sessionStorage.removeItem(PENDING_POS_CART_KEY);
-    setPendingCartRestore(null);
-  }
-
-  function handleDismissRestore() {
-    sessionStorage.removeItem(PENDING_POS_CART_KEY);
-    setPendingCartRestore(null);
   }
 
   function handleShareReceipt(sale: SaleSuccessCompletedSale) {
@@ -909,19 +768,6 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   return (
     <div className="min-h-screen bg-[var(--edk-bg)] flex flex-col overflow-hidden">
-      {pendingCartRestore && (
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-900 text-sm">
-          <span>Your cart was saved when your session expired. Restore it?</span>
-          <div className="flex items-center gap-2 shrink-0">
-            <button type="button" onClick={handleRestoreCart} className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700">
-              Restore
-            </button>
-            <button type="button" onClick={handleDismissRestore} className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-100">
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
       <POSHeader
         warehouseName={warehouse.name}
         search={search}
@@ -930,17 +776,6 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         onCartTap={() => cartCount > 0 && setCartOpen(true)}
         onBarcodeSubmit={handleBarcodeSubmit}
       />
-      {pendingSalesCount > 0 && (
-        <div
-          className="flex items-center justify-center gap-2 py-1.5 px-3 bg-amber-100 text-amber-900 text-xs font-medium border-b border-amber-200"
-          role="status"
-          aria-live="polite"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" aria-hidden />
-          Pending sync: {pendingSalesCount} sale{pendingSalesCount !== 1 ? 's' : ''}
-        </div>
-      )}
-
       <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[1fr_340px] min-h-0 overflow-hidden">
         {/* Products panel: on mobile add bottom padding for sticky CartBar */}
         <div className="flex-1 overflow-y-auto min-h-0 pb-20 lg:pb-0">
