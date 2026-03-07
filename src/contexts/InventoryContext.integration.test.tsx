@@ -63,14 +63,30 @@ vi.mock('./AuthContext', async (importOriginal) => {
   };
 });
 
+const TEST_WAREHOUSE_ID = '00000000-0000-0000-0000-000000000001';
+
+vi.mock('./WarehouseContext', () => ({
+  useWarehouse: () => ({
+    currentWarehouseId: TEST_WAREHOUSE_ID,
+    setCurrentWarehouseId: () => {},
+    warehouses: [{ id: TEST_WAREHOUSE_ID, name: 'Test Warehouse' }],
+    currentWarehouse: { id: TEST_WAREHOUSE_ID, name: 'Test Warehouse' },
+    isLoading: false,
+    loadError: null,
+    refreshWarehouses: () => Promise.resolve(),
+    isWarehouseSelectedForPOS: true,
+    isWarehouseBoundToSession: false,
+  }),
+  WarehouseProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 import { apiGet, apiPost } from '../lib/apiClient';
+import { queryKeys } from '../lib/queryKeys';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>
     <ToastProvider>
-      <WarehouseProvider>
-        <InventoryProvider>{children}</InventoryProvider>
-      </WarehouseProvider>
+      <InventoryProvider>{children}</InventoryProvider>
     </ToastProvider>
   </QueryClientProvider>
 );
@@ -95,6 +111,7 @@ const minimalProduct = {
 
 describe('InventoryContext reliability', () => {
   beforeEach(() => {
+    queryClient.clear();
     vi.mocked(apiGet).mockReset();
     vi.mocked(apiPost).mockReset();
     vi.mocked(apiGet).mockResolvedValue([]);
