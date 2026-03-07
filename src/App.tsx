@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useRef } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 import { queryClient } from './lib/queryClient';
@@ -107,24 +107,32 @@ function SalesHistoryPageRoute() {
 /** Listens for service worker update event and shows toast with Refresh action. Must be inside ToastProvider. */
 function ServiceWorkerUpdateListener() {
   const { showToast } = useToast();
+  const handleRefresh = useCallback(() => {
+    if (typeof navigator !== 'undefined' && navigator.serviceWorker?.controller) {
+      const onControllerChange = () => {
+        navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+        window.location.reload();
+      };
+      navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+      navigator.serviceWorker.ready.then((reg) => {
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        } else {
+          window.location.reload();
+        }
+      }).catch(() => window.location.reload());
+    } else {
+      window.location.reload();
+    }
+  }, []);
   const handlerRef = useRef(() => {
     showToast('warning', 'App updated. Tap Refresh to load the latest.', {
-      action: {
-        label: 'Refresh',
-        onAction: () => {
-          window.location.reload();
-        },
-      },
+      action: { label: 'Refresh', onAction: handleRefresh },
     });
   });
   handlerRef.current = () => {
     showToast('warning', 'App updated. Tap Refresh to load the latest.', {
-      action: {
-        label: 'Refresh',
-        onAction: () => {
-          window.location.reload();
-        },
-      },
+      action: { label: 'Refresh', onAction: handleRefresh },
     });
   };
   useEffect(() => {

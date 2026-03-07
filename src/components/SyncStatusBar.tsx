@@ -83,25 +83,25 @@ export function SyncStatusBar() {
 
   if (failed > 0) {
     variant = 'failed';
-    label = 'Sync failed - Check connection';
+    label = 'Sync failed — check connection';
     icon = <AlertTriangle className="w-5 h-5 shrink-0" strokeWidth={2} aria-hidden />;
-    barClass = 'bg-red-600 text-white';
+    barClass = 'bg-[var(--edk-red)] text-white';
   } else if (!isOnline && total > 0) {
     variant = 'offline';
-    label = `Offline — Read-only. Sync pending: ${total} item${total !== 1 ? 's' : ''}`;
+    label = `Offline — ${total} change${total !== 1 ? 's' : ''} pending`;
     icon = <CloudOff className="w-5 h-5 shrink-0" strokeWidth={2} aria-hidden />;
-    barClass = 'bg-amber-500 text-amber-950';
+    barClass = 'bg-[var(--edk-amber-bg)] text-[var(--edk-amber)] border-t border-[var(--edk-amber)]/30';
   } else if (isSyncing || total > 0) {
     variant = 'syncing';
     const n = total || 1;
-    label = `Syncing ${n} item${n !== 1 ? 's' : ''}...`;
+    label = `Syncing ${n} item${n !== 1 ? 's' : ''}…`;
     icon = <Loader2 className="w-5 h-5 animate-spin shrink-0" strokeWidth={2} aria-hidden />;
-    barClass = 'bg-blue-600 text-white';
+    barClass = 'bg-[var(--edk-amber)] text-white';
   } else if (total === 0 && isOnline) {
     variant = 'synced';
-    label = 'All changes synced ✓';
+    label = 'All changes synced';
     icon = <Check className="w-5 h-5 shrink-0" strokeWidth={2} aria-hidden />;
-    barClass = 'bg-emerald-600 text-white';
+    barClass = 'bg-[var(--edk-green)] text-white';
   }
 
   const [showSyncedUntil, setShowSyncedUntil] = useState(0);
@@ -127,12 +127,13 @@ export function SyncStatusBar() {
             animate="animate"
             exit="exit"
             variants={barVariants}
-            className={`fixed bottom-0 left-0 right-0 z-[65] ${barClass} shadow-lg`}
+            className={`fixed left-0 right-0 bottom-0 z-[65] rounded-t-[var(--edk-radius)] ${barClass} shadow-[0_-2px_12px_rgba(0,0,0,0.08)]`}
+            style={{ paddingBottom: 'max(0.75rem, var(--safe-bottom))' }}
           >
             <motion.button
               type="button"
               onClick={() => setModalOpen(true)}
-              className="w-full px-4 py-3 flex items-center justify-center gap-2 text-sm font-medium hover:opacity-90 transition-opacity cursor-pointer"
+              className="w-full px-4 py-3 flex items-center justify-center gap-2 text-sm font-semibold hover:opacity-90 transition-opacity cursor-pointer"
               aria-label="View sync queue"
               {...(variant === 'syncing' ? pulse : {})}
             >

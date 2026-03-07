@@ -10,7 +10,6 @@ import React from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../lib/queryClient';
 import { ToastProvider } from './ToastContext';
-import { WarehouseProvider } from './WarehouseContext';
 import { InventoryProvider, useInventory } from './InventoryContext';
 
 // Mock API client so we control success vs disaster (read-back missing).
@@ -81,7 +80,6 @@ vi.mock('./WarehouseContext', () => ({
 }));
 
 import { apiGet, apiPost } from '../lib/apiClient';
-import { queryKeys } from '../lib/queryKeys';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>

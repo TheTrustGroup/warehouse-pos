@@ -30,9 +30,9 @@ export function Toast({ type, message, onClose, duration = 3000, action }: Toast
   };
 
   const colors = {
-    success: 'bg-green-50 border-green-200 text-green-800',
-    error: 'bg-red-50 border-red-200 text-red-800',
-    warning: 'bg-amber-50 border-amber-200 text-amber-800',
+    success: 'bg-[var(--edk-green-bg)] border-2 border-[var(--edk-green)]/20 text-[var(--edk-ink)]',
+    error: 'bg-[var(--edk-red-soft)] border-2 border-[var(--edk-red-border)] text-[var(--edk-ink)]',
+    warning: 'bg-[var(--edk-amber-bg)] border-2 border-[var(--edk-amber)]/30 text-[var(--edk-ink)]',
   };
 
   const Icon = icons[type];
@@ -45,7 +45,7 @@ export function Toast({ type, message, onClose, duration = 3000, action }: Toast
   return (
     <div
       role="alert"
-      className={`solid-card flex items-center gap-3 px-4 py-3 min-h-touch border-2 ${colors[type]} shadow-lg`}
+      className={`flex items-center gap-3 px-4 py-3 min-h-[var(--touch-min)] rounded-[var(--edk-radius)] ${colors[type]} shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}
     >
       <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} aria-hidden />
       <p className="font-medium flex-1 text-sm">{message}</p>

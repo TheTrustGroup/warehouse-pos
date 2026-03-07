@@ -12,14 +12,12 @@ export function RealtimeSyncIndicator() {
   if (!isOnline) {
     return (
       <span
-        className="flex items-center gap-1.5 text-[11px] font-medium text-red-600"
+        className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--edk-red)]"
         title="No internet connection"
         role="status"
         aria-live="polite"
       >
-        <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-100" />
-        </span>
+        <span className="relative flex h-2 w-2 rounded-full bg-[var(--edk-red)] shrink-0" aria-hidden />
         <span className="hidden sm:inline">Offline</span>
       </span>
     );
@@ -29,28 +27,24 @@ export function RealtimeSyncIndicator() {
     case 'connected':
       return (
         <span
-          className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600"
+          className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--edk-green)]"
           title="Live updates on"
           role="status"
           aria-live="polite"
         >
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 animate-pulse" />
-          </span>
+          <span className="relative flex h-2 w-2 rounded-full bg-[var(--edk-green)] animate-pulse shrink-0" aria-hidden />
           <span className="hidden sm:inline">Live</span>
         </span>
       );
     case 'connecting':
       return (
         <span
-          className="flex items-center gap-1.5 text-[11px] font-medium text-amber-600"
+          className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--edk-amber)]"
           title="Reconnecting…"
           role="status"
           aria-live="polite"
         >
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-amber-500" />
-          </span>
+          <span className="relative flex h-2 w-2 rounded-full bg-[var(--edk-amber)] shrink-0" aria-hidden />
           <span className="hidden sm:inline">Syncing…</span>
         </span>
       );
@@ -59,14 +53,12 @@ export function RealtimeSyncIndicator() {
     default:
       return (
         <span
-          className="flex items-center gap-1.5 text-[11px] font-medium text-red-600"
-          title={isOnline ? 'Live updates paused — check docs/REALTIME_OFFLINE.md or console' : 'No internet connection'}
+          className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--edk-red)]"
+          title={isOnline ? 'Live updates paused — see docs/REALTIME_CROSS_DEVICE_SYNC.md' : 'No internet connection'}
           role="status"
           aria-live="polite"
         >
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-90" />
-          </span>
+          <span className="relative flex h-2 w-2 rounded-full bg-[var(--edk-red)] opacity-90 shrink-0" aria-hidden />
           <span className="hidden sm:inline">Offline</span>
         </span>
       );

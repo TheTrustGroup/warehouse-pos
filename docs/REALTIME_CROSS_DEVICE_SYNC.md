@@ -52,5 +52,6 @@ If you need faster sync without Realtime, you can temporarily lower `intervalMs`
 | Env vars set | `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in env; then **rebuild + redeploy**. |
 | Other device | Same build/deploy (same env); tab visible so 30s poll can run. |
 | Console | No `[Realtime] Not configured` warning if Realtime should be used. |
+| UI | Header shows a live sync indicator when Realtime is connected (green dot). When disconnected, 30s polling still runs. |
 
 After 1 and 2 are done, saving an inventory update on one device should appear on the other within a few seconds (Realtime) or within 30s (polling).

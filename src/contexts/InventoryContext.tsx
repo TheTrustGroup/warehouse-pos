@@ -27,7 +27,7 @@ import { parseProductsResponse } from '../lib/apiSchemas';
 import { useInventory as useOfflineInventory } from '../hooks/useInventory';
 import { getProductImages, setProductImages } from '../lib/productImagesStore';
 
-/** Phase 6 Part 2: React Query is the only cache. No productsCacheKey, no getCachedProductsForWarehouse. */
+/** React Query is the only cache for products; invalidate on Realtime and after mutations. */
 
 /** Normalize API row to Product (for use in fetchProductsForWarehouse). */
 function normalizeProductRow(p: any): Product {

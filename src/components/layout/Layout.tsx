@@ -136,60 +136,45 @@ function LayoutContent() {
       {isMobile && (
         <MobileBottomNav onMoreClick={() => setMoreMenuOpen(true)} />
       )}
-      {/* Slim hint while phase 2 (inventory, orders) syncs in background after login */}
-      {isSyncingCriticalData && (
-        <div
-          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-[var(--edk-amber-bg)] text-[var(--edk-amber)] text-center py-2 px-4 text-sm font-medium flex items-center justify-center gap-2 border-b border-[var(--edk-amber)]/20"
-          role="status"
-          aria-live="polite"
-        >
-          <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-[var(--edk-amber)] border-t-transparent animate-spin" aria-hidden />
-          Syncing inventory & orders…
-        </div>
-      )}
-      {/* In-flow banner: reserves layout space so content is never overlapped. Pushes main content down. */}
-      {criticalDataError && (
-        <div
-          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-[var(--edk-amber)] text-[var(--edk-ink)] text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-[var(--edk-amber)]/80"
-          role="alert"
-        >
-          <span>Initial load had issues: {criticalDataError}</span>
-          <Button type="button" variant="ghost" onClick={() => reloadCriticalData()} className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-[var(--edk-ink)] rounded text-[var(--edk-ink)]">
-            Retry
-          </Button>
-        </div>
-      )}
-      {showReconnectingBanner && (
-        <div
-          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-[var(--edk-amber-bg)] text-[var(--edk-ink)] text-center py-2 px-4 text-sm font-medium border-b border-[var(--edk-amber)]/20"
-          role="status"
-          aria-live="polite"
-        >
-          Reconnecting… Your data may be slightly delayed.
-        </div>
-      )}
-      {showDegradedBanner && (
-        <div
-          className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] bg-[var(--edk-amber)] text-[var(--edk-ink)] text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-3 flex-wrap min-h-[3rem] border-b border-[var(--edk-amber)]/80"
-          role="status"
-        >
-          <span>Server temporarily unavailable. Last saved data — read-only. Add, edit, and sales disabled until server is back.</span>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleTryAgain}
-            className="underline font-semibold hover:no-underline focus:outline-none focus:ring-2 focus:ring-[var(--edk-ink)] rounded text-[var(--edk-ink)]"
-          >
-            Try again
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleDismissBanner}
-            className="text-[var(--edk-ink)]/80 hover:text-[var(--edk-ink)] font-medium focus:outline-none focus:ring-2 focus:ring-[var(--edk-ink)] rounded"
-          >
-            Dismiss
-          </Button>
+      {/* Banners: syncing, reconnecting, server unavailable — same strip height and tokens */}
+      {(isSyncingCriticalData || criticalDataError || showReconnectingBanner || showDegradedBanner) && (
+        <div className="lg:ml-[var(--edk-sidebar-w)] mt-[calc(var(--edk-topbar-h)+var(--safe-top))] min-h-[2.75rem] flex items-stretch border-b border-[var(--edk-border)] bg-[var(--edk-amber-bg)]">
+          {isSyncingCriticalData && (
+            <div
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium text-[var(--edk-amber)]"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-[var(--edk-amber)] border-t-transparent animate-spin shrink-0" aria-hidden />
+              <span>Syncing inventory & orders…</span>
+            </div>
+          )}
+          {criticalDataError && !isSyncingCriticalData && (
+            <div className="w-full flex items-center justify-center gap-3 flex-wrap py-2.5 px-4 text-sm font-medium text-[var(--edk-ink)]" role="alert">
+              <span>Initial load had issues: {criticalDataError}</span>
+              <Button type="button" variant="ghost" size="sm" onClick={() => reloadCriticalData()} className="underline font-semibold hover:no-underline text-[var(--edk-ink)]">
+                Retry
+              </Button>
+            </div>
+          )}
+          {showReconnectingBanner && !isSyncingCriticalData && !criticalDataError && (
+            <div className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium text-[var(--edk-ink-2)]" role="status" aria-live="polite">
+              <span className="inline-block h-2 w-2 rounded-full bg-[var(--edk-amber)] animate-pulse shrink-0" aria-hidden />
+              <span>Reconnecting… Your data may be slightly delayed.</span>
+            </div>
+          )}
+          {showDegradedBanner && !isSyncingCriticalData && !criticalDataError && !showReconnectingBanner && (
+            <div className="w-full flex items-center justify-center gap-3 flex-wrap py-2.5 px-4 text-sm font-medium text-[var(--edk-ink)]" role="status">
+              <span className="inline-block h-2 w-2 rounded-full bg-[var(--edk-amber)] shrink-0" aria-hidden />
+              <span>Server temporarily unavailable. Last saved data — read-only.</span>
+              <Button type="button" variant="ghost" size="sm" onClick={handleTryAgain} className="underline font-semibold hover:no-underline text-[var(--edk-ink)]">
+                Try again
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={handleDismissBanner} className="text-[var(--edk-ink-2)] hover:text-[var(--edk-ink)] font-medium">
+                Dismiss
+              </Button>
+            </div>
+          )}
         </div>
       )}
       {/* Main: offset by sidebar and topbar; on mobile add bottom padding for tab bar */}
