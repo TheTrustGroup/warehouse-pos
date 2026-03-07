@@ -13,9 +13,12 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Package, AlertTriangle } from 'lucide-react';
 import ProductCard, { ProductCardSkeleton } from '../components/inventory/ProductCard';
 import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Button } from '../components/ui/Button';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
@@ -179,11 +182,12 @@ function ToastContainer({ toasts }: { toasts: ToastItem[] }) {
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
       {safeToasts.map(t => (
-        <div key={t.id}
-          className={`flex items-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 text-white
-                      text-[13px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.25)]
-                      border-l-[3px] ${styles[t.type]} min-w-[220px] max-w-[340px]
-                      animate-[toastIn_0.35s_cubic-bezier(0.34,1.56,0.64,1)]`}>
+        <div
+          key={t.id}
+          className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-[13px] font-semibold text-white min-w-[220px] max-w-[340px]
+                      animate-[toastIn_0.35s_cubic-bezier(0.34,1.56,0.64,1)] border-l-[3px] ${styles[t.type]}`}
+          style={{ background: 'var(--edk-sidebar-bg)', boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }}
+        >
           {t.message}
         </div>
       ))}
@@ -198,40 +202,37 @@ function DeleteDialog({
 }: { product: Product; onConfirm: () => void; onCancel: () => void; }) {
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" onClick={onCancel}/>
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[28px]
-                      shadow-[0_-8px_48px_rgba(0,0,0,0.15)] px-5 pt-5 pb-10
-                      animate-[sheetUp_0.3s_cubic-bezier(0.34,1.1,0.64,1)]">
-        <div className="w-10 h-1 rounded-full bg-slate-200 mx-auto mb-6"/>
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" onClick={onCancel} aria-hidden />
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 rounded-t-[28px] px-5 pt-5 pb-10 animate-[sheetUp_0.3s_cubic-bezier(0.34,1.1,0.64,1)]"
+        style={{ background: 'var(--edk-surface)', boxShadow: '0 -8px 48px rgba(0,0,0,0.15)' }}
+      >
+        <div className="w-10 h-1 rounded-full bg-[var(--edk-border-mid)] mx-auto mb-6" aria-hidden />
         <div className="flex items-start gap-4 mb-7">
-          <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center flex-shrink-0">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#EF4444"
-                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 bg-[var(--edk-red-soft)]">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--edk-red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <polyline points="3 6 5 6 21 6"/>
               <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
               <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
             </svg>
           </div>
           <div>
-            <p className="text-[17px] font-black text-slate-900">Delete product?</p>
-            <p className="text-[13px] text-slate-500 mt-1 leading-relaxed">
-              <span className="font-semibold text-slate-800">&quot;{product.name}&quot;</span> will be
+            <p className="text-[17px] font-black text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+              Delete product?
+            </p>
+            <p className="text-[13px] text-[var(--edk-ink-2)] mt-1 leading-relaxed">
+              <span className="font-semibold text-[var(--edk-ink)]">&quot;{product.name}&quot;</span> will be
               permanently removed from inventory. This cannot be undone.
             </p>
           </div>
         </div>
         <div className="flex gap-3">
-          <button type="button" onClick={onCancel}
-                  className="flex-1 h-[52px] rounded-2xl border-[1.5px] border-slate-200
-                             text-[15px] font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+          <Button type="button" variant="secondary" onClick={onCancel} className="flex-1 h-[52px]">
             Cancel
-          </button>
-          <button type="button" onClick={onConfirm}
-                  className="flex-1 h-[52px] rounded-2xl bg-red-500 hover:bg-red-600
-                             text-[15px] font-bold text-white transition-colors
-                             shadow-[0_4px_16px_rgba(239,68,68,0.3)]">
+          </Button>
+          <Button type="button" variant="danger" onClick={onConfirm} className="flex-1 h-[52px]">
             Delete
-          </button>
+          </Button>
         </div>
       </div>
       <style>{`@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
@@ -289,14 +290,6 @@ const PlusIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        strokeWidth="2.5" strokeLinecap="round">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-  </svg>
-);
-const BoxIcon = () => (
-  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-    <line x1="12" y1="22.08" x2="12" y2="12"/>
   </svg>
 );
 
@@ -685,13 +678,16 @@ export default function InventoryPage(_props: InventoryPageProps) {
             )}
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="sm"
           onClick={openAddModal}
-          className="h-[34px] px-3.5 rounded-[var(--edk-radius-sm)] bg-[var(--edk-red)] hover:bg-[var(--edk-red-hover)] text-white text-[13px] font-semibold flex items-center gap-1.5 shadow-[0_1px_3px_rgba(232,40,26,0.3)] flex-shrink-0"
+          leftIcon={<PlusIcon />}
+          className="flex-shrink-0 shadow-[0_1px_3px_var(--edk-red-soft)]"
         >
-          <PlusIcon /> Add product
-        </button>
+          Add product
+        </Button>
       </div>
 
       {/* Stats: from dashboard API when available (all products); otherwise from loaded list */}
@@ -780,7 +776,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
             {sortOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} aria-hidden />
-                <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-[var(--edk-border)] py-1.5 w-44">
+                <div className="absolute right-0 top-full mt-1 z-20 bg-[var(--edk-surface)] rounded-xl shadow-lg border border-[var(--edk-border)] py-1.5 w-44">
                   {SORT_OPTIONS.map((opt) => (
                     <button
                       key={opt.key}
@@ -806,25 +802,23 @@ export default function InventoryPage(_props: InventoryPageProps) {
       {/* Main content */}
       <main>
 
-        {/* Error — mobile-first: min tap target 44px, readable copy */}
+        {/* Error — design system EmptyState + Button */}
         {(error || getApiCircuitBreaker().isDegraded()) && (
-          <div className="flex flex-col items-center gap-5 py-20 text-center px-4">
-            <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center text-red-300 flex-shrink-0">
-              <BoxIcon aria-hidden />
-            </div>
-            <div>
-              <p className="text-[17px] font-black text-slate-800">Couldn&apos;t load products</p>
-              <p className="text-[13px] text-slate-500 mt-1 max-w-md mx-auto break-words leading-relaxed">
-                {error || (getApiCircuitBreaker().isDegraded() ? 'Server temporarily unavailable (too many failed requests). Tap Retry to try again.' : null)}
-              </p>
-            </div>
-            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true, timeoutMs: 90_000 }); }}
-                    className="min-h-[44px] h-12 px-6 rounded-xl bg-red-500 text-white text-[14px] font-bold
-                               hover:bg-red-600 active:bg-red-700 transition-colors shadow-[0_4px_12px_rgba(239,68,68,0.25)]
-                               touch-manipulation" aria-label="Retry loading products">
-              Retry
-            </button>
-          </div>
+          <EmptyState
+            icon={AlertTriangle}
+            title="Couldn't load products"
+            description={error || (getApiCircuitBreaker().isDegraded() ? 'Server temporarily unavailable. Tap Retry to try again.' : undefined)}
+            action={
+              <Button
+                variant="primary"
+                onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true, timeoutMs: 90_000 }); }}
+                aria-label="Retry loading products"
+              >
+                Retry
+              </Button>
+            }
+            className="py-12"
+          />
         )}
 
         {/* Skeletons */}
@@ -834,44 +828,38 @@ export default function InventoryPage(_props: InventoryPageProps) {
           </div>
         )}
 
-        {/* List failed to load but dashboard says products exist — show retry (longer timeout for mobile) */}
+        {/* List failed to load but dashboard says products exist */}
         {!loading && !error && products.length === 0 && dashboard != null && skuCount > 0 && (
-          <div className="flex flex-col items-center gap-5 py-24 text-center px-4">
-            <div className="w-20 h-20 rounded-3xl bg-amber-50 flex items-center justify-center text-amber-400 flex-shrink-0">
-              <BoxIcon aria-hidden />
-            </div>
-            <div>
-              <p className="text-[18px] font-black text-slate-800">Couldn&apos;t load product list</p>
-              <p className="text-[14px] text-slate-500 mt-1 max-w-sm mx-auto">
-                This warehouse has {skuCount} product{skuCount !== 1 ? 's' : ''}. The list didn&apos;t load. Tap Retry to try again.
-              </p>
-            </div>
-            <button type="button" onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true, timeoutMs: 90_000 }); }}
-                    className="min-h-[44px] h-12 px-7 rounded-2xl bg-[var(--edk-red)] text-white text-[14px] font-bold
-                               flex items-center gap-2 hover:opacity-95 active:opacity-90 transition-opacity
-                               shadow-[0_6px_20px_rgba(239,68,68,0.35)] touch-manipulation" aria-label="Retry loading product list">
-              Retry
-            </button>
-          </div>
+          <EmptyState
+            icon={AlertTriangle}
+            title="Couldn't load product list"
+            description={`This warehouse has ${skuCount} product${skuCount !== 1 ? 's' : ''}. The list didn't load. Tap Retry to try again.`}
+            action={
+              <Button
+                variant="primary"
+                onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true, timeoutMs: 90_000 }); }}
+                aria-label="Retry loading product list"
+              >
+                Retry
+              </Button>
+            }
+            className="py-12"
+          />
         )}
 
-        {/* Empty warehouse — clear CTA so user knows what to do next */}
+        {/* Empty warehouse — design system EmptyState + Button */}
         {!loading && !error && products.length === 0 && !(dashboard != null && skuCount > 0) && (
-          <div className="flex flex-col items-center gap-5 py-24 text-center">
-            <div className="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center text-slate-300">
-              <BoxIcon/>
-            </div>
-            <div>
-              <p className="text-[18px] font-black text-slate-800">No products yet</p>
-              <p className="text-[14px] text-slate-400 mt-1">Add your first product to get started.</p>
-            </div>
-            <button type="button" onClick={openAddModal}
-                    className="h-12 px-7 rounded-2xl bg-red-500 text-white text-[14px] font-bold
-                               flex items-center gap-2 hover:bg-red-600 transition-colors
-                               shadow-[0_6px_20px_rgba(239,68,68,0.35)]">
-              <PlusIcon/> Add your first product →
-            </button>
-          </div>
+          <EmptyState
+            icon={Package}
+            title="No products yet"
+            description="Add your first product to get started."
+            action={
+              <Button variant="primary" onClick={openAddModal} leftIcon={<PlusIcon />}>
+                Add your first product
+              </Button>
+            }
+            className="py-12"
+          />
         )}
 
         {/* Loading more for current page (e.g. page 4 needs items 61–80, we had 50; auto-loading) */}
@@ -880,25 +868,30 @@ export default function InventoryPage(_props: InventoryPageProps) {
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 w-full">
               {Array.from({ length: isMobileViewport ? 4 : 6 }).map((_, i) => <ProductCardSkeleton key={`page-load-${i}`} />)}
             </div>
-            <p className="text-[13px] text-slate-500">{isLoadingMore ? 'Loading page…' : 'Load more to view this page'}</p>
+            <p className="text-[13px] text-[var(--edk-ink-3)]">{isLoadingMore ? 'Loading page…' : 'Load more to view this page'}</p>
             {!isLoadingMore && hasMore && (
-              <button type="button" onClick={() => loadMore()} className="h-10 px-6 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 hover:bg-slate-50">
+              <Button type="button" variant="secondary" size="sm" onClick={() => loadMore()}>
                 Load more
-              </button>
+              </Button>
             )}
           </div>
         )}
 
-        {/* Empty filter (enough data loaded, but slice empty due to filters) */}
+        {/* Empty filter */}
         {!loading && !error && products.length > 0 && displayed.length === 0 && !pageNeedsMore && (
           <div className="flex flex-col items-center gap-3 py-20 text-center">
-            <p className="text-[15px] font-bold text-slate-700">
+            <p className="text-[15px] font-bold text-[var(--edk-ink-2)]">
               No results for current filters
             </p>
-            <button type="button" onClick={() => { setSearchParams({}); setCategory('all'); setSizeFilter(''); setColorFilter(''); setCurrentPage(1); }}
-                    className="text-[13px] font-bold text-red-500 hover:text-red-700">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => { setSearchParams({}); setCategory('all'); setSizeFilter(''); setColorFilter(''); setCurrentPage(1); }}
+              className="text-[var(--edk-red)] hover:text-[var(--edk-red-hover)]"
+            >
               Clear filters
-            </button>
+            </Button>
           </div>
         )}
 
@@ -918,38 +911,42 @@ export default function InventoryPage(_props: InventoryPageProps) {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-center gap-3 py-6">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                   disabled={currentPage <= 1}
-                  className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
                 >
                   Previous
-                </button>
-                <span className="text-[13px] font-semibold text-slate-600">
+                </Button>
+                <span className="text-[13px] font-semibold text-[var(--edk-ink-2)]">
                   Page {currentPage} of {totalPages}
                 </span>
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                   disabled={currentPage >= totalPages}
-                  className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
                 >
                   Next
-                </button>
+                </Button>
               </div>
             )}
             {/* Load more (fetch next page from API) */}
             {hasMore && (
               <div className="flex justify-center py-4">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => loadMore()}
                   disabled={isLoadingMore}
-                  className="h-10 px-6 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                  loading={isLoadingMore}
                 >
                   {isLoadingMore ? 'Loading…' : 'Load more'}
-                </button>
+                </Button>
               </div>
             )}
           </>

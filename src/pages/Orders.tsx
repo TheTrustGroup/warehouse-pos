@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '../lib/utils';
 import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageHeader } from '../components/ui/PageHeader';
 
@@ -73,49 +74,49 @@ export function Orders() {
     failed: orders.filter(o => o.status === 'failed').length,
   };
 
-  const getStatusColor = (status: OrderStatus) => {
-    const colors: Record<OrderStatus, string> = {
-      pending: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-      confirmed: 'bg-blue-50 text-blue-700 border-blue-200',
-      processing: 'bg-purple-50 text-purple-700 border-purple-200',
-      ready: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-      out_for_delivery: 'bg-orange-50 text-orange-700 border-orange-200',
-      delivered: 'bg-green-50 text-green-700 border-green-200',
-      failed: 'bg-red-50 text-red-700 border-red-200',
-      cancelled: 'bg-gray-50 text-gray-700 border-gray-200',
+  const getStatusBadgeVariant = (status: OrderStatus): 'success' | 'warning' | 'danger' | 'gray' | 'red' | 'blue' => {
+    const map: Record<OrderStatus, 'success' | 'warning' | 'danger' | 'gray' | 'red' | 'blue'> = {
+      pending: 'warning',
+      confirmed: 'blue',
+      processing: 'blue',
+      ready: 'blue',
+      out_for_delivery: 'warning',
+      delivered: 'success',
+      failed: 'danger',
+      cancelled: 'gray',
     };
-    return colors[status];
+    return map[status];
   };
 
   if (isLoading) {
     return (
-      <div className="space-y-6 min-h-[60dvh]" role="status" aria-live="polite">
+      <div className="space-y-6 min-h-[60dvh] bg-[var(--edk-bg)] p-4 sm:p-6" role="status" aria-live="polite">
         <div className="flex items-center justify-between">
           <div>
-            <div className="h-8 w-32 bg-slate-200 rounded animate-pulse" />
-            <div className="h-4 w-24 bg-slate-100 rounded mt-2 animate-pulse" />
+            <div className="h-8 w-32 bg-[var(--edk-border-mid)] rounded animate-pulse" />
+            <div className="h-4 w-24 bg-[var(--edk-border-mid)] rounded mt-2 animate-pulse" />
           </div>
-          <div className="h-12 w-32 bg-slate-200 rounded-xl animate-pulse" />
+          <div className="h-12 w-32 bg-[var(--edk-border-mid)] rounded-xl animate-pulse" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="solid-card p-4">
+            <div key={i} className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-4">
               <div className="flex items-center gap-3">
-                <div className="h-12 w-12 bg-slate-200 rounded-xl animate-pulse flex-shrink-0" />
+                <div className="h-12 w-12 bg-[var(--edk-border-mid)] rounded-xl animate-pulse flex-shrink-0" />
                 <div className="flex-1">
-                  <div className="h-4 w-16 bg-slate-100 rounded mb-2 animate-pulse" />
-                  <div className="h-7 w-10 bg-slate-200 rounded animate-pulse" />
+                  <div className="h-4 w-16 bg-[var(--edk-border-mid)] rounded mb-2 animate-pulse" />
+                  <div className="h-7 w-10 bg-[var(--edk-border-mid)] rounded animate-pulse" />
                 </div>
               </div>
             </div>
           ))}
         </div>
-        <div className="solid-card p-4">
-          <div className="h-12 bg-slate-100 rounded-xl animate-pulse w-full max-w-md" />
+        <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-4">
+          <div className="h-12 bg-[var(--edk-border-mid)] rounded-xl animate-pulse w-full max-w-md" />
         </div>
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="solid-card p-4 h-24 animate-pulse bg-slate-50" />
+            <div key={i} className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-4 h-24 animate-pulse" />
           ))}
         </div>
       </div>
@@ -123,15 +124,14 @@ export function Orders() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-[var(--edk-bg)] min-h-screen p-4 sm:p-6">
       {ordersError && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3" role="alert">
-          <p className="text-amber-900 text-sm font-medium flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600" aria-hidden />
+        <div className="rounded-[var(--edk-radius)] border border-[var(--edk-amber)]/20 bg-[var(--edk-amber-bg)] px-4 py-3 flex flex-wrap items-center justify-between gap-3" role="alert">
+          <p className="text-[var(--edk-ink)] text-sm font-medium flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-[var(--edk-amber)]" strokeWidth={2} aria-hidden />
             {ordersError}
           </p>
-          <Button variant="primary" size="sm" onClick={() => refreshOrders()} className="inline-flex items-center gap-2 shrink-0" aria-label="Retry loading orders">
-            <RefreshCw className="w-4 h-4" />
+          <Button variant="primary" size="sm" onClick={() => refreshOrders()} leftIcon={<RefreshCw className="w-4 h-4" strokeWidth={2} />} className="shrink-0" aria-label="Retry loading orders">
             Retry
           </Button>
         </div>
@@ -143,8 +143,7 @@ export function Orders() {
             title="No orders yet"
             description="Orders will appear here when they are created from POS or delivery."
             action={
-              <Button variant="primary" onClick={() => navigate('/pos')} className="inline-flex items-center gap-2">
-                <Plus className="w-5 h-5" />
+              <Button variant="primary" onClick={() => navigate('/pos')} leftIcon={<Plus className="w-5 h-5" strokeWidth={2} />}>
                 Go to POS
               </Button>
             }
@@ -152,88 +151,80 @@ export function Orders() {
         </div>
       ) : (
         <>
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
           title="Orders"
           description={`${filteredOrders.length} order${filteredOrders.length !== 1 ? 's' : ''} found`}
         />
-        <Button variant="primary" className="inline-flex items-center gap-2 w-full sm:w-auto justify-center" aria-label="New order">
-          <Plus className="w-5 h-5" />
+        <Button variant="primary" onClick={() => navigate('/pos')} leftIcon={<Plus className="w-5 h-5" strokeWidth={2} />} className="w-full sm:w-auto justify-center" aria-label="New order">
           New Order
         </Button>
       </div>
 
-      {/* Stats Cards — Phase 6: equal height (min-h), 8pt grid gap, icon stroke consistent */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="solid-card min-h-[7.5rem] flex flex-col justify-center">
+        <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] min-h-[7.5rem] flex flex-col justify-center p-4">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-yellow-50 rounded-xl flex items-center justify-center shrink-0">
-              <Clock className="w-6 h-6 text-yellow-600" strokeWidth={2} aria-hidden />
+            <div className="p-3 bg-[var(--edk-amber-bg)] rounded-xl flex items-center justify-center shrink-0">
+              <Clock className="w-6 h-6 text-[var(--edk-amber)]" strokeWidth={2} aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-sm text-slate-600">Pending</p>
-              <p className="text-2xl font-bold text-slate-900">{stats.pending}</p>
+              <p className="text-sm text-[var(--edk-ink-3)]">Pending</p>
+              <p className="text-2xl font-bold text-[var(--edk-ink)] tabular-nums">{stats.pending}</p>
             </div>
           </div>
         </div>
-
-        <div className="solid-card min-h-[7.5rem] flex flex-col justify-center">
+        <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] min-h-[7.5rem] flex flex-col justify-center p-4">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-50 rounded-xl flex items-center justify-center shrink-0">
-              <Package className="w-6 h-6 text-purple-600" strokeWidth={2} aria-hidden />
+            <div className="p-3 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
+              <Package className="w-6 h-6 text-blue-600" strokeWidth={2} aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-sm text-slate-600">Processing</p>
-              <p className="text-2xl font-bold text-slate-900">{stats.processing}</p>
+              <p className="text-sm text-[var(--edk-ink-3)]">Processing</p>
+              <p className="text-2xl font-bold text-[var(--edk-ink)] tabular-nums">{stats.processing}</p>
             </div>
           </div>
         </div>
-
-        <div className="solid-card min-h-[7.5rem] flex flex-col justify-center">
+        <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] min-h-[7.5rem] flex flex-col justify-center p-4">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-orange-50 rounded-xl flex items-center justify-center shrink-0">
-              <Truck className="w-6 h-6 text-orange-600" strokeWidth={2} aria-hidden />
+            <div className="p-3 bg-[var(--edk-amber-bg)] rounded-xl flex items-center justify-center shrink-0">
+              <Truck className="w-6 h-6 text-[var(--edk-amber)]" strokeWidth={2} aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-sm text-slate-600">Out for Delivery</p>
-              <p className="text-2xl font-bold text-slate-900">{stats.out_for_delivery}</p>
+              <p className="text-sm text-[var(--edk-ink-3)]">Out for Delivery</p>
+              <p className="text-2xl font-bold text-[var(--edk-ink)] tabular-nums">{stats.out_for_delivery}</p>
             </div>
           </div>
         </div>
-
-        <div className="solid-card min-h-[7.5rem] flex flex-col justify-center">
+        <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] min-h-[7.5rem] flex flex-col justify-center p-4">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
-              <CheckCircle className="w-6 h-6 text-green-600" strokeWidth={2} aria-hidden />
+            <div className="p-3 bg-[var(--edk-green-bg)] rounded-xl flex items-center justify-center shrink-0">
+              <CheckCircle className="w-6 h-6 text-[var(--edk-green)]" strokeWidth={2} aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-sm text-slate-600">Delivered</p>
-              <p className="text-2xl font-bold text-slate-900">{stats.delivered}</p>
+              <p className="text-sm text-[var(--edk-ink-3)]">Delivered</p>
+              <p className="text-2xl font-bold text-[var(--edk-ink)] tabular-nums">{stats.delivered}</p>
             </div>
           </div>
         </div>
-
-        <div className="solid-card min-h-[7.5rem] flex flex-col justify-center">
+        <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] min-h-[7.5rem] flex flex-col justify-center p-4">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
-              <XCircle className="w-6 h-6 text-red-600" strokeWidth={2} aria-hidden />
+            <div className="p-3 bg-[var(--edk-red-soft)] rounded-xl flex items-center justify-center shrink-0">
+              <XCircle className="w-6 h-6 text-[var(--edk-red)]" strokeWidth={2} aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-sm text-slate-600">Failed</p>
-              <p className="text-2xl font-bold text-slate-900">{stats.failed}</p>
+              <p className="text-sm text-[var(--edk-ink-3)]">Failed</p>
+              <p className="text-2xl font-bold text-[var(--edk-ink)] tabular-nums">{stats.failed}</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Filters — Phase 6: card uses default solid-card padding (≥16px) */}
-      <div className="solid-card">
+      <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-4">
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-sm font-medium text-slate-600 mb-1.5">Search</label>
+            <label className="block text-sm font-medium text-[var(--edk-ink-2)] mb-1.5">Search</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--edk-ink-3)] pointer-events-none" strokeWidth={2} />
               <input
                 type="text"
                 value={searchQuery}
@@ -246,7 +237,7 @@ export function Orders() {
           </div>
 
           <div className="input-select-wrapper min-w-[140px]">
-            <label className="block text-sm font-medium text-slate-600 mb-1.5">Status</label>
+            <label className="block text-sm font-medium text-[var(--edk-ink-2)] mb-1.5">Status</label>
             <select
               value={selectedStatus}
               onChange={e => setSelectedStatus(e.target.value as OrderStatus | 'all')}
@@ -267,43 +258,38 @@ export function Orders() {
         </div>
       </div>
 
-      {/* Orders List */}
       <div className="space-y-4">
         {filteredOrders.map(order => (
-          <div key={order.id} className="solid-card hover:shadow-xl transition-all">
+          <div key={order.id} className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-4 hover:shadow-lg transition-shadow">
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  <h3 className="text-lg font-bold text-slate-900">{order.orderNumber}</h3>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(order.status)}`}
-                  >
+                  <h3 className="text-lg font-bold text-[var(--edk-ink)]">{order.orderNumber}</h3>
+                  <Badge variant={getStatusBadgeVariant(order.status)} size="md">
                     {order.status.replace('_', ' ').toUpperCase()}
-                  </span>
+                  </Badge>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
-                    <p className="text-slate-500">Customer</p>
-                    <p className="font-medium text-slate-900">{order.customer.name}</p>
-                    <p className="text-slate-600">{order.customer.phone}</p>
+                    <p className="text-[var(--edk-ink-3)]">Customer</p>
+                    <p className="font-medium text-[var(--edk-ink)]">{order.customer.name}</p>
+                    <p className="text-[var(--edk-ink-2)]">{order.customer.phone}</p>
                   </div>
-
                   <div>
-                    <p className="text-slate-500">Order Date</p>
-                    <p className="font-medium text-slate-900">{formatDateTime(order.createdAt)}</p>
+                    <p className="text-[var(--edk-ink-3)]">Order Date</p>
+                    <p className="font-medium text-[var(--edk-ink)]">{formatDateTime(order.createdAt)}</p>
                   </div>
-
                   <div>
-                    <p className="text-slate-500">Total Amount</p>
-                    <p className="text-xl font-bold text-primary-600">{formatCurrency(order.total)}</p>
+                    <p className="text-[var(--edk-ink-3)]">Total Amount</p>
+                    <p className="text-xl font-bold text-[var(--edk-red)]">{formatCurrency(order.total)}</p>
                   </div>
                 </div>
 
                 {order.delivery?.driverName && (
-                  <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                    <p className="text-sm text-blue-900">
-                      <Truck className="w-4 h-4 inline mr-2" />
+                  <div className="mt-3 p-3 rounded-[var(--edk-radius-sm)] bg-[var(--edk-surface-2)] border border-[var(--edk-border-mid)]">
+                    <p className="text-sm text-[var(--edk-ink-2)]">
+                      <Truck className="w-4 h-4 inline mr-2" strokeWidth={2} />
                       Driver: <strong>{order.delivery.driverName}</strong> ({order.delivery.driverPhone})
                     </p>
                   </div>
@@ -312,96 +298,99 @@ export function Orders() {
 
               <div className="flex gap-2 flex-wrap">
                 {order.status === 'pending' && (
-                  <button
+                  <Button
+                    size="sm"
+                    variant="primary"
                     onClick={() => updateOrderStatus(order.id, 'confirmed')}
                     disabled={readOnlyMode || busyOrderId === order.id}
+                    loading={busyOrderId === order.id}
                     title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
-                    className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                   >
-                    {busyOrderId === order.id ? 'Updating…' : 'Confirm'}
-                  </button>
+                    Confirm
+                  </Button>
                 )}
-
                 {(order.status === 'confirmed' || order.status === 'processing') && (
-                  <button
+                  <Button
+                    size="sm"
+                    variant="primary"
                     onClick={() => updateOrderStatus(order.id, 'ready')}
                     disabled={readOnlyMode || busyOrderId === order.id}
+                    loading={busyOrderId === order.id}
                     title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
-                    className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                   >
-                    {busyOrderId === order.id ? 'Updating…' : 'Mark Ready'}
-                  </button>
+                    Mark Ready
+                  </Button>
                 )}
-
                 {order.status === 'ready' && (
-                  <button
+                  <Button
+                    size="sm"
+                    variant="primary"
                     onClick={() => {
                       const driver = prompt('Enter driver name:');
                       const phone = prompt('Enter driver phone:');
-                      if (driver && phone) {
-                        assignDriver(order.id, driver, phone);
-                      }
+                      if (driver && phone) assignDriver(order.id, driver, phone);
                     }}
                     disabled={readOnlyMode || busyOrderId === order.id}
+                    loading={busyOrderId === order.id}
                     title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
-                    className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                   >
-                    {busyOrderId === order.id ? 'Updating…' : 'Assign Driver'}
-                  </button>
+                    Assign Driver
+                  </Button>
                 )}
-
                 {order.status === 'out_for_delivery' && (
                   <>
-                    <button
-                      onClick={() =>
-                        markAsDelivered(order.id, { recipientName: order.customer.name })
-                      }
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => markAsDelivered(order.id, { recipientName: order.customer.name })}
                       disabled={readOnlyMode || busyOrderId === order.id}
+                      loading={busyOrderId === order.id}
                       title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
-                      className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                     >
-                      {busyOrderId === order.id ? 'Updating…' : 'Mark Delivered'}
-                    </button>
-                    <button
+                      Mark Delivered
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
                       onClick={() => {
                         const reason = prompt('Reason for failure:');
                         if (reason) markAsFailed(order.id, reason);
                       }}
                       disabled={readOnlyMode || busyOrderId === order.id}
+                      loading={busyOrderId === order.id}
                       title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : undefined}
-                      className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                     >
-                      {busyOrderId === order.id ? 'Updating…' : 'Mark Failed'}
-                    </button>
+                      Mark Failed
+                    </Button>
                   </>
                 )}
-
                 {isCancellable(order.status) && (
-                  <button
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => {
                       const reason = prompt('Reason for cancellation (optional):') ?? '';
                       cancelOrder(order.id, reason.trim() || 'Cancelled by user');
                     }}
                     disabled={readOnlyMode || busyOrderId === order.id}
+                    loading={busyOrderId === order.id}
                     title={readOnlyMode ? 'Read-only. Writes disabled until connection is restored.' : 'Cancel this order and return stock if already deducted'}
-                    className="min-h-touch inline-flex items-center justify-center px-4 py-2 bg-slate-600 text-white rounded-xl hover:bg-slate-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
                   >
-                    {busyOrderId === order.id ? 'Updating…' : 'Cancel order'}
-                  </button>
+                    Cancel order
+                  </Button>
                 )}
               </div>
             </div>
 
-            {/* Items */}
-            <div className="border-t border-slate-200 pt-3">
-              <p className="text-sm font-medium text-slate-700 mb-2">Items ({order.items.length})</p>
+            <div className="border-t border-[var(--edk-border)] pt-3">
+              <p className="text-sm font-medium text-[var(--edk-ink-2)] mb-2">Items ({order.items.length})</p>
               <div className="space-y-1">
                 {order.items.map((item, idx) => (
                   <div key={idx} className="flex justify-between text-sm">
-                    <span className="text-slate-600">
+                    <span className="text-[var(--edk-ink-2)]">
                       {item.productName} × {item.quantity}
                     </span>
-                    <span className="font-medium text-slate-900">
+                    <span className="font-medium text-[var(--edk-ink)]">
                       {formatCurrency(item.subtotal)}
                     </span>
                   </div>
@@ -412,11 +401,16 @@ export function Orders() {
         ))}
 
         {filteredOrders.length === 0 && (
-          <div className="solid-card text-center py-12">
-            <Package className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">No orders found</h3>
-            <p className="text-slate-600">Try adjusting your filters or create a new order</p>
-          </div>
+          <EmptyState
+            icon={Package}
+            title="No orders found"
+            description="Try adjusting your filters or create a new order."
+            action={
+              <Button variant="primary" onClick={() => navigate('/pos')} leftIcon={<Plus className="w-5 h-5" strokeWidth={2} />}>
+                New Order
+              </Button>
+            }
+          />
         )}
       </div>
         </>
