@@ -435,7 +435,7 @@ export function Reports() {
       {/* Inventory Report */}
       {reportType === 'inventory' && inventoryReport && (
         <div className="space-y-6">
-          <InventoryMetrics report={inventoryReport} />
+          <InventoryMetrics report={inventoryReport} snapshot={inventorySnapshot} />
 
           <div className="table-container rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
             <h3 className="text-lg font-semibold text-[var(--edk-ink)] mb-6 px-6 pt-6">Highest Value Inventory</h3>
