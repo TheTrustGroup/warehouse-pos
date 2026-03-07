@@ -112,3 +112,9 @@ $$;
 
 COMMENT ON FUNCTION get_sales_report(uuid, timestamptz, timestamptz) IS
   'Sales report: revenue, COGS, profit, margin, counts, AOV, top products, sales by day. All from sales/sale_lines; computed in SQL.';
+
+-- Post-hardening: revoke from client roles, grant only to service_role (CI invariant).
+REVOKE ALL ON FUNCTION public.get_sales_report(uuid, timestamptz, timestamptz) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_sales_report(uuid, timestamptz, timestamptz) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_sales_report(uuid, timestamptz, timestamptz) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.get_sales_report(uuid, timestamptz, timestamptz) TO service_role;

@@ -46,6 +46,7 @@ $$;
 
 COMMENT ON FUNCTION receive_delivery(uuid, uuid, jsonb) IS 'Atomically add inbound delivery items to warehouse_inventory_by_size for a warehouse. Trigger syncs warehouse_inventory. p_items: [{ product_id, size_code, quantity }].';
 
-REVOKE ALL ON FUNCTION receive_delivery(uuid, uuid, jsonb) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION receive_delivery(uuid, uuid, jsonb) TO service_role;
-GRANT EXECUTE ON FUNCTION receive_delivery(uuid, uuid, jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.receive_delivery(uuid, uuid, jsonb) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.receive_delivery(uuid, uuid, jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.receive_delivery(uuid, uuid, jsonb) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.receive_delivery(uuid, uuid, jsonb) TO service_role;

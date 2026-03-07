@@ -60,3 +60,9 @@ $$;
 
 COMMENT ON FUNCTION get_warehouse_inventory_stats(uuid) IS
   'Returns one row: total_stock_value (qty * selling_price), total_products, total_units, low_stock_count, out_of_stock_count for the warehouse. Used for dashboard and inventory stats accuracy.';
+
+-- Post-hardening: revoke from client roles, grant only to service_role (CI invariant).
+REVOKE ALL ON FUNCTION public.get_warehouse_inventory_stats(uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_warehouse_inventory_stats(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_warehouse_inventory_stats(uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.get_warehouse_inventory_stats(uuid) TO service_role;

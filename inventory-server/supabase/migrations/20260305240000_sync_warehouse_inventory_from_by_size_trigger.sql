@@ -51,6 +51,12 @@ $$;
 
 COMMENT ON FUNCTION sync_warehouse_inventory_from_by_size() IS 'Trigger function: sync warehouse_inventory.quantity from SUM(warehouse_inventory_by_size.quantity) for affected (warehouse_id, product_id).';
 
+-- Post-hardening: revoke from client roles, grant only to service_role (CI invariant).
+REVOKE ALL ON FUNCTION public.sync_warehouse_inventory_from_by_size() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.sync_warehouse_inventory_from_by_size() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.sync_warehouse_inventory_from_by_size() FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_warehouse_inventory_from_by_size() TO service_role;
+
 DROP TRIGGER IF EXISTS trigger_sync_warehouse_inventory_from_by_size ON warehouse_inventory_by_size;
 CREATE TRIGGER trigger_sync_warehouse_inventory_from_by_size
   AFTER INSERT OR UPDATE OR DELETE

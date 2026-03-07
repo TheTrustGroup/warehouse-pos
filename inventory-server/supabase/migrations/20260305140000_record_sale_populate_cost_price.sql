@@ -132,3 +132,9 @@ $$;
 
 COMMENT ON FUNCTION record_sale(uuid, jsonb, numeric, numeric, numeric, numeric, text, text, uuid, text) IS
   'Record sale + lines (with cost_price at time of sale) + deduct stock atomically.';
+
+-- Post-hardening: revoke from client roles, grant only to service_role (CI invariant).
+REVOKE ALL ON FUNCTION public.record_sale(uuid, jsonb, numeric, numeric, numeric, numeric, text, text, uuid, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.record_sale(uuid, jsonb, numeric, numeric, numeric, numeric, text, text, uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.record_sale(uuid, jsonb, numeric, numeric, numeric, numeric, text, text, uuid, text) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.record_sale(uuid, jsonb, numeric, numeric, numeric, numeric, text, text, uuid, text) TO service_role;
