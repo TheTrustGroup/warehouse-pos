@@ -29,8 +29,8 @@ export function MobileBottomNav({
     <nav
       className="lg:hidden fixed bottom-0 left-0 right-0 z-30 flex items-center justify-around border-t border-[var(--edk-border)] bg-[var(--edk-surface)]"
       style={{
-        paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
-        paddingTop: 8,
+        paddingBottom: 'max(env(safe-area-inset-bottom), 6px)',
+        paddingTop: 6,
         fontFamily: "'DM Sans', system-ui, sans-serif",
       }}
       role="tablist"
@@ -41,7 +41,7 @@ export function MobileBottomNav({
           key={item.name}
           to={item.to}
           className={({ isActive }) =>
-            `flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-lg transition-colors touch-manipulation ${
+            `flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 px-1.5 py-1 rounded-md transition-colors touch-manipulation ${
               isActive
                 ? 'bg-[rgba(232,40,26,0.12)] text-[var(--edk-red)]'
                 : 'text-[var(--edk-ink-2)]'
@@ -49,15 +49,15 @@ export function MobileBottomNav({
           }
           role="tab"
         >
-          <item.icon className="w-6 h-6 flex-shrink-0" strokeWidth={2} aria-hidden />
-          <span className="text-[11px] font-medium leading-tight">{item.name}</span>
+          <item.icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} aria-hidden />
+          <span className="text-[10px] font-medium leading-tight">{item.name}</span>
         </NavLink>
       ))}
       {showMore && (
         <button
           type="button"
           onClick={onMoreClick}
-          className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-lg text-[var(--edk-ink-2)] transition-colors touch-manipulation"
+          className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 px-1.5 py-1 rounded-md text-[var(--edk-ink-2)] transition-colors touch-manipulation"
           role="tab"
           aria-label="More menu"
         >
@@ -66,7 +66,7 @@ export function MobileBottomNav({
             <circle cx="12" cy="12" r="1.5" />
             <circle cx="12" cy="18" r="1.5" />
           </svg>
-          <span className="text-[11px] font-medium leading-tight">More</span>
+          <span className="text-[10px] font-medium leading-tight">More</span>
         </button>
       )}
     </nav>

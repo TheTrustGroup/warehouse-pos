@@ -205,10 +205,10 @@ function LayoutContent() {
       )}
       {/* Main: offset by sidebar and topbar; on mobile add bottom padding for tab bar */}
       <main
-        className={`lg:ml-[var(--edk-sidebar-w)] pt-20 lg:pt-8 pl-[max(1rem,var(--safe-left))] pr-[max(1rem,var(--safe-right))] lg:px-8 min-h-[calc(var(--min-h-viewport)-var(--edk-topbar-h))] max-w-[1600px] overflow-x-hidden ${
+        className={`lg:ml-[var(--edk-sidebar-w)] pt-16 lg:pt-6 pl-[max(0.75rem,var(--safe-left))] pr-[max(0.75rem,var(--safe-right))] lg:px-6 min-h-[calc(var(--min-h-viewport)-var(--edk-topbar-h))] max-w-[1600px] overflow-x-hidden ${
           showDegradedBanner || showSyncingBar ? 'mt-0' : isPOS ? 'mt-0' : 'mt-[calc(var(--edk-topbar-h)+var(--safe-top))]'
         } ${
-          isMobile ? 'pb-[max(4.5rem,calc(var(--safe-bottom)+4.5rem))]' : 'pb-[max(3.5rem,calc(var(--safe-bottom)+3.5rem))]'
+          isMobile ? 'pb-[max(4rem,calc(var(--safe-bottom)+4rem))]' : 'pb-[max(3rem,calc(var(--safe-bottom)+3rem))]'
         }`}
       >
         <Outlet />

@@ -61,14 +61,14 @@ export function Header() {
       {/* Single top nav search: flex-1 max 520px, placeholder, ⌘K badge, focus ring */}
       <div className="flex-1 max-w-[520px] relative">
         <form onSubmit={handleSearch} className="relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--edk-ink-3)] group-focus-within:text-[var(--edk-red)] pointer-events-none" strokeWidth={2} aria-hidden />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--edk-ink-3)] group-focus-within:text-[var(--edk-red)] pointer-events-none" strokeWidth={2} aria-hidden />
           <input
             type="search"
             inputMode="search"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search products, SKU, or barcode…"
-            className="w-full h-[34px] pl-9 pr-16 rounded-lg bg-[var(--edk-bg)] border border-[var(--edk-border-mid)] text-[13px] text-[var(--edk-ink)] placeholder:text-[var(--edk-ink-3)] outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--edk-red-border)] focus:shadow-[0_0_0_3px_var(--edk-red-soft)]"
+            className="w-full h-[32px] pl-8 pr-14 rounded-md bg-[var(--edk-bg)] border border-[var(--edk-border-mid)] text-[12px] text-[var(--edk-ink)] placeholder:text-[var(--edk-ink-3)] outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--edk-red-border)] focus:shadow-[0_0_0_2px_var(--edk-red-soft)]"
             aria-label="Search products, SKU, or barcode"
           />
           <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-medium text-[var(--edk-ink-3)] bg-[var(--edk-surface-2)] border border-[var(--edk-border-mid)] rounded px-1.5 py-0.5 pointer-events-none" aria-hidden>⌘K</span>
@@ -82,8 +82,8 @@ export function Header() {
           variant="secondary"
           onClick={handleLogout}
           loading={isLoggingOut}
-          leftIcon={!isLoggingOut ? <LogOut className="w-4 h-4" strokeWidth={2} /> : undefined}
-          className="h-[34px] px-3 rounded-lg border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] hover:bg-[var(--edk-bg)] text-[var(--edk-ink-2)] text-[12px] font-medium min-w-[44px] touch-manipulation"
+          leftIcon={!isLoggingOut ? <LogOut className="w-3.5 h-3.5" strokeWidth={2} /> : undefined}
+          className="h-[32px] px-2.5 rounded-md border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] hover:bg-[var(--edk-bg)] text-[var(--edk-ink-2)] text-[11px] font-medium min-w-[40px] touch-manipulation"
           title="Log out"
           aria-label={logoutButtonLabel}
         >
@@ -92,12 +92,12 @@ export function Header() {
         <Button
           type="button"
           variant="action"
-          className="relative w-[34px] h-[34px] flex items-center justify-center rounded-lg border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] hover:bg-[var(--edk-bg)] text-[var(--edk-ink-2)] disabled:opacity-50 touch-manipulation"
+          className="relative w-[32px] h-[32px] flex items-center justify-center rounded-md border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] hover:bg-[var(--edk-bg)] text-[var(--edk-ink-2)] disabled:opacity-50 touch-manipulation"
           aria-label="View notifications"
           title="Notifications"
           disabled
         >
-          <Bell className="w-4 h-4" strokeWidth={2} />
+          <Bell className="w-3.5 h-3.5" strokeWidth={2} />
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[var(--edk-red)] rounded-full ring-[1.5px] ring-white" aria-hidden />
         </Button>
       </div>

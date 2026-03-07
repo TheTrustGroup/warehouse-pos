@@ -50,13 +50,13 @@ export function StatCard({
       <div
         className={`
           rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)]
-          p-4 min-h-[100px] animate-pulse
+          p-3 min-h-[80px] animate-pulse
           ${className}
         `.trim()}
         aria-busy="true"
       >
-        <div className="h-4 w-20 rounded bg-[var(--edk-border-mid)] mb-3" />
-        <div className="h-8 w-24 rounded bg-[var(--edk-border-mid)]" />
+        <div className="h-3 w-16 rounded bg-[var(--edk-border-mid)] mb-2" />
+        <div className="h-6 w-20 rounded bg-[var(--edk-border-mid)]" />
       </div>
     );
   }
@@ -78,30 +78,30 @@ export function StatCard({
       }
       className={`
         rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)]
-        p-4 transition-shadow duration-200
+        p-3 transition-shadow duration-200
         ${isInteractive ? 'cursor-pointer hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--edk-red)] focus-visible:ring-offset-2' : ''}
         ${className}
       `.trim()}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-xs font-medium uppercase tracking-wider text-[var(--edk-ink-3)]">
+      <div className="flex items-start justify-between gap-1.5">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--edk-ink-3)]">
           {label}
         </span>
         {Icon && (
           <span className="text-[var(--edk-ink-3)]" aria-hidden>
-            <Icon className="w-5 h-5" strokeWidth={2} />
+            <Icon className="w-4 h-4" strokeWidth={2} />
           </span>
         )}
       </div>
       <p
-        className="mt-1 text-[26px] font-semibold tabular-nums leading-tight font-mono"
+        className="mt-0.5 text-[20px] font-semibold tabular-nums leading-tight font-mono"
         style={{ fontFamily: "'IBM Plex Mono', 'SF Mono', Consolas, monospace" }}
         aria-label={`${label}: ${value}`}
       >
         <span className={valueColor}>{value}</span>
       </p>
       {(delta != null || trend) && (
-        <p className="mt-1 text-xs font-medium flex items-center gap-1">
+        <p className="mt-0.5 text-[10px] font-medium flex items-center gap-1">
           {trend === 'up' && (
             <span className="text-[var(--edk-green)]" aria-hidden>↑</span>
           )}
@@ -124,7 +124,7 @@ export function StatCard({
         </p>
       )}
       {sub != null && (
-        <div className="mt-2 text-xs text-[var(--edk-ink-3)]">{sub}</div>
+        <div className="mt-1 text-[10px] text-[var(--edk-ink-3)]">{sub}</div>
       )}
     </div>
   );
