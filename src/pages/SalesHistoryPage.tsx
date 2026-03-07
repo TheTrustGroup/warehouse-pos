@@ -21,6 +21,7 @@ import { PERMISSIONS } from '../types/permissions';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 interface SalesHistoryPageProps { apiBaseUrl?: string; }
 
@@ -584,10 +585,14 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
         )}
 
         {loading && (
-          <div className="space-y-3">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-20 bg-[var(--edk-surface)] rounded-[var(--edk-radius)] border border-[var(--edk-border)] animate-pulse" />
-            ))}
+          <div className="flex flex-col items-center gap-4">
+            <LoadingSpinner size="md" />
+            <p className="text-[13px] font-medium text-[var(--edk-ink-3)]">Loading sales…</p>
+            <div className="w-full space-y-3">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="h-20 bg-[var(--edk-surface)] rounded-[var(--edk-radius)] border border-[var(--edk-border)] animate-pulse" />
+              ))}
+            </div>
           </div>
         )}
 

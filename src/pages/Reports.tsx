@@ -20,6 +20,7 @@ import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 type ReportType = 'sales' | 'inventory';
 type TransactionsSource = 'server' | 'local';
@@ -328,9 +329,10 @@ export function Reports() {
             />
           </div>
           {(salesReportLoading || transactionsLoading) && (
-            <p className="text-sm text-[var(--edk-ink-3)]">
-              {salesReportLoading ? 'Loading sales report…' : 'Loading sales from server…'}
-            </p>
+            <div className="flex items-center gap-3 text-sm text-[var(--edk-ink-3)]">
+              <LoadingSpinner size="sm" />
+              <span>{salesReportLoading ? 'Loading sales report…' : 'Loading sales from server…'}</span>
+            </div>
           )}
           {serverReportUnavailable && reportType === 'sales' && (
             <div className="rounded-[var(--edk-radius)] border border-[var(--edk-amber)]/30 bg-[var(--edk-amber-bg)] px-4 py-2.5 text-sm text-[var(--edk-ink)]">

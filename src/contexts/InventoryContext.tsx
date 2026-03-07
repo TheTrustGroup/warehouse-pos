@@ -181,6 +181,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   }, [warehouseId]);
   const lastUpdatedProductRef = useRef<{ product: Product; at: number } | null>(null);
   const recentlyDeletedIdsRef = useRef<Set<string>>(new Set());
+  /** Keep last non-empty quantityBySize per product so refetches that temporarily return empty don't flash "No sizes recorded". */
+  const lastQuantityBySizeRef = useRef<Map<string, { sizeCode: string; quantity: number }[]>>(new Map());
   const RECENT_UPDATE_WINDOW_MS = 10 * 60 * 1000;
   const RECENT_DELETE_WINDOW_MS = 15_000;
 
@@ -205,8 +207,39 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
       list = list.map((p) => (p.id === updated.product.id ? updated.product : p));
     }
-    return list.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
+    list = list.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
+    // Preserve last known quantityBySize when refetch returns empty for sized products (avoids "No sizes recorded" flash).
+    const prevSizes = lastQuantityBySizeRef.current;
+    return list.map((p) => {
+      if (p.sizeKind !== 'sized') return p;
+      const qbs = p.quantityBySize ?? [];
+      if (qbs.length > 0) return p;
+      const kept = prevSizes.get(p.id);
+      if (!kept || kept.length === 0) return p;
+      return { ...p, quantityBySize: kept };
+    });
   }, [offlineEnabled, offline.products, queryList]);
+
+  useEffect(() => {
+    products.forEach((p) => {
+      const qbs = p.quantityBySize;
+      if (p.sizeKind === 'sized' && Array.isArray(qbs) && qbs.length > 0) {
+        lastQuantityBySizeRef.current.set(
+          p.id,
+          qbs.map((r) => ({ sizeCode: r.sizeCode, quantity: r.quantity }))
+        );
+      }
+    });
+  }, [products]);
+
+  const prevWarehouseIdRef = useRef(warehouseId);
+  useEffect(() => {
+    if (prevWarehouseIdRef.current !== warehouseId) {
+      lastQuantityBySizeRef.current.clear();
+      prevWarehouseIdRef.current = warehouseId;
+    }
+  }, [warehouseId]);
+
   /** Merge in client-saved images so they stay visible even when API/refresh omits them. */
   const productsWithLocalImages = useMemo(
     () =>

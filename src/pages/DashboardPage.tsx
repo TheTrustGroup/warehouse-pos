@@ -14,6 +14,7 @@ import { useDashboardQuery, type DashboardLowStockItem } from '../hooks/useDashb
 import { StatCard } from '../components/ui/StatCard';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -149,7 +150,10 @@ export default function DashboardPage() {
             )}
           </p>
           {isWarehouseValid && loading && (
-            <span className="text-[12px] text-[var(--edk-ink-3)] animate-pulse">Loading…</span>
+            <span className="flex items-center gap-2 text-[12px] text-[var(--edk-ink-3)]">
+              <LoadingSpinner size="sm" />
+              Loading…
+            </span>
           )}
         </div>
 
@@ -292,10 +296,14 @@ export default function DashboardPage() {
             })()}
           </div>
           {loading ? (
-            <div className="p-6 space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-10 bg-[var(--edk-border-mid)] rounded-[var(--edk-radius-sm)] animate-pulse" />
-              ))}
+            <div className="flex flex-col items-center gap-4 p-6">
+              <LoadingSpinner size="md" />
+              <p className="text-[13px] font-medium text-[var(--edk-ink-3)]">Loading…</p>
+              <div className="w-full space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-10 bg-[var(--edk-border-mid)] rounded-[var(--edk-radius-sm)] animate-pulse" />
+                ))}
+              </div>
             </div>
           ) : (
             <LowStockTable items={dashboard?.lowStockItems ?? []} />

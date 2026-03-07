@@ -19,6 +19,7 @@ import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Button } from '../components/ui/Button';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
@@ -823,8 +824,12 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
         {/* Skeletons */}
         {loading && !error && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Array.from({ length: isMobileViewport ? 4 : 6 }).map((_, i) => <ProductCardSkeleton key={i}/>)}
+          <div className="flex flex-col items-center gap-4">
+            <LoadingSpinner size="md" />
+            <p className="text-[13px] font-medium text-[var(--edk-ink-3)]">Loading products…</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full">
+              {Array.from({ length: isMobileViewport ? 4 : 6 }).map((_, i) => <ProductCardSkeleton key={i}/>)}
+            </div>
           </div>
         )}
 
@@ -865,6 +870,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
         {/* Loading more for current page (e.g. page 4 needs items 61–80, we had 50; auto-loading) */}
         {!loading && !error && products.length > 0 && pageNeedsMore && displayed.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
+            {isLoadingMore && <LoadingSpinner size="md" />}
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 w-full">
               {Array.from({ length: isMobileViewport ? 4 : 6 }).map((_, i) => <ProductCardSkeleton key={`page-load-${i}`} />)}
             </div>

@@ -21,6 +21,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageHeader } from '../components/ui/PageHeader';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 export function Orders() {
   const {
@@ -91,6 +92,10 @@ export function Orders() {
   if (isLoading) {
     return (
       <div className="space-y-6 min-h-[60dvh] bg-[var(--edk-bg)] p-4 sm:p-6" role="status" aria-live="polite">
+        <div className="flex flex-col items-center gap-3 py-6">
+          <LoadingSpinner size="md" />
+          <p className="text-[13px] font-medium text-[var(--edk-ink-3)]">Loading orders…</p>
+        </div>
         <div className="flex items-center justify-between">
           <div>
             <div className="h-8 w-32 bg-[var(--edk-border-mid)] rounded animate-pulse" />
