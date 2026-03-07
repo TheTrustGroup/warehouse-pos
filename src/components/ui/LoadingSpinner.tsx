@@ -1,7 +1,7 @@
-const sizePx = { sm: 16, md: 32, lg: 48 };
+const sizePx: Record<'sm' | 'md' | 'lg' | 'xl', number> = { sm: 16, md: 32, lg: 48, xl: 40 };
 
-/** Single loading spinner used app-wide: red ring (--edk-border + --edk-red), edk-spin. */
-export function LoadingSpinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+/** Single loading spinner used app-wide: red ring (--edk-border + --edk-red), edk-spin. Matches "Loading warehouse" style. */
+export function LoadingSpinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' | 'xl' }) {
   const px = sizePx[size];
 
   return (
@@ -22,12 +22,42 @@ export function LoadingSpinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   );
 }
 
+/** Full-page loading screen matching "Loading warehouse" style: edk-bg, 40px red ring, Barlow Condensed uppercase label. */
+export function LoadingScreen({ message = 'Loading...' }: { message?: string }) {
+  return (
+    <div
+      className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-[var(--edk-bg)] gap-4"
+      role="status"
+      aria-live="polite"
+    >
+      <LoadingSpinner size="xl" />
+      <p
+        className="uppercase font-bold text-[14px] tracking-[0.08em] m-0"
+        style={{
+          fontFamily: "'Barlow Condensed', sans-serif",
+          color: 'var(--edk-ink-3)',
+        }}
+      >
+        {message}
+      </p>
+    </div>
+  );
+}
+
 export function PageLoader() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--edk-bg)]">
       <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] p-8 text-center shadow-sm">
-        <LoadingSpinner size="lg" />
-        <p className="mt-4 text-sm font-medium text-[var(--edk-ink-2)]">Loading...</p>
+        <LoadingSpinner size="xl" />
+        <p
+          className="mt-4 uppercase font-bold text-[14px] tracking-[0.08em]"
+          style={{
+            fontFamily: "'Barlow Condensed', sans-serif",
+            color: 'var(--edk-ink-3)',
+          }}
+        >
+          Loading...
+        </p>
       </div>
     </div>
   );

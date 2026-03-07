@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Permission } from '../types/permissions';
 import { User } from '../types';
 import { Button, Card } from '../components/ui';
+import { LoadingScreen } from '../components/ui/LoadingSpinner';
 import { ShieldX } from 'lucide-react';
 
 interface ProtectedRouteProps {
@@ -27,16 +28,8 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { user, isAuthenticated, isLoading, hasPermission, hasAnyPermission, hasAllPermissions, hasRole, getDefaultPathForRole } = useAuth();
 
-  // Show loading state while checking authentication
   if (isLoading) {
-    return (
-      <div className="min-h-[var(--min-h-viewport)] flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen message="Loading..." />;
   }
 
   if (!isAuthenticated) {

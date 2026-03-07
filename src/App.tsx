@@ -23,7 +23,7 @@ import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
 import { POSContentBoundary } from './components/pos/POSContentBoundary';
 import { Button } from './components/ui/Button';
 import { Layout } from './components/layout/Layout';
-import { LoadingSpinner } from './components/ui/LoadingSpinner';
+import { LoadingScreen } from './components/ui/LoadingSpinner';
 import { DebugPanel } from './components/debug/DebugPanel';
 import { BrowserCheck } from './components/BrowserCheck';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -263,12 +263,7 @@ function ProtectedRoutes() {
   const { user, isAuthenticated, isLoading, authError } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-[var(--edk-bg)]">
-        <LoadingSpinner size="lg" />
-        <p className="mt-4 text-sm font-medium text-[var(--edk-ink-2)]">Loading...</p>
-      </div>
-    );
+    return <LoadingScreen message="Loading..." />;
   }
 
   // Invalid role or session: block dashboard and force re-login (authError shown on Login page).
@@ -282,12 +277,7 @@ function ProtectedRoutes() {
 
   // Block dashboard until role is confirmed from server (no UI fallback for role).
   if (user == null) {
-    return (
-      <div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-[var(--edk-bg)]">
-        <LoadingSpinner size="lg" />
-        <p className="mt-4 text-sm font-medium text-[var(--edk-ink-2)]">Loading...</p>
-      </div>
-    );
+    return <LoadingScreen message="Loading..." />;
   }
 
   return (
@@ -332,7 +322,7 @@ function App() {
             <QueryClientProvider client={queryClient}>
             <BrowserRouter>
             <OnboardingModal />
-            <Suspense fallback={<div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center gap-4 bg-[var(--edk-bg)]"><LoadingSpinner size="lg" /><p className="text-sm font-medium text-[var(--edk-ink-2)]">Loading…</p></div>}>
+            <Suspense fallback={<LoadingScreen message="Loading…" />}>
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/" element={<ProtectedRoutes />}>

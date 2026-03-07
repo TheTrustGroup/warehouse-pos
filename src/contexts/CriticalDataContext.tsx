@@ -19,6 +19,7 @@ import { reportError } from '../lib/errorReporting';
 import { apiRequest } from '../lib/apiClient';
 import { API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
+import { LoadingScreen } from '../components/ui/LoadingSpinner';
 
 const is401 = (e: unknown) => (e as { status?: number })?.status === 401;
 
@@ -149,44 +150,7 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
   if (!internal) return <>{children}</>;
 
   if (internal.isCriticalDataLoading) {
-    return (
-      <div
-        style={{
-          background: 'var(--edk-bg)',
-          minHeight: 'var(--min-h-viewport)',
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 16,
-        }}
-      >
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            border: '3px solid var(--edk-border)',
-            borderTopColor: 'var(--edk-red)',
-            animation: 'edk-spin 0.8s linear infinite',
-          }}
-        />
-        <p
-          style={{
-            fontFamily: "'Barlow Condensed', sans-serif",
-            fontWeight: 700,
-            fontSize: 14,
-            letterSpacing: '0.08em',
-            color: 'var(--edk-ink-3)',
-            textTransform: 'uppercase',
-            margin: 0,
-          }}
-        >
-          Loading warehouse...
-        </p>
-      </div>
-    );
+    return <LoadingScreen message="Loading warehouse..." />;
   }
 
   return <>{children}</>;

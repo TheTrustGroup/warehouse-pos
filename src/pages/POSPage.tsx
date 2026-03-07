@@ -46,6 +46,7 @@ import CartSheet, {
   type SalePayload,
 } from '../components/pos/CartSheet';
 import SaleSuccessScreen, { type CompletedSale as SaleSuccessCompletedSale } from '../components/pos/SaleSuccessScreen';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { BRAND } from '../config/branding';
 
 interface POSPageProps {
@@ -839,9 +840,11 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
                 </>
               ) : (
                 <>
-                  <div className="w-10 h-10 border-2 border-[var(--edk-red)] border-t-transparent rounded-full animate-spin" aria-hidden />
-                  <p className="text-[var(--edk-ink-2)] font-medium">Loading warehouse…</p>
-                  <p className="text-sm text-[var(--edk-ink-3)]">Location must be set before you can sell.</p>
+                  <LoadingSpinner size="xl" />
+                  <p className="uppercase font-bold text-[14px] tracking-[0.08em] m-0" style={{ fontFamily: "'Barlow Condensed', sans-serif", color: 'var(--edk-ink-3)' }}>
+                    Loading warehouse…
+                  </p>
+                  <p className="text-sm text-[var(--edk-ink-3)] mt-0">Location must be set before you can sell.</p>
                 </>
               )}
             </div>

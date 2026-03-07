@@ -6,6 +6,7 @@
  * Uses current brand: Barlow Condensed, --edk-* colors, primary red #E8281A.
  */
 import { useCurrentWarehouse, useWarehouse } from '../contexts/WarehouseContext';
+import { LoadingScreen } from './ui/LoadingSpinner';
 
 export function WarehouseGuard({ children }: { children: React.ReactNode }) {
   const { warehouseId: id, isLoading, error } = useCurrentWarehouse();
@@ -16,44 +17,7 @@ export function WarehouseGuard({ children }: { children: React.ReactNode }) {
   };
 
   if (isLoading) {
-    return (
-      <div
-        style={{
-          background: 'var(--edk-bg)',
-          minHeight: 'var(--min-h-viewport)',
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 16,
-        }}
-      >
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            border: '3px solid var(--edk-border)',
-            borderTopColor: 'var(--edk-red)',
-            animation: 'edk-spin 0.8s linear infinite',
-          }}
-        />
-        <p
-          style={{
-            fontFamily: "'Barlow Condensed', sans-serif",
-            fontWeight: 700,
-            fontSize: 14,
-            letterSpacing: '0.08em',
-            color: 'var(--edk-ink-3)',
-            textTransform: 'uppercase',
-            margin: 0,
-          }}
-        >
-          Loading warehouse...
-        </p>
-      </div>
-    );
+    return <LoadingScreen message="Loading warehouse..." />;
   }
 
   if (!id || error) {
