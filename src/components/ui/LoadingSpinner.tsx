@@ -1,15 +1,20 @@
+const sizePx = { sm: 16, md: 32, lg: 48 };
+
 export function LoadingSpinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
-  const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-8 h-8',
-    lg: 'w-12 h-12',
-  };
+  const px = sizePx[size];
 
   return (
     <div className="flex items-center justify-center" aria-hidden>
       <div
-        className={`${sizeClasses[size]} rounded-full animate-spin border-[3px] border-[var(--edk-border-mid)]`}
-        style={{ borderTopColor: 'var(--edk-ink)' }}
+        className="rounded-full animate-spin"
+        style={{
+          width: px,
+          height: px,
+          borderWidth: 3,
+          borderStyle: 'solid',
+          borderColor: 'var(--edk-border-mid)',
+          borderTopColor: 'var(--edk-red)',
+        }}
       />
     </div>
   );

@@ -19,7 +19,6 @@ import { reportError } from '../lib/errorReporting';
 import { apiRequest } from '../lib/apiClient';
 import { API_BASE_URL } from '../lib/api';
 import { getApiCircuitBreaker } from '../lib/circuit';
-import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 const is401 = (e: unknown) => (e as { status?: number })?.status === 401;
 
@@ -151,10 +150,32 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
 
   if (internal.isCriticalDataLoading) {
     return (
-      <div className="min-h-[var(--min-h-viewport)] flex flex-col items-center justify-center bg-[var(--edk-bg)] p-4">
-        <LoadingSpinner size="lg" />
-        <p className="mt-4 font-medium text-[var(--edk-ink-2)]">Loading your data...</p>
-        <p className="text-sm mt-1 text-[var(--edk-ink-3)]">Stores, warehouses, inventory, orders</p>
+      <div
+        className="flex min-h-[var(--min-h-viewport)] w-full flex-col items-center justify-center gap-4"
+        style={{ background: 'var(--edk-bg)' }}
+      >
+        <div
+          className="rounded-full border-[3px] border-[var(--edk-border)]"
+          style={{
+            width: 40,
+            height: 40,
+            borderTopColor: 'var(--edk-red)',
+            animation: 'spin 0.8s linear infinite',
+          }}
+        />
+        <p
+          className="uppercase tracking-wider"
+          style={{
+            fontFamily: "'Barlow Condensed', sans-serif",
+            fontWeight: 700,
+            fontSize: 14,
+            letterSpacing: '0.08em',
+            color: 'var(--edk-ink-3)',
+          }}
+        >
+          Loading warehouse...
+        </p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
