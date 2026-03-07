@@ -356,7 +356,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       quantityBySize: Array.isArray(p.quantityBySize) ? p.quantityBySize : [],
     });
 
-  /** Load next page (50 items). No-op when offline, when no more data, or when already loading. */
+  const LOAD_MORE_PAGE_SIZE = 250;
+
+  /** Load next page (250 items). No-op when offline, when no more data, or when already loading. */
   const loadMore = useCallback(async () => {
     if (offlineEnabled || isLoadingMore) return;
     const current = productsRef.current;
@@ -366,14 +368,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     setIsLoadingMore(true);
     try {
       const offset = current.length;
-      const path = productsPath('/api/products', { limit: 50, offset });
+      const path = productsPath('/api/products', { limit: LOAD_MORE_PAGE_SIZE, offset });
       let raw: { data?: Product[]; total?: number } | Product[] | null = null;
       try {
         raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, { maxRetries: 2 });
       } catch (e) {
         const status = (e as { status?: number })?.status;
         if (status === 404) {
-          raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: 50, offset }), { maxRetries: 2 });
+          raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, productsPath('/admin/api/products', { limit: LOAD_MORE_PAGE_SIZE, offset }), { maxRetries: 2 });
         } else {
           throw e;
         }

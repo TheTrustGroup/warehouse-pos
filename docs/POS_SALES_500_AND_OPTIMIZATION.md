@@ -92,3 +92,17 @@ Once you have the **exact** log line for the 500 (e.g. copy from Vercel), we can
 - `ALTER TABLE sales ALTER COLUMN delivery_status DROP NOT NULL;`
 
 so direct sales can store NULL. Apply this migration to your Supabase (or run the SQL in the SQL editor), then redeploy or retry. After that, POST /api/sales should return 200 and product will deduct.
+
+---
+
+## Resolved: Sale completes but product shows "out of stock" (1 sold from 6 → 0)
+
+**Cause:** (1) **Data:** Any over-deduction or bug could persist negative/zero stock. (2) **UI:** After a sale, the refetch (GET /api/products) often fails with "network connection was lost". The POS effect was overwriting the correct optimistic product list (e.g. 5 left) with context data; when that context was stale or from a failed/cached response, the UI showed wrong stock (e.g. 0).
+
+**Fixes:**
+
+1. **DB (data integrity):** Migration `20260307110000_inventory_quantity_non_negative.sql`:
+   - Clamps existing negative quantities to 0 (one-time).
+   - Adds `CHECK (quantity >= 0)` on `warehouse_inventory` and `warehouse_inventory_by_size` so no future UPDATE can persist negative stock.
+
+2. **Frontend (display integrity):** While the sale-success screen is showing (`saleResult != null`), the POS effect no longer overwrites `products` from `safeInventoryProducts`. So a failed or stale refetch cannot replace the correct post-sale list with wrong data. When the user clicks "New sale", the effect runs again with `saleResult === null` and refreshes from context/API as before.

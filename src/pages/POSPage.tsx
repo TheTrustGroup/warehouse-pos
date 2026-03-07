@@ -267,6 +267,17 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const loadProductsAbortRef = useRef<AbortController | null>(null);
   const productsCacheRef = useRef<{ wid: string; list: POSProduct[]; at: number } | null>(null);
   const PRODUCTS_CACHE_TTL_MS = 30_000;
+  const PRODUCTS_PAGE_LIMIT = 250;
+
+  function normalizeProductItem(item: unknown): POSProduct {
+    const row = item as unknown as { color?: string; variants?: { color?: string }; barcode?: string | null };
+    const color = (row.color != null ? String(row.color).trim() : '') || (row.variants?.color ?? '') || '';
+    return {
+      ...(item as POSProduct),
+      color: color || null,
+      barcode: row.barcode != null ? String(row.barcode) : null,
+    };
+  }
 
   const loadProducts = useCallback(
     async (wid: string, silent = false, signal?: AbortSignal) => {
@@ -277,21 +288,29 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           setProductsLoadError(null);
         }
         if (!silent) setLoading(false);
-        const revalidate = await apiFetch<
-          POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }
-        >(`/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=250`, { signal }).catch(() => null);
-        if (signal?.aborted || !isMounted.current) return;
-        if (revalidate != null) {
+        const allPages: POSProduct[] = [];
+        let totalFromApi: number | undefined;
+        for (let offset = 0; ; offset += PRODUCTS_PAGE_LIMIT) {
+          if (signal?.aborted || !isMounted.current) return;
+          const revalidate = await apiFetch<
+            POSProduct[] | { data?: POSProduct[]; products?: POSProduct[]; total?: number }
+          >(
+            `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=${PRODUCTS_PAGE_LIMIT}&offset=${offset}`,
+            { signal }
+          ).catch(() => null);
+          if (signal?.aborted || !isMounted.current) return;
+          if (revalidate == null) break;
           const rawList: POSProduct[] = Array.isArray(revalidate)
             ? revalidate
             : (revalidate as { data?: POSProduct[] }).data ?? (revalidate as { products?: POSProduct[] }).products ?? [];
-          const list = rawList.map((item) => {
-            const row = item as unknown as { color?: string; variants?: { color?: string }; barcode?: string | null };
-            const color = (row.color != null ? String(row.color).trim() : '') || (row.variants?.color ?? '') || '';
-            return { ...item, color: color || null, barcode: row.barcode != null ? String(row.barcode) : null };
-          });
-          productsCacheRef.current = { wid, list, at: Date.now() };
-          setProducts(list);
+          if (typeof (revalidate as { total?: number }).total === 'number') totalFromApi = (revalidate as { total: number }).total;
+          const page = rawList.map((item) => normalizeProductItem(item));
+          allPages.push(...page);
+          if (page.length < PRODUCTS_PAGE_LIMIT || (typeof totalFromApi === 'number' && allPages.length >= totalFromApi)) break;
+        }
+        if (allPages.length > 0) {
+          productsCacheRef.current = { wid, list: allPages, at: Date.now() };
+          if (isMounted.current) setProducts(allPages);
         }
         return;
       }
@@ -300,30 +319,28 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         setProductsLoadError(null);
       }
       try {
-        const data = await apiFetch<
-          POSProduct[] | { data?: POSProduct[]; products?: POSProduct[] }
-        >(`/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=250`, { signal });
-        if (signal?.aborted) return;
-        const rawList: POSProduct[] = Array.isArray(data)
-          ? data
-          : (data as { data?: POSProduct[] }).data ??
-            (data as { products?: POSProduct[] }).products ??
-            [];
-        const list: POSProduct[] = rawList.map((item) => {
-          const row = item as unknown as { color?: string; variants?: { color?: string }; barcode?: string | null };
-          const color =
-            (row.color != null ? String(row.color).trim() : '') ||
-            (row.variants?.color ?? '') ||
-            '';
-          return {
-            ...item,
-            color: color || null,
-            barcode: row.barcode != null ? String(row.barcode) : null,
-          };
-        });
+        const allPages: POSProduct[] = [];
+        let totalFromApi: number | undefined;
+        for (let offset = 0; ; offset += PRODUCTS_PAGE_LIMIT) {
+          if (signal?.aborted) return;
+          const data = await apiFetch<
+            POSProduct[] | { data?: POSProduct[]; products?: POSProduct[]; total?: number }
+          >(
+            `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=${PRODUCTS_PAGE_LIMIT}&offset=${offset}`,
+            { signal }
+          );
+          if (signal?.aborted) return;
+          const rawList: POSProduct[] = Array.isArray(data)
+            ? data
+            : (data as { data?: POSProduct[] }).data ?? (data as { products?: POSProduct[] }).products ?? [];
+          if (typeof (data as { total?: number }).total === 'number') totalFromApi = (data as { total: number }).total;
+          const page = rawList.map((item) => normalizeProductItem(item));
+          allPages.push(...page);
+          if (page.length < PRODUCTS_PAGE_LIMIT || (typeof totalFromApi === 'number' && allPages.length >= totalFromApi)) break;
+        }
         if (isMounted.current) {
-          productsCacheRef.current = { wid, list, at: Date.now() };
-          setProducts(list);
+          productsCacheRef.current = { wid, list: allPages, at: Date.now() };
+          setProducts(allPages);
           setProductsLoadError(null);
         }
       } catch (e: unknown) {
@@ -370,6 +387,17 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     setCategory('all');
     setSizeFilter('');
     setColorFilter('');
+    // While sale-success screen is showing, do not overwrite products from context: refetch may fail
+    // ("network connection lost") and context could be stale or wrong; keep optimistic post-sale list.
+    if (saleResult != null) {
+      loadProducts(wid, true, ctrl.signal).catch(() => {
+        if (isMounted.current) setLoading(false);
+      });
+      return () => {
+        ctrl.abort();
+        if (loadProductsAbortRef.current === ctrl) loadProductsAbortRef.current = null;
+      };
+    }
     // Reuse InventoryContext products when already loaded (CriticalData phase-2 or cache) to avoid duplicate fetch and spinner.
     const hasInventoryForWarehouse =
       currentWarehouseId === wid && safeInventoryProducts.length > 0;
@@ -389,7 +417,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       ctrl.abort();
       if (loadProductsAbortRef.current === ctrl) loadProductsAbortRef.current = null;
     };
-  }, [warehouse.id, currentWarehouseId, loadProducts, safeInventoryProducts]);
+  }, [warehouse.id, currentWarehouseId, loadProducts, safeInventoryProducts, saleResult]);
 
   // NEXT 4: show toast when another cashier broadcasts low-stock, then dismiss
   const processedAlertCountRef = useRef(0);
