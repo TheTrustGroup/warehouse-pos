@@ -21,11 +21,8 @@ import { createContext, useContext, useState, ReactNode, useEffect, useCallback 
 import { Warehouse } from '../types';
 import { API_BASE_URL } from '../lib/api';
 import { apiGet } from '../lib/apiClient';
-import { isValidWarehouseId, PLACEHOLDER_WAREHOUSE_ID } from '../lib/warehouseId';
+import { isValidWarehouseId } from '../lib/warehouseId';
 import { useOptionalAuth } from './AuthContext';
-
-/** @deprecated Use isValidWarehouseId and PLACEHOLDER_WAREHOUSE_ID from lib/warehouseId. Kept for backward compat with InventoryContext/ProductFormModal. */
-export const DEFAULT_WAREHOUSE_ID = PLACEHOLDER_WAREHOUSE_ID;
 
 const STORAGE_KEY = 'warehouse_current_id';
 
@@ -141,11 +138,11 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
     [boundWarehouseId]
   );
 
-  const effectiveWarehouseId = boundWarehouseId || currentWarehouseId;
-  const currentWarehouse = warehouses.find((w) => w.id === effectiveWarehouseId) ?? null;
+  const resolvedWarehouseId = boundWarehouseId || currentWarehouseId;
+  const currentWarehouse = warehouses.find((w) => w.id === resolvedWarehouseId) ?? null;
   const isWarehouseSelectedForPOS = !!(
-    effectiveWarehouseId &&
-    (warehouses.length <= 1 || warehouses.some((w) => w.id === effectiveWarehouseId))
+    resolvedWarehouseId &&
+    (warehouses.length <= 1 || warehouses.some((w) => w.id === resolvedWarehouseId))
   );
   const isWarehouseBoundToSession = !!boundWarehouseId;
 
@@ -153,7 +150,7 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
     <WarehouseContext.Provider
       value={{
         warehouses,
-        currentWarehouseId: effectiveWarehouseId,
+        currentWarehouseId: resolvedWarehouseId,
         setCurrentWarehouseId,
         currentWarehouse,
         isLoading,

@@ -18,7 +18,7 @@ import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPost, apiPut, apiDelete } from '../lib/apiClient';
 import { getApiCircuitBreaker } from '../lib/circuit';
 import { queryKeys } from '../lib/queryKeys';
-import { useWarehouse, DEFAULT_WAREHOUSE_ID } from './WarehouseContext';
+import { useWarehouse } from './WarehouseContext';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
@@ -689,7 +689,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
       const isSized = updates.sizeKind === 'sized' || updated.sizeKind === 'sized';
-      const payload = { ...productToPayload(updated), warehouseId: (updates.warehouseId ?? warehouseId) || DEFAULT_WAREHOUSE_ID } as Record<string, unknown>;
+      const payload = { ...productToPayload(updated), warehouseId: (updates.warehouseId ?? warehouseId ?? '').trim() || '' } as Record<string, unknown>;
       // Always send quantityBySize when product is sized so the server applies the new sizes (add/change/clear).
       if (isSized) {
         payload.quantityBySize = Array.isArray(updates.quantityBySize)

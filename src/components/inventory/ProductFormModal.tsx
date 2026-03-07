@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } fr
 import { Product, type QuantityBySizeItem } from '../../types';
 import { generateSKU, getCategoryDisplay } from '../../lib/utils';
 import { safeValidateProductForm } from '../../lib/validationSchemas';
-import { useWarehouse, DEFAULT_WAREHOUSE_ID } from '../../contexts/WarehouseContext';
+import { useWarehouse } from '../../contexts/WarehouseContext';
 import { useInventory } from '../../contexts/InventoryContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useNetworkStatusContext } from '../../contexts/NetworkStatusContext';
@@ -469,7 +469,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         sizeKind: formData.sizeKind,
         quantityBySize: formData.sizeKind === 'sized' ? validSizeRows : formData.quantityBySize,
         images: payloadImages,
-        warehouseId: effectiveWarehouseId ?? DEFAULT_WAREHOUSE_ID,
+        warehouseId: effectiveWarehouseId ?? currentWarehouseId ?? '',
       };
       // Persist images to client store before async submit so list shows them even if API/state path fails or is delayed
       if (product?.id && payloadImages.length > 0) {
