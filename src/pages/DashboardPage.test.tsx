@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../lib/queryClient';
 import DashboardPage from './DashboardPage';
@@ -21,6 +22,20 @@ vi.mock('../contexts/WarehouseContext', () => ({
     refreshWarehouses: vi.fn(),
     isWarehouseSelectedForPOS: true,
     isWarehouseBoundToSession: false,
+  }),
+}));
+
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    hasRole: () => false,
+    user: { role: 'cashier' },
+  }),
+}));
+
+vi.mock('../contexts/PresenceContext', () => ({
+  usePresence: () => ({
+    presenceList: [],
+    isSubscribed: false,
   }),
 }));
 
@@ -56,9 +71,11 @@ describe('DashboardPage', () => {
 
   it('fetches dashboard with warehouse_id from context', async () => {
     render(
-      <QueryClientProvider client={queryClient}>
-        <DashboardPage />
-      </QueryClientProvider>
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <DashboardPage />
+        </QueryClientProvider>
+      </MemoryRouter>
     );
 
     await waitFor(

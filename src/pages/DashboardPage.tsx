@@ -1,19 +1,19 @@
 // ============================================================
-// DashboardPage.tsx
-// File: warehouse-pos/src/pages/DashboardPage.tsx
-//
-// Uses WarehouseContext for warehouseId. Data via React Query (useDashboardQuery)
-// with staleTime 1 min so navigating back is instant. Skeleton screens while loading.
+// DashboardPage.tsx — Phase 5: design system (StatCard, Badge, Button, --edk-*)
+// Uses WarehouseContext for warehouseId. Data via React Query (useDashboardQuery).
 // ============================================================
 
 import { useEffect } from 'react';
-import type { LucideIcon } from 'lucide-react';
 import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { usePresence } from '../contexts/PresenceContext';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { useDashboardQuery, type DashboardLowStockItem } from '../hooks/useDashboardQuery';
+import { StatCard } from '../components/ui/StatCard';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -36,91 +36,32 @@ function formatGHCCompact(n: number): string {
   return sign + 'GH₵' + abs.toLocaleString('en-GH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-// ── Skeleton (matches StatCard layout) ──────────────────────────────────────
-
-function StatCardSkeleton() {
-  return (
-    <div className="flex flex-col justify-between p-6 rounded-2xl border bg-white border-slate-200 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <div className="h-[13px] w-24 bg-slate-100 rounded animate-pulse" />
-        <div className="h-7 w-7 bg-slate-100 rounded animate-pulse" />
-      </div>
-      <div className="h-[28px] w-20 bg-slate-100 rounded animate-pulse" />
-    </div>
-  );
-}
-
-// ── Stat card ─────────────────────────────────────────────────────────────
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  accent = false,
-  warning = false,
-  danger = false,
-}: {
-  label:   string;
-  value:   string | number;
-  icon:    LucideIcon;
-  accent?: boolean;
-  warning?: boolean;
-  danger?:  boolean;
-}) {
-  const bg = accent  ? 'bg-white border-slate-200' :
-             warning ? 'bg-white border-slate-200' :
-             danger  ? 'bg-white border-slate-200' :
-                       'bg-white border-slate-200';
-
-  const valColor = danger  ? 'text-red-500'   :
-                   warning ? 'text-amber-500' :
-                             'text-slate-900';
-
-  const iconColor = danger  ? 'text-red-500'   :
-                    warning ? 'text-amber-500' :
-                              'text-slate-400';
-
-  return (
-    <div className={`flex flex-col justify-between p-6 rounded-2xl border ${bg} shadow-sm`}>
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-[13px] font-semibold text-slate-500">{label}</span>
-        <Icon className={iconColor} size={28} aria-hidden />
-      </div>
-      <p className={`text-[28px] font-black tabular-nums leading-none min-w-0 truncate ${valColor}`} title={typeof value === 'string' ? value : String(value)}>{value}</p>
-    </div>
-  );
-}
-
 // ── Low stock table (uses pre-aggregated lowStockItems from API) ────────────
 
 function LowStockTable({ items }: { items: DashboardLowStockItem[] }) {
   if (items.length === 0) {
     return (
-      <div className="flex items-center gap-3 py-6 px-4 text-emerald-600">
-        <CheckCircle className="w-6 h-6 flex-shrink-0" aria-hidden />
+      <div className="flex items-center gap-3 py-6 px-4 text-[var(--edk-green)]">
+        <CheckCircle className="w-6 h-6 flex-shrink-0" strokeWidth={2} aria-hidden />
         <span className="text-[14px] font-semibold">All products are sufficiently stocked</span>
       </div>
     );
   }
 
   return (
-    <div className="divide-y divide-slate-100">
+    <div className="divide-y divide-[var(--edk-border)]">
       {items.map((p) => {
         const isOut = p.quantity === 0;
         return (
           <div key={p.id} className="flex items-center justify-between py-3.5 px-4">
             <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-bold text-slate-900 truncate">{p.name}</p>
-              <p className="text-[11px] text-slate-400 font-medium mt-0.5">{p.category || 'Uncategorised'}</p>
+              <p className="text-[14px] font-bold text-[var(--edk-ink)] truncate">{p.name}</p>
+              <p className="text-[11px] text-[var(--edk-ink-3)] font-medium mt-0.5">{p.category || 'Uncategorised'}</p>
             </div>
             <div className="flex items-center gap-3 ml-4">
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-bold
-                ${isOut
-                  ? 'bg-red-50 text-red-500 border border-red-100'
-                  : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${isOut ? 'bg-red-400' : 'bg-amber-400'}`}/>
+              <Badge variant={isOut ? 'danger' : 'warning'} size="md">
                 {isOut ? 'Out of stock' : `${p.quantity} left`}
-              </div>
+              </Badge>
             </div>
           </div>
         );
@@ -132,13 +73,15 @@ function LowStockTable({ items }: { items: DashboardLowStockItem[] }) {
 // ── Main component ────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const { currentWarehouseId, currentWarehouse, warehouses } = useWarehouse();
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
   const { presenceList, isSubscribed } = usePresence();
   const warehouseId = currentWarehouseId ?? '';
   const warehouseName = currentWarehouse?.name ?? 'Warehouse';
   const isWarehouseValid = isValidWarehouseId(warehouseId);
   const canSeePresence = hasRole(['admin', 'super_admin']);
+  const roleLabel = user?.role === 'super_admin' ? 'Super Admin' : user?.role === 'admin' ? 'Admin' : null;
 
   const { dashboard, todayByWarehouse, isLoading: loading, error: queryError, refetch } = useDashboardQuery(warehouseId);
   const error = queryError?.message ?? null;
@@ -161,63 +104,69 @@ export default function DashboardPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] p-6">
+    <div className="min-h-screen bg-[var(--edk-bg)] p-4 sm:p-6">
       <div className="max-w-5xl mx-auto space-y-6">
 
         {/* ── Header ── */}
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-[24px] font-black text-slate-900 tracking-tight">
-                Admin Control Panel
+            <div className="flex items-center gap-3 mb-1 flex-wrap">
+              <h1
+                className="text-[24px] font-black tracking-tight text-[var(--edk-ink)]"
+                style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+              >
+                Dashboard
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full
-                               bg-slate-900 text-white text-[11px] font-bold uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>
-                Super Admin
-              </span>
+              {roleLabel != null && (
+                <Badge variant="gray" size="sm">
+                  {roleLabel}
+                </Badge>
+              )}
             </div>
-            <p className="text-[13px] text-slate-500">
-              Full system access — inventory, POS, reports, users &amp; settings.
+            <p className="text-[13px] text-[var(--edk-ink-2)]">
+              Inventory stats, stock alerts, and today&apos;s sales for this warehouse.
             </p>
           </div>
 
-          <a href="/pos"
-             className="flex items-center gap-2 h-10 px-5 rounded-xl bg-red-500 hover:bg-red-600
-                        text-white text-[14px] font-bold transition-colors
-                        shadow-[0_4px_12px_rgba(239,68,68,0.3)]">
-            <ShoppingCart className="w-5 h-5" aria-hidden />
+          <Button
+            variant="primary"
+            onClick={() => navigate('/pos')}
+            leftIcon={<ShoppingCart className="w-5 h-5" strokeWidth={2} />}
+            className="shadow-[0_4px_12px_var(--edk-red-soft)]"
+          >
             New sale
-          </a>
+          </Button>
         </div>
 
-        {/* ── Warehouse label — prove context is working; show loading when warehouse not resolved ── */}
+        {/* ── Warehouse label ── */}
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400"/>
-          <p className="text-[13px] font-semibold text-slate-600">
+          <span className="w-2 h-2 rounded-full bg-[var(--edk-green)]" aria-hidden />
+          <p className="text-[13px] font-semibold text-[var(--edk-ink-2)]">
             {!isWarehouseValid ? (
               <>Loading warehouse…</>
             ) : (
-              <>Inventory stats for: <span className="text-slate-900 font-black">{warehouseName}</span></>
+              <>Inventory stats for: <span className="text-[var(--edk-ink)] font-bold">{warehouseName}</span></>
             )}
           </p>
           {isWarehouseValid && loading && (
-            <span className="text-[12px] text-slate-400 animate-pulse">Loading…</span>
+            <span className="text-[12px] text-[var(--edk-ink-3)] animate-pulse">Loading…</span>
           )}
         </div>
 
         {/* ── Today's Sales by Location ── */}
         {warehouses.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h2 className="text-[15px] font-black text-slate-900">Today&apos;s Sales by Location</h2>
-              <p className="text-[12px] text-slate-400 mt-0.5">Sales total per warehouse for today</p>
+          <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--edk-border)]">
+              <h2 className="text-[15px] font-black text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                Today&apos;s Sales by Location
+              </h2>
+              <p className="text-[12px] text-[var(--edk-ink-3)] mt-0.5">Sales total per warehouse for today</p>
             </div>
             <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {warehouses.map((w) => (
-                <div key={w.id} className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-[13px] font-bold text-slate-800">{w.name}</span>
-                  <span className="text-[15px] font-black text-slate-900 tabular-nums">
+                <div key={w.id} className="flex items-center justify-between p-3.5 rounded-[var(--edk-radius-sm)] bg-[var(--edk-surface-2)] border border-[var(--edk-border-mid)]">
+                  <span className="text-[13px] font-bold text-[var(--edk-ink-2)]">{w.name}</span>
+                  <span className="text-[15px] font-black tabular-nums text-[var(--edk-ink)] font-mono" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                     {loading ? '—' : formatGHCCompact(todayByWarehouse[w.id] ?? 0)}
                   </span>
                 </div>
@@ -228,14 +177,14 @@ export default function DashboardPage() {
 
         {/* ── Active cashiers (admin only, Supabase Realtime Presence) ── */}
         {canSeePresence && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-              <Users className="w-5 h-5 text-slate-500" aria-hidden />
+          <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--edk-border)] flex items-center gap-2">
+              <Users className="w-5 h-5 text-[var(--edk-ink-3)]" strokeWidth={2} aria-hidden />
               <div>
-                <h2 className="text-[15px] font-black text-slate-900">
+                <h2 className="text-[15px] font-black text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
                   {presenceList.length === 0 ? 'No other users active' : `${presenceList.length} cashier${presenceList.length !== 1 ? 's' : ''} active`}
                 </h2>
-                <p className="text-[12px] text-slate-400 mt-0.5">
+                <p className="text-[12px] text-[var(--edk-ink-3)] mt-0.5">
                   {isSubscribed ? 'Live — updates when someone opens or leaves the app' : 'Connecting…'}
                 </p>
               </div>
@@ -243,15 +192,15 @@ export default function DashboardPage() {
             {presenceList.length > 0 && (
               <ul className="p-5 space-y-2">
                 {presenceList.map((entry) => (
-                  <li key={entry.key} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <li key={entry.key} className="flex items-center justify-between gap-3 p-3 rounded-[var(--edk-radius-sm)] bg-[var(--edk-surface-2)] border border-[var(--edk-border-mid)]">
                     <div className="min-w-0">
-                      <p className="text-[13px] font-bold text-slate-800 truncate">{entry.payload.displayName || entry.payload.email}</p>
-                      <p className="text-[12px] text-slate-500">
+                      <p className="text-[13px] font-bold text-[var(--edk-ink)] truncate">{entry.payload.displayName || entry.payload.email}</p>
+                      <p className="text-[12px] text-[var(--edk-ink-2)]">
                         {entry.payload.page} — {entry.payload.warehouseName}
-                        {entry.isIdle && <span className="ml-2 text-amber-600 font-medium">Idle</span>}
+                        {entry.isIdle && <span className="ml-2 text-[var(--edk-amber)] font-medium">Idle</span>}
                       </p>
                     </div>
-                    {!entry.isIdle && <span className="text-[11px] text-slate-400 whitespace-nowrap">{entry.lastActivityAgo}</span>}
+                    {!entry.isIdle && <span className="text-[11px] text-[var(--edk-ink-3)] whitespace-nowrap">{entry.lastActivityAgo}</span>}
                   </li>
                 ))}
               </ul>
@@ -259,74 +208,75 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Soft notice when API returned 200 with empty stats (no circuit; sales/POS still work) ── */}
+        {/* ── Soft notice when API returned 200 with empty stats ── */}
         {dashboard?.error && !loading && (
-          <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-100">
-            <AlertTriangle className="w-6 h-6 flex-shrink-0 text-amber-600" aria-hidden />
+          <div className="flex items-center gap-3 p-4 rounded-[var(--edk-radius)] bg-[var(--edk-amber-bg)] border border-[var(--edk-amber)]/20">
+            <AlertTriangle className="w-6 h-6 flex-shrink-0 text-[var(--edk-amber)]" strokeWidth={2} aria-hidden />
             <div>
-              <p className="text-[14px] font-bold text-amber-800">Stats temporarily unavailable</p>
-              <p className="text-[12px] text-amber-700 mt-0.5">{dashboard.error}</p>
-              <p className="text-[11px] text-slate-500 mt-1">Dashboard stats only — sales and inventory are unaffected.</p>
+              <p className="text-[14px] font-bold text-[var(--edk-ink)]">Stats temporarily unavailable</p>
+              <p className="text-[12px] text-[var(--edk-ink-2)] mt-0.5">{dashboard.error}</p>
+              <p className="text-[11px] text-[var(--edk-ink-3)] mt-1">Dashboard stats only — sales and inventory are unaffected.</p>
             </div>
-            <button onClick={() => refetch()} className="ml-auto px-4 py-2 rounded-xl bg-amber-500 text-white text-[12px] font-bold hover:bg-amber-600">
+            <Button variant="secondary" size="sm" onClick={() => refetch()} className="ml-auto">
               Retry
-            </button>
+            </Button>
           </div>
         )}
 
-        {/* ── Hard error (query failed after retries or dashboard circuit open) ── */}
+        {/* ── Hard error ── */}
         {error && !loading && !dashboard?.error && (
-          <div className="flex items-center gap-3 p-4 rounded-2xl bg-red-50 border border-red-100">
-            <AlertTriangle className="w-6 h-6 flex-shrink-0 text-red-500" aria-hidden />
+          <div className="flex items-center gap-3 p-4 rounded-[var(--edk-radius)] bg-[var(--edk-red-soft)] border border-[var(--edk-red-border)]">
+            <AlertTriangle className="w-6 h-6 flex-shrink-0 text-[var(--edk-red)]" strokeWidth={2} aria-hidden />
             <div>
-              <p className="text-[14px] font-bold text-red-700">Failed to load data</p>
-              <p className="text-[12px] text-red-500 mt-0.5">{error}</p>
-              <p className="text-[11px] text-slate-500 mt-1">Dashboard only — sales and POS still work. Click Retry to try again.</p>
+              <p className="text-[14px] font-bold text-[var(--edk-ink)]">Failed to load data</p>
+              <p className="text-[12px] text-[var(--edk-ink-2)] mt-0.5">{error}</p>
+              <p className="text-[11px] text-[var(--edk-ink-3)] mt-1">Dashboard only — sales and POS still work. Click Retry to try again.</p>
             </div>
-            <button onClick={() => refetch()} className="ml-auto px-4 py-2 rounded-xl bg-red-500 text-white text-[12px] font-bold hover:bg-red-600">
+            <Button variant="primary" size="sm" onClick={() => refetch()} className="ml-auto">
               Retry
-            </button>
+            </Button>
           </div>
         )}
 
-        {/* ── Stat cards (skeleton when loading or warehouse not yet resolved) ── */}
+        {/* ── Stat cards ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {(!isWarehouseValid || (loading && !dashboard)) ? (
-            Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
-          ) : (
-            <>
-              <StatCard
-                label="Total Stock Value"
-                value={stats ? formatGHCCompact(stats.totalStockValue) : '—'}
-                icon={DollarSign}
-                accent
-              />
-              <StatCard
-                label="Total Products"
-                value={stats?.totalProducts ?? '—'}
-                icon={Package}
-              />
-              <StatCard
-                label="Low Stock Items"
-                value={stats ? stats.lowStockCount + stats.outOfStockCount : '—'}
-                icon={AlertTriangle}
-                warning={stats ? stats.lowStockCount + stats.outOfStockCount > 0 : false}
-              />
-              <StatCard
-                label="Today's Sales"
-                value={stats ? formatGHCCompact(stats.todaysSales) : '—'}
-                icon={Receipt}
-              />
-            </>
-          )}
+          <StatCard
+            label="Total Stock Value"
+            value={stats ? formatGHCCompact(stats.totalStockValue) : '—'}
+            icon={DollarSign}
+            variant="default"
+            loading={!isWarehouseValid || (loading && !dashboard)}
+          />
+          <StatCard
+            label="Total Products"
+            value={stats?.totalProducts ?? '—'}
+            icon={Package}
+            loading={!isWarehouseValid || (loading && !dashboard)}
+          />
+          <StatCard
+            label="Low Stock Items"
+            value={stats ? stats.lowStockCount + stats.outOfStockCount : '—'}
+            icon={AlertTriangle}
+            variant={stats && stats.lowStockCount + stats.outOfStockCount > 0 ? 'amber' : 'default'}
+            loading={!isWarehouseValid || (loading && !dashboard)}
+          />
+          <StatCard
+            label="Today's Sales"
+            value={stats ? formatGHCCompact(stats.todaysSales) : '—'}
+            icon={Receipt}
+            variant="green"
+            loading={!isWarehouseValid || (loading && !dashboard)}
+          />
         </div>
 
-        {/* ── Low stock alerts (from API: GET /api/dashboard → lowStockItems, never hardcoded) ── */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        {/* ── Low stock alerts ── */}
+        <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--edk-border)] flex-wrap gap-2">
             <div>
-              <h2 className="text-[15px] font-black text-slate-900">Stock Alerts</h2>
-              <p className="text-[12px] text-slate-400 mt-0.5">
+              <h2 className="text-[15px] font-black text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                Stock Alerts
+              </h2>
+              <p className="text-[12px] text-[var(--edk-ink-3)] mt-0.5">
                 {warehouseName} — products at or below reorder level
               </p>
             </div>
@@ -335,39 +285,43 @@ export default function DashboardPage() {
               const outCount = items.filter((i) => i.quantity === 0).length;
               if (outCount === 0) return null;
               return (
-                <span className="px-3 py-1 rounded-full bg-red-50 text-red-500 text-[12px] font-bold border border-red-100">
+                <Badge variant="danger" size="md">
                   {outCount} out of stock
-                </span>
+                </Badge>
               );
             })()}
           </div>
           {loading ? (
             <div className="p-6 space-y-3">
-              {[1,2,3].map(i => (
-                <div key={i} className="h-10 bg-slate-100 rounded-xl animate-pulse"/>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-10 bg-[var(--edk-border-mid)] rounded-[var(--edk-radius-sm)] animate-pulse" />
               ))}
             </div>
           ) : (
-            <LowStockTable items={dashboard?.lowStockItems ?? []}/>
+            <LowStockTable items={dashboard?.lowStockItems ?? []} />
           )}
         </div>
 
         {/* ── Category breakdown ── */}
-        {!loading && dashboard && dashboard.categorySummary && typeof dashboard.categorySummary === 'object' && Object.keys(dashboard.categorySummary).length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h2 className="text-[15px] font-black text-slate-900">By Category</h2>
-              <p className="text-[12px] text-slate-400 mt-0.5">{warehouseName}</p>
+        {!loading && dashboard?.categorySummary && typeof dashboard.categorySummary === 'object' && Object.keys(dashboard.categorySummary).length > 0 && (
+          <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--edk-border)]">
+              <h2 className="text-[15px] font-black text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                By Category
+              </h2>
+              <p className="text-[12px] text-[var(--edk-ink-3)] mt-0.5">{warehouseName}</p>
             </div>
             <div className="p-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
               {Object.entries(dashboard.categorySummary)
                 .sort((a, b) => b[1].value - a[1].value)
                 .map(([cat, { count, value }]) => (
-                  <div key={cat}
-                       className="flex flex-col gap-1 p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-                    <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">{cat}</span>
-                    <span className="text-[18px] font-black text-slate-900">{count} SKUs</span>
-                    <span className="text-[11px] text-slate-400 font-medium">{formatGHC(value)}</span>
+                  <div
+                    key={cat}
+                    className="flex flex-col gap-1 p-3.5 rounded-[var(--edk-radius-sm)] bg-[var(--edk-surface-2)] border border-[var(--edk-border-mid)]"
+                  >
+                    <span className="text-[12px] font-bold text-[var(--edk-ink-3)] uppercase tracking-wider">{cat}</span>
+                    <span className="text-[18px] font-black text-[var(--edk-ink)] font-mono" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{count} SKUs</span>
+                    <span className="text-[11px] text-[var(--edk-ink-2)] font-medium font-mono" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{formatGHC(value)}</span>
                   </div>
                 ))}
             </div>
