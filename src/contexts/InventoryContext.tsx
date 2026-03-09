@@ -235,7 +235,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const productsQuery = useQuery({
     queryKey: queryKeys.products(warehouseId),
     queryFn: ({ signal }) => fetchProductsForWarehouse(warehouseId, { signal }),
-    enabled: isValidWarehouseId(warehouseId),
+    enabled: isValidWarehouseId(warehouseId) && !!page1Query.data, // wait for page1 first
     staleTime: PRODUCTS_QUERY_STALE_MS,
     gcTime: PRODUCTS_QUERY_GC_MS,
     retry: 2,
