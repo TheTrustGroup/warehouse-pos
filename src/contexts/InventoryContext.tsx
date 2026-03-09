@@ -88,39 +88,6 @@ export async function fetchProductsForWarehouse(
   return { list: allItems, total: totalFromApi };
 }
 
-/** Fetch first page only (limit 250, offset 0). Used for fast initial paint; full list loads in background. */
-export async function fetchProductsFirstPage(
-  wid: string,
-  opts?: { signal?: AbortSignal; timeoutMs?: number }
-): Promise<{ list: Product[]; total?: number }> {
-  const PAGE_LIMIT = 250;
-  const PRODUCTS_REQUEST_TIMEOUT_MS = 55_000;
-  const getOpts = { signal: opts?.signal, timeoutMs: opts?.timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 3 };
-  const apiBase = '/api/products';
-  const adminBase = '/admin/api/products';
-  const path = `${apiBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${PAGE_LIMIT}&offset=0`;
-  const adminPath = `${adminBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${PAGE_LIMIT}&offset=0`;
-  let raw: { data?: Product[]; total?: number } | Product[] | null = null;
-  try {
-    raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
-  } catch (e) {
-    const status = (e as { status?: number })?.status;
-    if (status === 404) {
-      raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, adminPath, getOpts);
-    } else {
-      throw e;
-    }
-  }
-  const parsed = parseProductsResponse(raw);
-  if (!parsed.success) throw new Error(parsed.message);
-  const page = parsed.items
-    .filter((p) => p != null && typeof p === 'object')
-    .map((p) => normalizeProductRow(p))
-    .filter((p): p is Product => p != null && typeof p === 'object');
-  const totalFromApi = raw != null && typeof raw === 'object' && 'total' in raw ? (raw as { total?: number }).total : undefined;
-  return { list: page, total: totalFromApi };
-}
-
 /** Seed/placeholder product ID that may exist in cache but not on production API; skip verify to avoid 404. */
 const SEED_PLACEHOLDER_PRODUCT_ID = '00000000-0000-0000-0000-000000000101';
 
@@ -222,28 +189,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const PRODUCTS_QUERY_STALE_MS = 60_000;
   const PRODUCTS_QUERY_GC_MS = 300_000;
-  /** First page only: resolves fast so Inventory can show products immediately. */
-  const page1Query = useQuery({
-    queryKey: [...queryKeys.products(warehouseId), 'page1'],
-    queryFn: ({ signal }) => fetchProductsFirstPage(warehouseId, { signal }),
+  const productsQuery = useQuery({
+    queryKey: queryKeys.products(warehouseId),
+    queryFn: ({ signal }) => fetchProductsForWarehouse(warehouseId, { signal }),
     enabled: isValidWarehouseId(warehouseId),
     staleTime: PRODUCTS_QUERY_STALE_MS,
     gcTime: PRODUCTS_QUERY_GC_MS,
     retry: 2,
   });
-  /** Full list: all pages, used for POS and when complete replaces page1 in UI. */
-  const productsQuery = useQuery({
-    queryKey: queryKeys.products(warehouseId),
-    queryFn: ({ signal }) => fetchProductsForWarehouse(warehouseId, { signal }),
-    enabled: isValidWarehouseId(warehouseId) && !!page1Query.data, // wait for page1 first
-    staleTime: PRODUCTS_QUERY_STALE_MS,
-    gcTime: PRODUCTS_QUERY_GC_MS,
-    retry: 2,
-  });
-  /** Show first page until full list is ready; then show full list (POS gets all products when complete). */
-  const queryList = productsQuery.data?.list ?? page1Query.data?.list ?? [];
-  const queryError = productsQuery.error ?? page1Query.error;
-  const queryTotal = productsQuery.data?.total ?? page1Query.data?.total;
+  const queryList = productsQuery.data?.list ?? [];
+  const queryError = productsQuery.error;
+  const queryTotal = productsQuery.data?.total;
 
   const products = useMemo((): Product[] => {
     const base = offlineEnabled ? (offline.products ?? []) : queryList;
@@ -299,8 +255,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     productsRef.current = products;
   }, [products]);
 
-  /** Loading until at least first page is in (so Inventory shows products within ~1s of API response). */
-  const isLoading = offlineEnabled ? offline.isLoading : (page1Query.isLoading && !page1Query.data);
+  const isLoading = offlineEnabled ? offline.isLoading : productsQuery.isLoading;
   const unsyncedCountFromHook = offline.unsyncedCount ?? 0;
 
   const [error, setError] = useState<string | null>(null);
@@ -1056,10 +1011,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setError(null);
       invalidateProducts();
       if (isValidWarehouseId(warehouseId)) {
-        await Promise.all([
-          queryClient.refetchQueries({ queryKey: queryKeys.products(warehouseId) }),
-          queryClient.refetchQueries({ queryKey: [...queryKeys.products(warehouseId), 'page1'] }),
-        ]);
+        await queryClient.refetchQueries({ queryKey: queryKeys.products(warehouseId) });
       }
     },
     [offlineEnabled, invalidateProducts, queryClient, warehouseId]
