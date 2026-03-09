@@ -2,6 +2,8 @@
 
 This doc summarizes **what causes** dashboard/products errors and **what tools and practices** help keep the server stable and the UI resilient.
 
+**See also:** [FRONTEND_BACKEND_COMMUNICATION.md](./FRONTEND_BACKEND_COMMUNICATION.md) for **"Fetch API cannot load … due to access control checks"** (CORS), same-origin setup, and principal-engineer recommendations for keeping front–back communication reliable.
+
 ---
 
 ## Quick troubleshooting (when the app has "server issues")

@@ -77,7 +77,7 @@ export class CircuitBreaker {
   }
 }
 
-let sharedCircuit: CircuitBreaker | null = null;
+const circuits = new Map<string, CircuitBreaker>();
 
 function logCircuitState(state: State): void {
   if (state === 'open' && typeof console !== 'undefined') {
@@ -87,13 +87,39 @@ function logCircuitState(state: State): void {
   }
 }
 
-export function getApiCircuitBreaker(): CircuitBreaker {
-  if (!sharedCircuit) {
-    sharedCircuit = new CircuitBreaker({
-      failureThreshold: 12,
-      cooldownMs: 60_000,
-      onStateChange: logCircuitState,
-    });
+function createCircuit(): CircuitBreaker {
+  return new CircuitBreaker({
+    failureThreshold: 12,
+    cooldownMs: 60_000,
+    onStateChange: logCircuitState,
+  });
+}
+
+/**
+ * Get circuit breaker for a given endpoint name. Each name has its own instance
+ * so e.g. products timeouts do not block stores/warehouses.
+ */
+export function getApiCircuitBreaker(name: string = 'default'): CircuitBreaker {
+  if (!circuits.has(name)) {
+    circuits.set(name, createCircuit());
   }
-  return sharedCircuit;
+  return circuits.get(name)!;
+}
+
+/** Reset one circuit by name (for tests). Next getApiCircuitBreaker(name) will create a fresh instance. */
+export function resetApiCircuitBreaker(name: string = 'default'): void {
+  circuits.delete(name);
+}
+
+/** Reset state of all circuits so the app Retry button allows requests again. */
+export function resetAllApiCircuitBreakers(): void {
+  circuits.forEach((c) => c.reset());
+}
+
+/** True if any circuit is open (for app-wide "Server unavailable" banner). */
+export function isAnyApiCircuitDegraded(): boolean {
+  for (const c of circuits.values()) {
+    if (c.isDegraded()) return true;
+  }
+  return false;
 }

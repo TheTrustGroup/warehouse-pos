@@ -59,6 +59,16 @@ function backoff(attempt: number): number {
   return ms + Math.floor(Math.random() * 500);
 }
 
+/** Per-endpoint circuit so e.g. products timeouts do not block stores/warehouses. */
+function getCircuitName(path: string): string {
+  if (path.startsWith('/api/products')) return 'products';
+  if (path.startsWith('/api/dashboard')) return 'dashboard';
+  if (path.startsWith('/api/stores')) return 'stores';
+  if (path.startsWith('/api/warehouses')) return 'warehouses';
+  if (path.startsWith('/api/sales')) return 'sales';
+  return 'default';
+}
+
 /**
  * Execute a fetch with retries, backoff, and circuit breaker.
  * On circuit open throws with message indicating degraded mode.
@@ -75,7 +85,7 @@ export async function apiRequest<T = unknown>(options: ApiRequestOptions): Promi
     ...init
   } = options;
 
-  const circuit = getApiCircuitBreaker();
+  const circuit = getApiCircuitBreaker(getCircuitName(path));
   if (!skipCircuit && !circuit.allowRequest()) {
     throw new Error(
       'Server is temporarily unavailable. Using last saved data. Please try again in a moment.'

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Download, FileText, Table } from 'lucide-react';
 import { useInventory } from '../contexts/InventoryContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,7 +6,6 @@ import { useWarehouse } from '../contexts/WarehouseContext';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { DateRangePicker } from '../components/reports/DateRangePicker';
 import { SalesMetrics } from '../components/reports/SalesMetrics';
-import { SalesChart } from '../components/reports/SalesChart';
 import { TopProductsTable } from '../components/reports/TopProductsTable';
 import { InventoryMetrics } from '../components/reports/InventoryMetrics';
 import { generateSalesReport, generateInventoryReport, exportToCSV, mapApiReportToSalesReport, SalesReport, InventoryReport } from '../services/reportService';
@@ -21,6 +20,11 @@ import { API_BASE_URL } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+
+/** Lazy-load SalesChart (and recharts) only when Reports page shows the chart. */
+const SalesChart = lazy(() =>
+  import('../components/reports/SalesChart').then((m) => ({ default: m.SalesChart }))
+);
 
 type ReportType = 'sales' | 'inventory';
 type TransactionsSource = 'server' | 'local';
@@ -373,7 +377,9 @@ export function Reports() {
                   </p>
                 </div>
               </div>
-              <SalesChart report={displayedSalesReport} />
+              <Suspense fallback={<div className="solid-card p-8 flex items-center justify-center min-h-[300px]"><LoadingSpinner size="lg" /></div>}>
+                <SalesChart report={displayedSalesReport} />
+              </Suspense>
               <TopProductsTable report={displayedSalesReport} />
               <div className="table-container rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
                 <h3 className="text-lg font-semibold text-[var(--edk-ink)] mb-6 px-6 pt-6">Category Performance</h3>

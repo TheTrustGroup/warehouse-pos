@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { corsHeaders } from '@/lib/cors';
 
 export const dynamic = 'force-dynamic';
+/** Explicit ceiling for cron warmup; health responds in < 1s. */
+export const maxDuration = 10;
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   Object.entries(corsHeaders(req)).forEach(([k, v]) => res.headers.set(k, v));

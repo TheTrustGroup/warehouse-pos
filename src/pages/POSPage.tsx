@@ -21,7 +21,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
-import { getApiCircuitBreaker } from '../lib/circuit';
+import { resetAllApiCircuitBreakers } from '../lib/circuit';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { getProductImageDisplayUrl } from '../lib/imageUpload';
 import { isValidWarehouseId } from '../lib/warehouseId';
@@ -869,7 +869,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
               <button
                 type="button"
                 onClick={() => {
-                  getApiCircuitBreaker().reset();
+                  resetAllApiCircuitBreakers();
                   setProductsLoadError(null);
                   if (isValidWarehouseId(warehouse.id)) loadProducts(warehouse.id);
                 }}

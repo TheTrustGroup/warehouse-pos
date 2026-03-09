@@ -21,7 +21,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Button } from '../components/ui/Button';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
-import { getApiCircuitBreaker } from '../lib/circuit';
+import { isAnyApiCircuitDegraded, resetAllApiCircuitBreakers } from '../lib/circuit';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { onUnauthorized } from '../lib/onUnauthorized';
 import { useWarehouse } from '../contexts/WarehouseContext';
@@ -556,7 +556,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
         showToast(`${payload.name} updated`, 'success');
       } catch (e: unknown) {
         const msg = getUserFriendlyMessage(e);
-        if (!(getApiCircuitBreaker().isDegraded() && /server|unavailable|writes disabled|connection is restored/i.test(msg)))
+        if (!(isAnyApiCircuitDegraded() && /server|unavailable|writes disabled|connection is restored/i.test(msg)))
           showToast(msg, 'error');
         throw e;
       }
@@ -582,7 +582,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
         showToast(`${payload.name} added`, 'success');
       } catch (e: unknown) {
         const msg = getUserFriendlyMessage(e);
-        if (!(getApiCircuitBreaker().isDegraded() && /server|unavailable|writes disabled|connection is restored/i.test(msg)))
+        if (!(isAnyApiCircuitDegraded() && /server|unavailable|writes disabled|connection is restored/i.test(msg)))
           showToast(msg, 'error');
         throw e;
       }
@@ -808,16 +808,16 @@ export default function InventoryPage(_props: InventoryPageProps) {
       <main>
 
         {/* Error — design system EmptyState + Button */}
-        {(error || getApiCircuitBreaker().isDegraded()) && (
+        {(error || isAnyApiCircuitDegraded()) && (
           <EmptyState
             icon={AlertTriangle}
             title="Couldn't load products"
-            description={error || (getApiCircuitBreaker().isDegraded() ? 'Server temporarily unavailable. Tap Retry to try again.' : undefined)}
+            description={error || (isAnyApiCircuitDegraded() ? 'Server temporarily unavailable. Tap Retry to try again.' : undefined)}
             action={
               <Button
                 variant="primary"
                 onClick={() => {
-                  getApiCircuitBreaker().reset();
+                  resetAllApiCircuitBreakers();
                   refreshProducts({ bypassCache: true, timeoutMs: 90_000 });
                 }}
                 aria-label="Retry loading products"
@@ -849,7 +849,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
             action={
               <Button
                 variant="primary"
-                onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true, timeoutMs: 90_000 }); }}
+                onClick={() => { resetAllApiCircuitBreakers(); refreshProducts({ bypassCache: true, timeoutMs: 90_000 }); }}
                 aria-label="Retry loading product list"
               >
                 Retry
