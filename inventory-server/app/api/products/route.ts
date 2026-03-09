@@ -138,9 +138,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           signal: controller.signal,
         });
         const payload = { data: result.data, total: result.total };
-        /** Upstash value size limit (e.g. 8MB by plan); skip cache when payload is too large to avoid silent set failure. */
+        /** Upstash paid plans support large values (8MB+); skip cache only when payload exceeds plan limit. */
         const payloadSize = JSON.stringify(payload).length;
-        const MAX_CACHE_PAYLOAD_BYTES = 1_000_000;
+        const MAX_CACHE_PAYLOAD_BYTES = 8_000_000;
         if (payloadSize <= MAX_CACHE_PAYLOAD_BYTES) {
           await setCachedProducts(cacheParams, payload);
         }
