@@ -132,7 +132,7 @@ function LayoutContent() {
       {isMobile && (
         <MoreMenuSheet open={moreMenuOpen} onClose={() => setMoreMenuOpen(false)} />
       )}
-      <Header />
+      {!isPOS && <Header />}
       {isMobile && (
         <MobileBottomNav onMoreClick={() => setMoreMenuOpen(true)} />
       )}
