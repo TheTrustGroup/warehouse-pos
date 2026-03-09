@@ -139,10 +139,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         });
         const payload = { data: result.data, total: result.total };
         const payloadSize = JSON.stringify(payload).length;
-        /** Paid Upstash allows large values (e.g. 100MB+); cache full payload including images. */
-        const MAX_CACHE_PAYLOAD_BYTES = 100_000_000;
+        /** Upstash default max request size is 10MB. Only cache when under this limit to avoid "max request size exceeded". See https://upstash.com/docs/redis/troubleshooting/max_request_size_exceeded */
+        const MAX_CACHE_PAYLOAD_BYTES = 10_485_760;
+        let setOk = false;
         if (payloadSize <= MAX_CACHE_PAYLOAD_BYTES) {
-          await setCachedProducts(cacheParams, payload);
+          setOk = await setCachedProducts(cacheParams, payload);
         }
         const res = NextResponse.json(payload, { headers: h });
         res.headers.set('Cache-Control', 'private, no-store, max-age=0');
@@ -154,7 +155,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           ? 'unavailable'
           : payloadSize > MAX_CACHE_PAYLOAD_BYTES
             ? 'MISS (payload too large)'
-            : 'MISS';
+            : !setOk
+              ? 'MISS (set failed)'
+              : 'MISS';
         res.headers.set('X-Redis', redisStatus);
         return logAndReturn(withCors(res, req));
       } catch (e) {

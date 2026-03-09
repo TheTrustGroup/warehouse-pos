@@ -71,19 +71,21 @@ export async function getCachedProducts(
 }
 
 /**
- * Set products list in cache with TTL. No-op on error (fail-safe).
+ * Set products list in cache with TTL. Returns true if written, false if skipped or failed (fail-safe).
  */
 export async function setCachedProducts(
   params: ProductsCacheParams,
   value: unknown,
   ttlSeconds: number = TTL_SECONDS
-): Promise<void> {
+): Promise<boolean> {
   const redis = getRedis();
-  if (!redis) return;
+  if (!redis) return false;
   try {
     await redis.set(cacheKey(params), value, { ex: ttlSeconds });
+    return true;
   } catch (e) {
     console.warn('[productsCache] set failed:', e instanceof Error ? e.message : e);
+    return false;
   }
 }
 
