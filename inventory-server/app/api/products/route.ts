@@ -18,6 +18,7 @@ import {
 } from '@/lib/data/warehouseProducts';
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
 import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
+import { getCachedProducts, setCachedProducts, notifyProductsUpdated } from '@/lib/cache/productsCache';
 
 export const dynamic = 'force-dynamic';
 /** Higher than DB statement_timeout (10s) so we return a clean 504/503 instead of Vercel 504. Requires Vercel Pro for >10s. */
@@ -112,6 +113,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const lowStock = searchParams.get('low_stock') === 'true' || searchParams.get('low_stock') === '1';
       const outOfStock = searchParams.get('out_of_stock') === 'true' || searchParams.get('out_of_stock') === '1';
 
+      const cacheParams = { warehouseId, limit, offset, q, category, lowStock: lowStock || undefined, outOfStock: outOfStock || undefined };
+      const cached = await getCachedProducts(cacheParams);
+      if (cached != null && typeof cached === 'object' && 'data' in cached) {
+        const res = NextResponse.json(cached, { headers: h });
+        res.headers.set('Cache-Control', 'private, no-store, max-age=0');
+        res.headers.set('X-Content-Type-Options', 'nosniff');
+        res.headers.set('X-Data-Warehouse-Id', warehouseId);
+        res.headers.set('X-Cache', 'HIT');
+        return logAndReturn(withCors(res, req));
+      }
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), PRODUCTS_QUERY_TIMEOUT_MS);
       try {
@@ -124,10 +136,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           outOfStock: outOfStock || undefined,
           signal: controller.signal,
         });
-        const res = NextResponse.json({ data: result.data, total: result.total }, { headers: h });
+        const payload = { data: result.data, total: result.total };
+        await setCachedProducts(cacheParams, payload);
+        const res = NextResponse.json(payload, { headers: h });
         res.headers.set('Cache-Control', 'private, no-store, max-age=0');
         res.headers.set('X-Content-Type-Options', 'nosniff');
         res.headers.set('X-Data-Warehouse-Id', warehouseId);
+        res.headers.set('X-Cache', 'MISS');
         return logAndReturn(withCors(res, req));
       } catch (e) {
         const isAbortOrTimeout =
@@ -214,6 +229,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const created = await createWarehouseProduct({ ...body, warehouseId: effectiveWarehouseId });
     await notifyInventoryUpdated(effectiveWarehouseId);
+    await notifyProductsUpdated(effectiveWarehouseId);
     return withCors(NextResponse.json(created, { status: 201, headers: h }), req);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Failed to create product';
@@ -268,6 +284,7 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
       return withCors(NextResponse.json({ error: 'Product not found' }, { status: 404, headers: h }), req);
     }
     await notifyInventoryUpdated(effectiveWarehouseId);
+    await notifyProductsUpdated(effectiveWarehouseId);
     return withCors(NextResponse.json(updated, { headers: h }), req);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Failed to update product';
@@ -306,6 +323,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   try {
     await deleteWarehouseProduct(productId, warehouseId);
     await notifyInventoryUpdated(warehouseId);
+    await notifyProductsUpdated(warehouseId);
     return withCors(NextResponse.json({ ok: true }, { headers: h }), req);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Failed to delete product';
