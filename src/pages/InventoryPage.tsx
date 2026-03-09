@@ -555,7 +555,9 @@ export default function InventoryPage(_props: InventoryPageProps) {
         lastSaveTimeRef.current = Date.now();
         showToast(`${payload.name} updated`, 'success');
       } catch (e: unknown) {
-        showToast(getUserFriendlyMessage(e), 'error');
+        const msg = getUserFriendlyMessage(e);
+        if (!(getApiCircuitBreaker().isDegraded() && /server|unavailable|writes disabled|connection is restored/i.test(msg)))
+          showToast(msg, 'error');
         throw e;
       }
     } else {
@@ -579,7 +581,9 @@ export default function InventoryPage(_props: InventoryPageProps) {
         lastSaveTimeRef.current = Date.now();
         showToast(`${payload.name} added`, 'success');
       } catch (e: unknown) {
-        showToast(getUserFriendlyMessage(e), 'error');
+        const msg = getUserFriendlyMessage(e);
+        if (!(getApiCircuitBreaker().isDegraded() && /server|unavailable|writes disabled|connection is restored/i.test(msg)))
+          showToast(msg, 'error');
         throw e;
       }
     }
