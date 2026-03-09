@@ -15,9 +15,9 @@ This doc summarizes **what causes** dashboard/products errors and **what tools a
    - In Vercel → Project → Settings → Environment Variables, set **`SUPABASE_URL`** and **`SUPABASE_SERVICE_ROLE_KEY`** for the environment you use. Missing or wrong values → 500 and "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY".
    - In Vercel → Logs (or Functions), filter by "Error" to see the real server error. Redeploy after fixing env.
 
-3. **If the UI shows "Failed to load data" or orange banner**
-   - Use the **Retry** (Dashboard) or **Try again** button to reset the circuit breaker and retry after the server is fixed.
-   - Check network tab: 500 = server error (often env/DB); 503 = timeout or overload; CORS/blocked = wrong `VITE_API_BASE_URL` or backend not running.
+3. **If the UI shows "Failed to load data", "Couldn't load products", or orange banner**
+   - Use the **Retry** button (Inventory/Dashboard) or **Try again** (banner) to reset the circuit breaker and refetch. The app will clear the error and show loading, then either load data or show the error again.
+   - If it keeps failing: open DevTools → Network, find the failing request (e.g. `GET /api/products?warehouse_id=...`). Note the status: **401** = session expired (log out and log in again); **500/503** = server or DB issue (check Vercel logs and env); **CORS/blocked** = wrong `VITE_API_BASE_URL` or backend not running.
 
 ---
 

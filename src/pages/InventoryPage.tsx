@@ -812,7 +812,10 @@ export default function InventoryPage(_props: InventoryPageProps) {
             action={
               <Button
                 variant="primary"
-                onClick={() => { getApiCircuitBreaker().reset(); refreshProducts({ bypassCache: true, timeoutMs: 90_000 }); }}
+                onClick={() => {
+                  getApiCircuitBreaker().reset();
+                  refreshProducts({ bypassCache: true, timeoutMs: 90_000 });
+                }}
                 aria-label="Retry loading products"
               >
                 Retry

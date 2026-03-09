@@ -1001,6 +1001,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const refreshProducts = useCallback(
     async (_options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => {
       if (offlineEnabled) return offlineRef.current.forceSync();
+      setError(null);
       invalidateProducts();
       if (isValidWarehouseId(warehouseId)) {
         await queryClient.refetchQueries({ queryKey: queryKeys.products(warehouseId) });
