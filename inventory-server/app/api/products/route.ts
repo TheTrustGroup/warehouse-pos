@@ -138,13 +138,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           signal: controller.signal,
         });
         const payload = { data: result.data, total: result.total };
-        await setCachedProducts(cacheParams, payload);
+        /** Upstash value size limit ~256KB; skip cache when payload is too large to avoid silent set failure. */
+        const payloadSize = JSON.stringify(payload).length;
+        const MAX_CACHE_PAYLOAD_BYTES = 200_000;
+        if (payloadSize <= MAX_CACHE_PAYLOAD_BYTES) {
+          await setCachedProducts(cacheParams, payload);
+        }
         const res = NextResponse.json(payload, { headers: h });
         res.headers.set('Cache-Control', 'private, no-store, max-age=0');
         res.headers.set('X-Content-Type-Options', 'nosniff');
         res.headers.set('X-Data-Warehouse-Id', warehouseId);
         res.headers.set('X-Cache', 'MISS');
-        res.headers.set('X-Redis', isProductsCacheAvailable() ? 'MISS' : 'unavailable');
+        const redisStatus = !isProductsCacheAvailable()
+          ? 'unavailable'
+          : payloadSize > MAX_CACHE_PAYLOAD_BYTES
+            ? 'MISS (payload too large)'
+            : 'MISS';
+        res.headers.set('X-Redis', redisStatus);
         return logAndReturn(withCors(res, req));
       } catch (e) {
         const isAbortOrTimeout =
