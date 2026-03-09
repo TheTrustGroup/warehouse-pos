@@ -10,7 +10,7 @@
 -- (by_size exists but inv.quantity is out of sync). See docs/DATA_INTEGRITY_PRODUCT_DRIFT.md.
 
 -- Backfill: one warehouse_inventory_by_size row per (warehouse_id, product_id) that has inv.quantity > 0 and zero by_size rows.
--- Size code: 'NA' for size_kind = 'na' (enforce_size_policy allows only NA for na products), 'OS' otherwise.
+-- Size code: 'NA' for size_kind = 'na', 'OS' for one_size. Skip size_kind = 'sized' so XS/S/M etc are not overwritten by OS.
 INSERT INTO warehouse_inventory_by_size (warehouse_id, product_id, size_code, quantity, updated_at)
 SELECT
   wi.warehouse_id,
@@ -21,6 +21,7 @@ SELECT
 FROM warehouse_inventory wi
 JOIN warehouse_products wp ON wp.id = wi.product_id
 WHERE wi.quantity > 0
+  AND COALESCE(wp.size_kind, 'na') <> 'sized'
   AND NOT EXISTS (
     SELECT 1
     FROM warehouse_inventory_by_size bs

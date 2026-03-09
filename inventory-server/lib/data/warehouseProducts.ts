@@ -70,7 +70,12 @@ function getDb(): SupabaseClient {
 }
 
 /** Turn DB constraint errors into clear 400-style messages for the client. */
-function normalizeDbConstraintError(dbMessage: string, action: 'create' | 'update'): string {
+function normalizeDbConstraintError(dbMessage: string, action: 'create' | 'update', code?: string): string {
+  if (code === '23505' || /unique constraint|duplicate key value|already exists/i.test(dbMessage)) {
+    if (/sku|idx_warehouse_products_sku_unique/i.test(dbMessage)) {
+      return 'A product with this SKU already exists. Use a unique SKU or edit the existing product.';
+    }
+  }
   const notNullMatch = dbMessage.match(/null value in column "([^"]+)" of relation "[^"]+" violates not-null constraint/i);
   if (notNullMatch) {
     const col = notNullMatch[1];
@@ -353,7 +358,8 @@ export async function createWarehouseProduct(body: Record<string, unknown>): Pro
 
   const { error: insertProductError } = await db.from('warehouse_products').insert(productRow);
   if (insertProductError) {
-    throw new Error(normalizeDbConstraintError(insertProductError.message, 'create'));
+    const code = (insertProductError as { code?: string }).code;
+    throw new Error(normalizeDbConstraintError(insertProductError.message, 'create', code));
   }
 
   const isSized = sizeKind === 'sized' && quantityBySize.length > 0;

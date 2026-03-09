@@ -69,6 +69,7 @@ A script runs `git status --porcelain` and **exits 1** if there are uncommitted 
 - **Seeds** are in migrations (e.g. `seed_size_codes_*`) or `inventory-server/supabase/scripts/`.
 - **Rule:** Adding a DB change = add migration + commit it in the same commit/PR as the code that depends on it. Never leave migrations uncommitted.
 - **Data integrity (product/quantity drift):** Keep `warehouse_inventory.quantity` and `warehouse_inventory_by_size` in sync so the UI and reports show correct totals. See **docs/DATA_INTEGRITY_PRODUCT_DRIFT.md** for fix scripts and prevention (triggers). After manual inventory loads, run the documented scripts and verify.
+- **Preventing product/size/duplicate issues:** See **docs/PREVENT_PRODUCT_ISSUES.md** for a short checklist (edit URL, size drift, SKU uniqueness) so past issues don’t recur.
 
 ---
 

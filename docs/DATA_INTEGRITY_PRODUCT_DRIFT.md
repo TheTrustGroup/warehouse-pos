@@ -30,8 +30,8 @@ Run in **Supabase SQL Editor** in this order:
 
 2. **Inv has qty but no by_size rows**  
    Run: `inventory-server/supabase/scripts/FIX_DRIFT_BACKFILL_BY_SIZE_FROM_INV.sql`  
-   - Backfills one `warehouse_inventory_by_size` row per (warehouse, product) with size_code `'OS'` and quantity from inv.  
-   - Prerequisite: size code `'OS'` exists in `size_codes` (seed in migration).
+   - Backfills one `warehouse_inventory_by_size` row per (warehouse, product) with size_code `'NA'` or `'OS'`. **Skips `size_kind = 'sized'`** so XS/S/M are not overwritten.  
+   - Prerequisite: size codes `'NA'` and `'OS'` exist in `size_codes` (seed in migration).
 
 3. **By_size correct but inv stale or missing**  
    Run: `inventory-server/supabase/scripts/SYNC_INV_FROM_BY_SIZE.sql`  
@@ -47,15 +47,18 @@ Run in **Supabase SQL Editor** in this order:
 | Mechanism | Purpose |
 |-----------|--------|
 | **Trigger `sync_warehouse_inventory_from_by_size`** (migration `20260305240000_sync_warehouse_inventory_from_by_size_trigger.sql`) | On INSERT/UPDATE/DELETE on `warehouse_inventory_by_size`, recompute and set `warehouse_inventory.quantity` = sum(by_size) for that (warehouse_id, product_id). Keeps inv in sync whenever by_size changes. |
-| **Trigger `backfill_by_size_from_inv`** (migration `20260308100000_backfill_by_size_when_inv_only.sql`) | On INSERT or UPDATE of `warehouse_inventory.quantity`, if quantity > 0 and there are no `warehouse_inventory_by_size` rows for that (warehouse_id, product_id), insert one row with size_code `'OS'` and that quantity. Ensures “inv-only” state doesn’t persist so UI and views that use by_size see the quantity. |
-| **App discipline** | Create/update product flows in `inventory-server` write both `warehouse_inventory` and `warehouse_inventory_by_size` (sized products). RPCs `record_sale`, `complete_delivery`, `void_sale` update both. |
+| **Trigger `backfill_by_size_from_inv_when_empty`** (migration `20260308100000_backfill_by_size_when_inv_only.sql`) | On INSERT or UPDATE of `warehouse_inventory.quantity`, if quantity > 0 and there are no `warehouse_inventory_by_size` rows, insert one row (NA or OS). **Skips `size_kind = 'sized'`** so XS/S/M etc are never overwritten by OS. |
+| **Unique index `idx_warehouse_products_sku_unique`** (migration `20260309100000_sku_unique_and_size_codes.sql`) | One non-empty SKU per product. Prevents duplicate products; API returns "A product with this SKU already exists" on conflict. **Do not drop this index** unless you are fixing duplicates and will recreate it. |
+| **Product edit URL** | Frontend uses `PUT /api/products/:id` (id in path) so the update route is hit. Keeps "server unavailable" on edit from happening. |
+| **App discipline** | Create/update flows write both `warehouse_inventory` and `warehouse_inventory_by_size` (sized products). RPCs `record_sale`, `complete_delivery`, `void_sale` update both. |
 
 ---
 
 ## 5. Checklist for data integrity
 
-- [ ] Migrations applied: `20260305240000_sync_warehouse_inventory_from_by_size_trigger.sql`, `20260308100000_backfill_by_size_when_inv_only.sql`.
-- [ ] After any one-off or manual inventory load: run `FIX_DRIFT_BACKFILL_BY_SIZE_FROM_INV.sql` and/or `SYNC_INV_FROM_BY_SIZE.sql` as needed, then re-run VERIFY.
+- [ ] Migrations applied: `20260305240000_sync_warehouse_inventory_from_by_size_trigger.sql`, `20260308100000_backfill_by_size_when_inv_only.sql`, `20260309100000_sku_unique_and_size_codes.sql`.
+- [ ] After any one-off or manual inventory load: run `FIX_DRIFT_BACKFILL_BY_SIZE_FROM_INV.sql` and/or `SYNC_INV_FROM_BY_SIZE.sql` only if you see missing quantities; then re-run VERIFY.
+- [ ] Do not drop `idx_warehouse_products_sku_unique` unless resolving duplicates and recreating it (see `scripts/RECREATE_sku_unique_index.sql`).
 - [ ] Dashboard/reports: ensure they use the same quantity rule as the API (by_size sum when present, else inv.quantity); if a view uses only by_size, the triggers above keep both sources in sync so totals match.
 - [ ] If products “don’t show” for a warehouse: confirm warehouse scope and list request use the same warehouse (see `POS_WAREHOUSE_SCOPE_DIAGNOSTIC.md`, `TRACE_PRODUCT_SIZES_VANISH.md`).
 

@@ -11,14 +11,18 @@ SET search_path = public
 AS $$
 DECLARE
   v_size_code text;
+  v_size_kind text;
 BEGIN
+  -- Never backfill for sized products: they must have XS/S/M etc from the app; inserting OS would overwrite or conflict.
+  SELECT COALESCE(size_kind, 'na') INTO v_size_kind FROM warehouse_products WHERE id = NEW.product_id;
+  IF v_size_kind = 'sized' THEN
+    RETURN NEW;
+  END IF;
   IF NEW.quantity > 0 AND NOT EXISTS (
     SELECT 1 FROM warehouse_inventory_by_size
     WHERE warehouse_id = NEW.warehouse_id AND product_id = NEW.product_id
   ) THEN
-    SELECT CASE WHEN COALESCE(size_kind, 'na') = 'na' THEN 'NA' ELSE 'OS' END INTO v_size_code
-    FROM warehouse_products WHERE id = NEW.product_id;
-    v_size_code := COALESCE(v_size_code, 'OS');
+    v_size_code := CASE WHEN v_size_kind = 'na' THEN 'NA' ELSE 'OS' END;
     INSERT INTO warehouse_inventory_by_size (warehouse_id, product_id, size_code, quantity, updated_at)
     VALUES (NEW.warehouse_id, NEW.product_id, v_size_code, NEW.quantity, now())
     ON CONFLICT (warehouse_id, product_id, size_code)
@@ -28,7 +32,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION backfill_by_size_from_inv_when_empty() IS 'Trigger: when warehouse_inventory has qty but no by_size rows, insert one row (size_code NA for na products, OS otherwise) so both sources match and UI shows quantity.';
+COMMENT ON FUNCTION backfill_by_size_from_inv_when_empty() IS 'Trigger: when warehouse_inventory has qty but no by_size rows, insert one row (NA for na, OS for one_size). Skipped for size_kind=sized so XS/S/M etc are not overwritten by OS.';
 
 REVOKE ALL ON FUNCTION public.backfill_by_size_from_inv_when_empty() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.backfill_by_size_from_inv_when_empty() TO service_role;

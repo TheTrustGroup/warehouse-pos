@@ -454,8 +454,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return `${base}?${params.toString()}`;
   };
 
-  /** Path for PUT/PATCH product (no id in path; send id in body). */
-  const productUpdatePath = (base: string) => base;
+  /** Path for PUT/PATCH product. Main API uses /api/products/:id; admin uses base with id in body. */
+  const productUpdatePath = (base: string, productId: string) =>
+    base.includes('/admin/') ? base : `${base}/${productId}`;
 
   /** Minimal payload for API POST/PUT: only fields backend persists. Reduces payload size and avoids sending UI-only data. */
   /** When omitImagesForSync is true, images are sent as [] to avoid 413 (payload too large) from base64 images exceeding Vercel's body limit. */
@@ -741,9 +742,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       const putProduct = async (): Promise<Record<string, unknown> | null> => {
         try {
-          return (await apiPut<Record<string, unknown>>(API_BASE_URL, productUpdatePath('/admin/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+          return (await apiPut<Record<string, unknown>>(API_BASE_URL, productUpdatePath('/admin/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
         } catch {
-          return (await apiPut<Record<string, unknown>>(API_BASE_URL, productUpdatePath('/api/products'), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
+          return (await apiPut<Record<string, unknown>>(API_BASE_URL, productUpdatePath('/api/products', id), payload, { timeoutMs: SAVE_TIMEOUT_MS })) ?? null;
         }
       };
       let fromApi: Record<string, unknown> | null = null;
