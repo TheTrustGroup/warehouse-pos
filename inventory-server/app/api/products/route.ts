@@ -18,7 +18,7 @@ import {
 } from '@/lib/data/warehouseProducts';
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
 import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
-import { getCachedProducts, setCachedProducts, notifyProductsUpdated } from '@/lib/cache/productsCache';
+import { getCachedProducts, setCachedProducts, notifyProductsUpdated, isProductsCacheAvailable } from '@/lib/cache/productsCache';
 
 export const dynamic = 'force-dynamic';
 /** Higher than DB statement_timeout (10s) so we return a clean 504/503 instead of Vercel 504. Requires Vercel Pro for >10s. */
@@ -121,6 +121,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         res.headers.set('X-Content-Type-Options', 'nosniff');
         res.headers.set('X-Data-Warehouse-Id', warehouseId);
         res.headers.set('X-Cache', 'HIT');
+        res.headers.set('X-Redis', 'HIT');
         return logAndReturn(withCors(res, req));
       }
 
@@ -143,6 +144,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         res.headers.set('X-Content-Type-Options', 'nosniff');
         res.headers.set('X-Data-Warehouse-Id', warehouseId);
         res.headers.set('X-Cache', 'MISS');
+        res.headers.set('X-Redis', isProductsCacheAvailable() ? 'MISS' : 'unavailable');
         return logAndReturn(withCors(res, req));
       } catch (e) {
         const isAbortOrTimeout =

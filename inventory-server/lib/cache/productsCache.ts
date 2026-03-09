@@ -32,6 +32,11 @@ export interface ProductsCacheParams {
   outOfStock?: boolean;
 }
 
+/** True if Redis is configured and available (for diagnostics). */
+export function isProductsCacheAvailable(): boolean {
+  return getRedis() !== null;
+}
+
 export function cacheKey(params: ProductsCacheParams): string {
   const { warehouseId, limit, offset, q, category, lowStock, outOfStock } = params;
   // Only include non-default / non-empty parts to keep keys readable
