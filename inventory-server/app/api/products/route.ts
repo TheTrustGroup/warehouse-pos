@@ -138,9 +138,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           signal: controller.signal,
         });
         const payload = { data: result.data, total: result.total };
-        /** Upstash paid plans support large values (8MB+); skip cache only when payload exceeds plan limit. */
         const payloadSize = JSON.stringify(payload).length;
-        const MAX_CACHE_PAYLOAD_BYTES = 8_000_000;
+        /** Paid Upstash allows large values (e.g. 100MB+); cache full payload including images. */
+        const MAX_CACHE_PAYLOAD_BYTES = 100_000_000;
         if (payloadSize <= MAX_CACHE_PAYLOAD_BYTES) {
           await setCachedProducts(cacheParams, payload);
         }
@@ -149,6 +149,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         res.headers.set('X-Content-Type-Options', 'nosniff');
         res.headers.set('X-Data-Warehouse-Id', warehouseId);
         res.headers.set('X-Cache', 'MISS');
+        res.headers.set('X-Payload-Bytes', String(payloadSize));
         const redisStatus = !isProductsCacheAvailable()
           ? 'unavailable'
           : payloadSize > MAX_CACHE_PAYLOAD_BYTES
