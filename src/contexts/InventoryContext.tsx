@@ -573,6 +573,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    */
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { warehouseId?: string }): Promise<string> => {
     if (!productData?.name?.trim?.()) throw new Error('Product name is required');
+    const newSku = String(productData.sku ?? '').trim();
+    if (newSku) {
+      const exists = products.some((p) => String(p.sku ?? '').trim().toLowerCase() === newSku.toLowerCase());
+      if (exists) throw new Error('A product with this SKU already exists. Use a unique SKU or edit the existing product.');
+    }
     const SAVE_TIMEOUT_MS = 10_000;
     if (import.meta.env?.DEV) {
       console.time('Total Save Time');
@@ -800,14 +805,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
       queryClient.refetchQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
       showToast('success', 'Product updated.');
-      const postSaveDelayMs = isSized ? 2000 : 500;
-      await new Promise((r) => setTimeout(r, postSaveDelayMs));
-      invalidateProducts();
-      await queryClient.refetchQueries({ queryKey: queryKeys.products(warehouseId) });
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update (update)');
         console.timeEnd('Total Update Time');
       }
+      // Refetch in background so the modal can close immediately; don't await.
+      const postSaveDelayMs = isSized ? 2000 : 500;
+      setTimeout(() => {
+        invalidateProducts();
+        queryClient.refetchQueries({ queryKey: queryKeys.products(warehouseId) });
+      }, postSaveDelayMs);
     } catch (err) {
       const status = (err as { status?: number })?.status;
       const msg =
