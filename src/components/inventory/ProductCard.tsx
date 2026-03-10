@@ -327,11 +327,11 @@ export default function ProductCard({
         ${!editing ? 'hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:-translate-y-0.5' : ''}
       `}
     >
-      {/* Image: 4:3 aspect, hover scale — thumb size for list/grid (CDN-ready). Fallback to placeholder on load error. */}
+      {/* Image: 4:3 aspect, hover scale — medium size for list/grid to avoid upscaling blur. Fallback to placeholder on load error. */}
       <div className="relative w-full aspect-[4/3] bg-[var(--edk-bg)] overflow-hidden">
         {showImage ? (
           <img
-            src={getProductImageUrl(product.images![0], 'thumb')}
+            src={getProductImageUrl(product.images![0], 'medium')}
             alt={product.name}
             width={320}
             height={240}

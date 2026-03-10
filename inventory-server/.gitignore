@@ -2,6 +2,7 @@ node_modules
 .next
 .env.local
 .env*.local
+.env.migration
 tsconfig.tsbuildinfo
 # Vite build output (copied by build:vercel); generated on deploy
 /public/

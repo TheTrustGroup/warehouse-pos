@@ -5,6 +5,7 @@ import { ProductSizesFromProduct } from './ProductSizes';
 import { Button } from '../ui/Button';
 import { ProductSyncBadge } from '../ProductSyncBadge';
 import { Pencil, Trash2, Eye, Package, RefreshCw } from 'lucide-react';
+import { getProductImageUrl } from '../../lib/productImageUrl';
 
 interface ProductTableViewProps {
   products: Product[];
@@ -154,7 +155,7 @@ export function ProductTableView({
                   <td className="px-4 py-3 align-middle">
                     {Array.isArray(product.images) && product.images[0] ? (
                       <img 
-                        src={product.images[0]} 
+                        src={getProductImageUrl(product.images[0], 'thumb')} 
                         alt={product.name}
                         loading="lazy"
                         className="w-14 h-14 rounded-lg object-cover shadow-sm border-2 border-white/80"

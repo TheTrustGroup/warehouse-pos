@@ -10,6 +10,7 @@ import { Button } from '../ui/Button';
 import { useAnimations } from '../../hooks/useAnimations';
 import { glassReveal, glassHover, liquidMorph, rippleVariants } from '../../animations/liquidGlass';
 import { hapticFeedback } from '../../lib/haptics';
+import { getProductImageUrl } from '../../lib/productImageUrl';
 
 export type SaveStockPayload = { quantityBySize?: Array<{ sizeCode: string; quantity: number }>; quantity?: number };
 
@@ -219,7 +220,7 @@ export function ProductGridView({
             <div className="w-full aspect-square max-h-52 bg-slate-100 rounded-t-lg overflow-hidden shrink-0">
               {Array.isArray(product.images) && product.images[0] ? (
                 <img
-                  src={product.images[0]}
+                  src={getProductImageUrl(product.images[0], 'medium')}
                   alt={product.name}
                   loading="lazy"
                   className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"

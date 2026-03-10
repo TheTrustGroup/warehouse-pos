@@ -11,7 +11,8 @@
     "deploy:trigger": "trigger deploy",
     "lint": "next lint",
     "lint:auth": "node scripts/check-auth-await.mjs",
-    "test:health": "node scripts/health-check.mjs"
+    "test:health": "node scripts/health-check.mjs",
+    "migrate:base64-images": "node --env-file=.env.migration ./node_modules/.bin/tsx scripts/migrate-base64-images.ts"
   },
   "dependencies": {
     "@trigger.dev/sdk": "^4.0.0",
@@ -31,6 +32,7 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

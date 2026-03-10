@@ -9,6 +9,7 @@ import { Product } from '../../types';
 import { formatCurrency, getLocationDisplay } from '../../lib/utils';
 import { Button } from '../ui/Button';
 import { Package, Pencil, Layers, MapPin } from 'lucide-react';
+import { getProductImageUrl } from '../../lib/productImageUrl';
 
 export interface InventoryCardProps {
   product: Product;
@@ -207,7 +208,7 @@ export function InventoryCard({
       <div className="relative w-full pt-[56.25%] bg-slate-100 overflow-hidden">
         {Array.isArray(product.images) && product.images[0] ? (
           <img
-            src={product.images[0]}
+            src={getProductImageUrl(product.images[0], 'medium')}
             alt={product.name}
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
