@@ -310,6 +310,8 @@ export default function ProductCard({
 
   const status = getStockStatus(product);
   const hasImage = Array.isArray(product.images) && product.images.length > 0;
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const showImage = hasImage && !imageLoadFailed;
   const isOutOfStock = status === 'out';
   const isLowStock = status === 'low';
 
@@ -325,9 +327,9 @@ export default function ProductCard({
         ${!editing ? 'hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:-translate-y-0.5' : ''}
       `}
     >
-      {/* Image: 4:3 aspect, hover scale — thumb size for list/grid (CDN-ready) */}
+      {/* Image: 4:3 aspect, hover scale — thumb size for list/grid (CDN-ready). Fallback to placeholder on load error. */}
       <div className="relative w-full aspect-[4/3] bg-[var(--edk-bg)] overflow-hidden">
-        {hasImage ? (
+        {showImage ? (
           <img
             src={getProductImageUrl(product.images![0], 'thumb')}
             alt={product.name}
@@ -336,6 +338,7 @@ export default function ProductCard({
             className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03] ${isOutOfStock ? 'opacity-60' : ''}`}
             loading="lazy"
             decoding="async"
+            onError={() => setImageLoadFailed(true)}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[var(--edk-ink-3)]">

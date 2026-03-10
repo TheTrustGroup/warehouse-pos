@@ -210,9 +210,16 @@ export async function getWarehouseProducts(
     const rawImages = Array.isArray(row.images) ? (row.images as string[]) : [];
     const images =
       options.view === 'list'
-        ? rawImages
-            .filter((img): img is string => typeof img === 'string' && !img.startsWith('data:'))
-            .slice(0, 1)
+        ? (() => {
+            const urlFirst = rawImages
+              .filter((img): img is string => typeof img === 'string' && !img.startsWith('data:'))
+              .slice(0, 1);
+            if (urlFirst.length > 0) return urlFirst;
+            const firstBase64 = rawImages.find(
+              (img): img is string => typeof img === 'string' && img.startsWith('data:') && img.length <= 80_000
+            );
+            return firstBase64 ? [firstBase64] : [];
+          })()
         : rawImages;
 
     return {
