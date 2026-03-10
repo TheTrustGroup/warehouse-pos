@@ -280,11 +280,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const syncRef = useRef<(() => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>) | null>(null);
 
+  // Only show error after all retries failed (not while a fetch/retry is in progress), so we don't flash "Invalid products response" before a retry succeeds.
   useEffect(() => {
     if (offlineEnabled) return;
-    if (queryError) setError(queryError instanceof Error ? queryError.message : String(queryError));
-    else if (productsQuery.isSuccess) setError(null);
-  }, [offlineEnabled, queryError, productsQuery.isSuccess]);
+    if (productsQuery.isSuccess) setError(null);
+    else if (queryError && !productsQuery.isFetching) setError(queryError instanceof Error ? queryError.message : String(queryError));
+  }, [offlineEnabled, queryError, productsQuery.isSuccess, productsQuery.isFetching]);
 
   const setProductsQueryData = useCallback(
     (updater: (old: { list: Product[]; total?: number } | undefined) => { list: Product[]; total?: number }) => {
