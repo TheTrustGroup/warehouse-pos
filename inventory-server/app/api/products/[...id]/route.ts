@@ -121,37 +121,23 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     const db = getSupabase();
     const now = new Date().toISOString();
 
-    // Look up product: try (id, warehouse_id) first for multi-warehouse schema; then by id only (single row per product).
-    let existing: { id?: string; version?: number; size_kind?: string } | null = null;
-    const { data: byWarehouse, error: fetchErr } = await db
+    // warehouse_products has no warehouse_id — one row per product. Look up by id only.
+    const { data: existingRow } = await db
       .from('warehouse_products')
       .select('id, version, size_kind')
       .eq('id', id)
-      .eq('warehouse_id', wid)
       .maybeSingle();
 
-    if (byWarehouse) {
-      existing = byWarehouse as { id?: string; version?: number; size_kind?: string };
-    }
-    if (!existing && (fetchErr?.code === 'PGRST116' || !byWarehouse)) {
-      const { data: byId } = await db
-        .from('warehouse_products')
-        .select('id, version, size_kind')
-        .eq('id', id)
-        .maybeSingle();
-      if (byId) existing = byId as { id?: string; version?: number; size_kind?: string };
-    }
-
-    if (!existing) {
+    if (!existingRow) {
       return withCors(
-        NextResponse.json({ error: `Product ${id} not found in warehouse ${wid}` }, { status: 404 }),
+        NextResponse.json({ error: 'Product not found' }, { status: 404 }),
         req
       );
     }
 
-    const existingRow = existing as { version?: number; size_kind?: string };
-    const currentVersion = Number(existingRow.version ?? 0);
-    const sizeKind       = normSK(body, existingRow.size_kind ?? '');
+    const existing = existingRow as { id?: string; version?: number; size_kind?: string };
+    const currentVersion = Number(existing.version ?? 0);
+    const sizeKind       = normSK(body, existing.size_kind ?? '');
     const rawSizes       = parseRawSizes(body);
 
     const singleOneSize =
