@@ -124,7 +124,21 @@ A script runs `git status --porcelain` and **exits 1** if there are uncommitted 
 
 ---
 
-## 11. If you use the parent repo
+## 11. API: what must stay synchronous (no background jobs)
+
+When introducing Trigger.dev or any background job system, **do not** move the following into tasks. They must complete in the API request and return success/failure with the response.
+
+| Area | Rule | Why |
+|------|------|-----|
+| **Recording the sale and deducting stock** | Stay in the API. `POST /api/sales` (and any equivalent) must perform the sale + stock deduction and return the result in the same response. | The POS must show exact success or “Insufficient stock” immediately. No “we’ll tell you later.” |
+| **Auth and scope checks** | Stay in the API. All auth (e.g. `requireAuth`) and scope resolution (e.g. `getEffectiveWarehouseId`, `getScopeForUser`) run in the request. | Security and correctness; the response must reflect the authenticated user’s permissions. |
+| **Light reads** | Stay in the API. Health (`GET /api/health`), small config, warehouse/store lists, and similar fast reads are request-scoped. | No need for background jobs; keep latency low and logic simple. |
+
+**Background jobs (e.g. Trigger.dev)** are for: post-sale side effects (receipt email, notifications, external sync), heavy reports/exports, dashboard precomputation, bulk imports, scheduled maintenance. Never use them for the critical path of sale recording, auth, or scope checks.
+
+---
+
+## 12. If you use the parent repo
 
 - After pushing from `warehouse-pos/`, if the parent repo points at `warehouse-pos` as a gitlink, update it so it doesn’t "revert" to an old commit:
   ```bash
@@ -136,4 +150,4 @@ A script runs `git status --porcelain` and **exits 1** if there are uncommitted 
 
 ---
 
-**Summary:** Commit and push from `warehouse-pos/` at feature boundaries and before you leave. CI runs on push to `main` (§10).  Use the guard script to avoid leaving uncommitted work. Keep one source of truth (this repo). Migrations and UI changes stay in version control with the code that uses them. Keep Sidebar and MobileMenu nav in sync via `src/config/navigation.tsx`; control caching so mobile users get updates (see §8); see §9 for performance choices and §10 for parent repo.
+**Summary:** Commit and push from `warehouse-pos/` at feature boundaries and before you leave. CI runs on push to `main` (§10).  Use the guard script to avoid leaving uncommitted work. Keep one source of truth (this repo). Migrations and UI changes stay in version control with the code that uses them. Keep Sidebar and MobileMenu nav in sync via `src/config/navigation.tsx`; control caching so mobile users get updates (see §8); see §9 for performance choices; §11 for what must stay synchronous in the API (sale recording, auth, light reads); §12 for parent repo.

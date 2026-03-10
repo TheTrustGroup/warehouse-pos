@@ -11,6 +11,7 @@
     "build": "tsc && vite build",
     "build:server": "cd inventory-server && npm run build",
     "build:all": "npm run build && npm run build:server",
+    "deploy:trigger": "cd inventory-server && npm run deploy:trigger",
     "build:bundler-only": "vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 107",
     "preview": "vite preview",

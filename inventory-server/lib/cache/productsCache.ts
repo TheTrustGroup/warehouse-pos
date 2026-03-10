@@ -30,6 +30,7 @@ export interface ProductsCacheParams {
   category?: string;
   lowStock?: boolean;
   outOfStock?: boolean;
+  view?: 'list' | 'full';
 }
 
 /** True if Redis is configured and available (for diagnostics). */
@@ -38,7 +39,7 @@ export function isProductsCacheAvailable(): boolean {
 }
 
 export function cacheKey(params: ProductsCacheParams): string {
-  const { warehouseId, limit, offset, q, category, lowStock, outOfStock } = params;
+  const { warehouseId, limit, offset, q, category, lowStock, outOfStock, view } = params;
   // Only include non-default / non-empty parts to keep keys readable
   const parts = [
     `wh:${warehouseId}`,
@@ -48,6 +49,7 @@ export function cacheKey(params: ProductsCacheParams): string {
     category ? `cat:${category}` : null,
     lowStock ? 'low:1' : null,
     outOfStock ? 'out:1' : null,
+    view ? `v:${view}` : null,
   ].filter(Boolean);
   return `${CACHE_PREFIX}:${parts.join('|')}`;
 }

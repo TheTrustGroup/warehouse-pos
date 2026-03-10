@@ -47,12 +47,20 @@ function normalizeProductRow(p: any): Product {
   });
 }
 
-/** Fetch all pages of products for a warehouse (Phase 6 Part 2: used as React Query queryFn). */
+/** Default page size for initial load (API-side pagination to avoid 29MB fetch). */
+const INITIAL_PRODUCTS_PAGE_SIZE = 50;
+
+/**
+ * Fetch products for a warehouse (Phase 6 Part 2: used as React Query queryFn).
+ * When initialPageSize is set, fetches only the first page (API-side pagination).
+ * When omitted, fetches all pages (legacy; avoid for initial load).
+ */
 export async function fetchProductsForWarehouse(
   wid: string,
-  opts?: { signal?: AbortSignal; timeoutMs?: number }
+  opts?: { signal?: AbortSignal; timeoutMs?: number; initialPageSize?: number }
 ): Promise<{ list: Product[]; total?: number }> {
-  const PAGE_LIMIT = 250;
+  const initialOnly = opts?.initialPageSize != null && opts.initialPageSize > 0;
+  const pageLimit = initialOnly ? Math.min(opts!.initialPageSize!, 250) : 250;
   const PRODUCTS_REQUEST_TIMEOUT_MS = 55_000;
   const getOpts = { signal: opts?.signal, timeoutMs: opts?.timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 3 };
   const allItems: Product[] = [];
@@ -61,8 +69,9 @@ export async function fetchProductsForWarehouse(
   const adminBase = '/admin/api/products';
   let offset = 0;
   for (;;) {
-    const path = `${apiBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${PAGE_LIMIT}&offset=${offset}`;
-    const adminPath = `${adminBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${PAGE_LIMIT}&offset=${offset}`;
+    const viewSuffix = initialOnly ? '&view=list' : '';
+    const path = `${apiBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${offset}${viewSuffix}`;
+    const adminPath = `${adminBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${offset}${viewSuffix}`;
     let raw: { data?: Product[]; total?: number } | Product[] | null = null;
     try {
       raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
@@ -82,8 +91,8 @@ export async function fetchProductsForWarehouse(
       .filter((p): p is Product => p != null && typeof p === 'object');
     allItems.push(...page);
     if (raw != null && typeof raw === 'object' && 'total' in raw) totalFromApi = (raw as { total?: number }).total;
-    if (page.length < PAGE_LIMIT || (typeof totalFromApi === 'number' && allItems.length >= totalFromApi)) break;
-    offset += PAGE_LIMIT;
+    if (initialOnly || page.length < pageLimit || (typeof totalFromApi === 'number' && allItems.length >= totalFromApi)) break;
+    offset += pageLimit;
   }
   return { list: allItems, total: totalFromApi };
 }
@@ -191,7 +200,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const PRODUCTS_QUERY_GC_MS = 300_000;
   const productsQuery = useQuery({
     queryKey: queryKeys.products(warehouseId),
-    queryFn: ({ signal }) => fetchProductsForWarehouse(warehouseId, { signal }),
+    queryFn: ({ signal }) =>
+      fetchProductsForWarehouse(warehouseId, { signal, initialPageSize: INITIAL_PRODUCTS_PAGE_SIZE }),
     enabled: isValidWarehouseId(warehouseId),
     staleTime: PRODUCTS_QUERY_STALE_MS,
     gcTime: PRODUCTS_QUERY_GC_MS,
@@ -512,7 +522,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       return { synced: 0, failed: 0, total: 0, syncedIds: [] };
     }
 
-    let localRaw = getStoredData<any[]>('warehouse_products', []);
+    const localRaw = getStoredData<any[]>('warehouse_products', []);
     const localProducts = (Array.isArray(localRaw) ? localRaw : []).map((p: any) => normalizeProduct(p));
     const localOnly = localProducts.filter((p) => !apiIds.has(p.id));
     const total = localOnly.length;

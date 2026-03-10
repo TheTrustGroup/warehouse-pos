@@ -46,7 +46,7 @@ const getAllowedOrigins = (): { origins: string[]; suffixes: string[]; strict: b
 };
 
 function corsHeaders(request: NextRequest): HeadersInit {
-  const { origins, suffixes, strict } = getAllowedOrigins();
+  const { origins, suffixes } = getAllowedOrigins();
   const origin = (request.headers.get('origin') ?? '').trim();
   // With credentials, browser requires exact origin. Reflect request origin only when allowed.
   let allowOrigin: string;

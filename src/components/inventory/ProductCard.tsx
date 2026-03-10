@@ -11,6 +11,7 @@ import { useState, useRef, useCallback } from 'react';
 import type { Product } from '../../types';
 import type { QuantityBySizeItem } from '../../types';
 import { LOW_STOCK_THRESHOLD } from '../../lib/stockConstants';
+import { getProductImageUrl } from '../../lib/productImageUrl';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -324,11 +325,11 @@ export default function ProductCard({
         ${!editing ? 'hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:-translate-y-0.5' : ''}
       `}
     >
-      {/* Image: 4:3 aspect, hover scale */}
+      {/* Image: 4:3 aspect, hover scale — thumb size for list/grid (CDN-ready) */}
       <div className="relative w-full aspect-[4/3] bg-[var(--edk-bg)] overflow-hidden">
         {hasImage ? (
           <img
-            src={product.images![0]}
+            src={getProductImageUrl(product.images![0], 'thumb')}
             alt={product.name}
             width={320}
             height={240}

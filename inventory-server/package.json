@@ -4,14 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
+    "dev:trigger": "trigger dev",
     "build": "next build",
     "build:vercel": "node scripts/build-with-frontend.mjs && next build",
     "start": "next start -p 3001",
+    "deploy:trigger": "trigger deploy",
     "lint": "next lint",
     "lint:auth": "node scripts/check-auth-await.mjs",
     "test:health": "node scripts/health-check.mjs"
   },
   "dependencies": {
+    "@trigger.dev/sdk": "^4.0.0",
     "@sentry/nextjs": "^8.55.0",
     "@supabase/supabase-js": "^2.47.10",
     "@upstash/ratelimit": "^2.0.8",
@@ -23,6 +26,8 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@trigger.dev/build": "^4.0.0",
+    "trigger.dev": "^4.0.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

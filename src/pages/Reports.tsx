@@ -42,8 +42,8 @@ export function Reports() {
 
   const setPeriod = useCallback((preset: 'today' | 'week' | 'month' | 'last_month' | 'quarter' | 'year') => {
     const now = new Date();
-    let start = new Date(now);
-    let end = new Date(now);
+    const start = new Date(now);
+    const end = new Date(now);
     end.setHours(23, 59, 59, 999);
     switch (preset) {
       case 'today':

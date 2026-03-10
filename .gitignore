@@ -25,6 +25,9 @@ coverage
 # Deploy
 .vercel
 
+# Trigger.dev local dev
+.trigger
+
 # Supabase CLI temp (root and inventory-server)
 supabase/.temp
 inventory-server/supabase/.temp

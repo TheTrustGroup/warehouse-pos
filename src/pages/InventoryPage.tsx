@@ -562,7 +562,8 @@ export default function InventoryPage(_props: InventoryPageProps) {
       }
     } else {
       try {
-        const { id: _omit, ...rest } = payload;
+        const { id: _droppedId, ...rest } = payload;
+        void _droppedId;
         await contextAddProduct({
           ...rest,
           warehouseId,
@@ -697,7 +698,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
 
       {/* Stats: from dashboard API when available (all products); otherwise from loaded list */}
       {!loading && !error && (products.length > 0 || (dashboard && skuCount >= 0)) && (
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 mb-5">
           <StatCard
             label="SKUs"
             value={skuCount}
@@ -722,7 +723,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
       )}
 
       {/* Filter toolbar: category pills, Size/Color dropdowns, sort, results count */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-5">
         <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
           {(['all', ...CATEGORIES] as string[]).map((cat) => (
             <button
@@ -834,7 +835,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
           <div className="flex flex-col items-center gap-4">
             <LoadingSpinner size="md" />
             <p className="text-[13px] font-medium text-[var(--edk-ink-3)]">Loading products…</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 w-full">
               {Array.from({ length: isMobileViewport ? 4 : 6 }).map((_, i) => <ProductCardSkeleton key={i}/>)}
             </div>
           </div>

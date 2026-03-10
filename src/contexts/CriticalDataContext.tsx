@@ -11,7 +11,6 @@ import { createContext, useContext, useState, useCallback, ReactNode, useEffect 
 import { useAuth } from './AuthContext';
 import { useStore } from './StoreContext';
 import { useWarehouse } from './WarehouseContext';
-import { useInventory } from './InventoryContext';
 import { useOrders } from './OrderContext';
 import { withRetry } from '../lib/retry';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
@@ -107,7 +106,6 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
   const { user, tryRefreshSession } = useAuth();
   const { refreshStores } = useStore();
   const { refreshWarehouses } = useWarehouse();
-  const { refreshProducts } = useInventory();
   const { refreshOrders } = useOrders();
   const internal = useContext(CriticalDataInternalContext);
 
@@ -126,14 +124,11 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
         withRetry(() => refreshStores(phase1Opts), MAX_RETRIES),
         withRetry(() => refreshWarehouses(phase1Opts), MAX_RETRIES),
       ]);
-      // Show app immediately; phase 2 (inventory, orders) runs in background so products appear from cache then refresh
+      // Show app immediately; phase 2 (orders) runs in background. Products are loaded by InventoryContext useQuery on demand (single fetch, first page only); skip refreshProducts here to avoid duplicate 29MB fetch.
       internal.setCriticalDataLoading(false);
       internal.setSyncingCriticalData(true);
-      // Phase 2: inventory + orders (heavier) — silent so we don't replace cache with "Loading products..." spinner
-      Promise.all([
-        withRetry(() => refreshProducts({ bypassCache: true, timeoutMs: INITIAL_LOAD_TIMEOUT_MS, silent: true }), MAX_RETRIES),
-        withRetry(() => refreshOrders(phase2Opts), MAX_RETRIES),
-      ])
+      // Phase 2: orders only — products load when user opens Inventory/POS via shared React Query cache
+      Promise.all([withRetry(() => refreshOrders(phase2Opts), MAX_RETRIES)])
         .catch((err) => {
           const msg = getUserFriendlyMessage(err);
           internal.setCriticalDataError(msg);
@@ -150,10 +145,7 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
           ]);
           internal.setCriticalDataLoading(false);
           internal.setSyncingCriticalData(true);
-          Promise.all([
-            withRetry(() => refreshProducts({ bypassCache: true, timeoutMs: INITIAL_LOAD_TIMEOUT_MS, silent: true }), MAX_RETRIES),
-            withRetry(() => refreshOrders(phase2Opts), MAX_RETRIES),
-          ])
+          Promise.all([withRetry(() => refreshOrders(phase2Opts), MAX_RETRIES)])
             .catch((retryErr) => {
               const msg = getUserFriendlyMessage(retryErr);
               internal.setCriticalDataError(msg);
@@ -177,7 +169,7 @@ export function CriticalDataGate({ children }: { children: ReactNode }) {
     } finally {
       internal.setCriticalDataLoading(false);
     }
-  }, [internal, tryRefreshSession, refreshStores, refreshWarehouses, refreshProducts, refreshOrders]);
+  }, [internal, tryRefreshSession, refreshStores, refreshWarehouses, refreshOrders]);
 
   useEffect(() => {
     if (!user || !internal) return;

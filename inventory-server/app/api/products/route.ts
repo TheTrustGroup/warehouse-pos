@@ -112,8 +112,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const category = searchParams.get('category')?.trim() ?? undefined;
       const lowStock = searchParams.get('low_stock') === 'true' || searchParams.get('low_stock') === '1';
       const outOfStock = searchParams.get('out_of_stock') === 'true' || searchParams.get('out_of_stock') === '1';
+      const viewParam = searchParams.get('view')?.toLowerCase();
+      const view = viewParam === 'list' ? 'list' as const : undefined;
 
-      const cacheParams = { warehouseId, limit, offset, q, category, lowStock: lowStock || undefined, outOfStock: outOfStock || undefined };
+      const cacheParams = { warehouseId, limit, offset, q, category, lowStock: lowStock || undefined, outOfStock: outOfStock || undefined, view };
       const cached = await getCachedProducts(cacheParams);
       if (cached != null && typeof cached === 'object' && 'data' in cached) {
         const res = NextResponse.json(cached, { headers: h });
@@ -135,6 +137,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           category,
           lowStock: lowStock || undefined,
           outOfStock: outOfStock || undefined,
+          view,
           signal: controller.signal,
         });
         const payload = { data: result.data, total: result.total };

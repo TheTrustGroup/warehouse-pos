@@ -413,16 +413,14 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         if (loadProductsAbortRef.current === ctrl) loadProductsAbortRef.current = null;
       };
     }
-    // Reuse InventoryContext products when already loaded (CriticalData phase-2 or cache) to avoid duplicate fetch and spinner.
+    // Reuse InventoryContext products when already loaded to avoid duplicate fetch (was causing second 29MB request).
     const hasInventoryForWarehouse =
       currentWarehouseId === wid && safeInventoryProducts.length > 0;
     if (hasInventoryForWarehouse) {
       setProducts(safeInventoryProducts.map(productToPOSProduct));
       setProductsLoadError(null);
       setLoading(false);
-      loadProducts(wid, true, ctrl.signal).catch(() => {
-        if (isMounted.current) setLoading(false);
-      });
+      // Do not call loadProducts here — context is source of truth; visibility revalidation invalidates React Query so refetch is shared.
     } else {
       loadProducts(wid, false, ctrl.signal).catch(() => {
         if (isMounted.current) setLoading(false);

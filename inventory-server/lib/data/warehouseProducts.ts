@@ -12,6 +12,8 @@ export interface ListOptions {
   category?: string;
   lowStock?: boolean;
   outOfStock?: boolean;
+  /** When 'list', use slimmer select (omit description, location, supplier, tags) for smaller payload. */
+  view?: 'list' | 'full';
   /** When set, passed to fetch() for all Supabase queries so the request can be aborted (e.g. timeout). */
   signal?: AbortSignal;
 }
@@ -93,6 +95,10 @@ function normalizeDbConstraintError(dbMessage: string, action: 'create' | 'updat
 const WAREHOUSE_PRODUCTS_SELECT =
   'id, sku, barcode, name, description, category, size_kind, selling_price, cost_price, reorder_level, location, supplier, tags, images, color, version, created_at, updated_at';
 
+/** Slimmer select for list view — omits description, location, supplier, tags to reduce payload. */
+const WAREHOUSE_PRODUCTS_SELECT_LIST =
+  'id, sku, barcode, name, category, size_kind, selling_price, cost_price, reorder_level, images, color, version, created_at, updated_at';
+
 function isStatementTimeoutError(err: { message?: string }): boolean {
   const m = (err?.message ?? '').toLowerCase();
   return m.includes('statement timeout') || m.includes('canceling statement due to statement timeout');
@@ -123,10 +129,11 @@ export async function getWarehouseProducts(
     return { data: [], total: 0 };
   }
 
+  const selectColumns: string = options.view === 'list' ? WAREHOUSE_PRODUCTS_SELECT_LIST : WAREHOUSE_PRODUCTS_SELECT;
   // 1) Fetch products: warehouse_products (no warehouse_id column — one row per product). Order by name, paginate.
   let productsQuery = db
     .from('warehouse_products')
-    .select(WAREHOUSE_PRODUCTS_SELECT, selectOpts({ count: 'exact' }))
+    .select(selectColumns, selectOpts({ count: 'exact' }))
     .order('name')
     .range(offset, offset + limit - 1);
   if (options.q?.trim()) {
