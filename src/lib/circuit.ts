@@ -3,8 +3,8 @@
  * After consecutive failures, "opens" and blocks calls until cooldown.
  */
 
-const DEFAULT_FAILURE_THRESHOLD = 12;
-const DEFAULT_COOLDOWN_MS = 60_000;
+const DEFAULT_FAILURE_THRESHOLD = 3;
+const DEFAULT_COOLDOWN_MS = 30_000;
 
 type State = 'closed' | 'open' | 'half-open';
 
@@ -89,8 +89,8 @@ function logCircuitState(state: State): void {
 
 function createCircuit(): CircuitBreaker {
   return new CircuitBreaker({
-    failureThreshold: 12,
-    cooldownMs: 60_000,
+    failureThreshold: DEFAULT_FAILURE_THRESHOLD,
+    cooldownMs: DEFAULT_COOLDOWN_MS,
     onStateChange: logCircuitState,
   });
 }

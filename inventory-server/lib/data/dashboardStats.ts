@@ -329,7 +329,12 @@ export async function getDashboardStats(
   const useCache = isToday(date);
 
   if (useCache) {
-    const cached = await getCached(warehouseId);
+    let cached: unknown = null;
+    try {
+      cached = await getCached(warehouseId);
+    } catch (e) {
+      console.warn('[dashboardStats] Cache unavailable, using DB:', e instanceof Error ? e.message : e);
+    }
     if (isDashboardStatsResult(cached)) {
       const lowStockItems = await computeLowStockItemsFresh(warehouseId, signal);
       return { ...cached, lowStockItems };
@@ -338,7 +343,11 @@ export async function getDashboardStats(
 
   const result = await computeDashboardStatsUncached(warehouseId, date, signal);
   if (useCache) {
-    await setCached(warehouseId, result);
+    try {
+      await setCached(warehouseId, result);
+    } catch (e) {
+      console.warn('[dashboardStats] Cache set failed:', e instanceof Error ? e.message : e);
+    }
   }
   return result;
 }

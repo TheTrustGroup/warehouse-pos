@@ -50,10 +50,14 @@ function normalizeProductRow(p: any): Product {
 /** Default page size for initial load (API-side pagination to avoid 29MB fetch). */
 const INITIAL_PRODUCTS_PAGE_SIZE = 50;
 
+/** In-flight products fetches by logical key to prevent duplicate concurrent requests. */
+const productsFetchInFlight = new Map<string, Promise<{ list: Product[]; total?: number }>>();
+
 /**
  * Fetch products for a warehouse (Phase 6 Part 2: used as React Query queryFn).
  * When initialPageSize is set, fetches only the first page (API-side pagination).
  * When omitted, fetches all pages (legacy; avoid for initial load).
+ * Deduplicates concurrent identical requests (same warehouse + options).
  */
 export async function fetchProductsForWarehouse(
   wid: string,
@@ -61,41 +65,53 @@ export async function fetchProductsForWarehouse(
 ): Promise<{ list: Product[]; total?: number }> {
   const initialOnly = opts?.initialPageSize != null && opts.initialPageSize > 0;
   const pageLimit = initialOnly ? Math.min(opts!.initialPageSize!, 250) : 250;
-  const PRODUCTS_REQUEST_TIMEOUT_MS = 55_000;
-  const getOpts = { signal: opts?.signal, timeoutMs: opts?.timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 3 };
-  const allItems: Product[] = [];
-  let totalFromApi: number | undefined;
-  const apiBase = '/api/products';
-  const adminBase = '/admin/api/products';
-  let offset = 0;
-  for (;;) {
-    const viewSuffix = initialOnly ? '&view=list' : '';
-    const safeOffset = Number(offset) || 0;
-    const path = `${apiBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${safeOffset}${viewSuffix}`;
-    const adminPath = `${adminBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${safeOffset}${viewSuffix}`;
-    let raw: { data?: Product[]; total?: number } | Product[] | null = null;
-    try {
-      raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
-    } catch (e) {
-      const status = (e as { status?: number })?.status;
-      if (status === 404) {
-        raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, adminPath, getOpts);
-      } else {
-        throw e;
+  const dedupeKey = `${wid}:${pageLimit}:${initialOnly ? 'list' : 'full'}`;
+  const existing = productsFetchInFlight.get(dedupeKey);
+  if (existing) return existing;
+
+  const run = async (): Promise<{ list: Product[]; total?: number }> => {
+    const PRODUCTS_REQUEST_TIMEOUT_MS = 55_000;
+    const getOpts = { signal: opts?.signal, timeoutMs: opts?.timeoutMs ?? PRODUCTS_REQUEST_TIMEOUT_MS, maxRetries: 3 };
+    const allItems: Product[] = [];
+    let totalFromApi: number | undefined;
+    const apiBase = '/api/products';
+    const adminBase = '/admin/api/products';
+    let offset = 0;
+    for (;;) {
+      const viewSuffix = initialOnly ? '&view=list' : '';
+      const safeOffset = Number(offset) || 0;
+      const path = `${apiBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${safeOffset}${viewSuffix}`;
+      const adminPath = `${adminBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${safeOffset}${viewSuffix}`;
+      let raw: { data?: Product[]; total?: number } | Product[] | null = null;
+      try {
+        raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
+      } catch (e) {
+        const status = (e as { status?: number })?.status;
+        if (status === 404) {
+          raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, adminPath, getOpts);
+        } else {
+          throw e;
+        }
       }
+      const parsed = parseProductsResponse(raw);
+      if (!parsed.success) throw new Error(parsed.message);
+      const page = parsed.items
+        .filter((p) => p != null && typeof p === 'object')
+        .map((p) => normalizeProductRow(p))
+        .filter((p): p is Product => p != null && typeof p === 'object');
+      allItems.push(...page);
+      if (raw != null && typeof raw === 'object' && 'total' in raw) totalFromApi = (raw as { total?: number }).total;
+      if (initialOnly || page.length < pageLimit || (typeof totalFromApi === 'number' && allItems.length >= totalFromApi)) break;
+      offset += pageLimit;
     }
-    const parsed = parseProductsResponse(raw);
-    if (!parsed.success) throw new Error(parsed.message);
-    const page = parsed.items
-      .filter((p) => p != null && typeof p === 'object')
-      .map((p) => normalizeProductRow(p))
-      .filter((p): p is Product => p != null && typeof p === 'object');
-    allItems.push(...page);
-    if (raw != null && typeof raw === 'object' && 'total' in raw) totalFromApi = (raw as { total?: number }).total;
-    if (initialOnly || page.length < pageLimit || (typeof totalFromApi === 'number' && allItems.length >= totalFromApi)) break;
-    offset += pageLimit;
-  }
-  return { list: allItems, total: totalFromApi };
+    return { list: allItems, total: totalFromApi };
+  };
+
+  const promise = run().finally(() => {
+    productsFetchInFlight.delete(dedupeKey);
+  });
+  productsFetchInFlight.set(dedupeKey, promise);
+  return promise;
 }
 
 /** Seed/placeholder product ID that may exist in cache but not on production API; skip verify to avoid 404. */
@@ -197,8 +213,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const RECENT_UPDATE_WINDOW_MS = 10 * 60 * 1000;
   const RECENT_DELETE_WINDOW_MS = 15_000;
 
-  const PRODUCTS_QUERY_STALE_MS = 60_000;
-  const PRODUCTS_QUERY_GC_MS = 300_000;
+  const PRODUCTS_QUERY_STALE_MS = 30_000;
+  const PRODUCTS_QUERY_GC_MS = 5 * 60 * 1000;
   const productsQuery = useQuery({
     queryKey: queryKeys.products(warehouseId),
     queryFn: ({ signal }) =>
@@ -206,7 +222,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     enabled: isValidWarehouseId(warehouseId),
     staleTime: PRODUCTS_QUERY_STALE_MS,
     gcTime: PRODUCTS_QUERY_GC_MS,
-    retry: 2,
+    retry: 2, // 1 initial + 2 retries = 3 total; aligns with circuit breaker opening at 3 failures
   });
   const queryList = productsQuery.data?.list ?? [];
   const queryError = productsQuery.error;

@@ -207,6 +207,14 @@ export async function getWarehouseProducts(
     if (options.lowStock && totalQuantity > (Number(row.reorder_level ?? 0) || 3)) return null;
     if (options.outOfStock && totalQuantity > 0) return null;
 
+    const rawImages = Array.isArray(row.images) ? (row.images as string[]) : [];
+    const images =
+      options.view === 'list'
+        ? rawImages
+            .filter((img): img is string => typeof img === 'string' && !img.startsWith('data:'))
+            .slice(0, 1)
+        : rawImages;
+
     return {
       id: rowId,
       warehouseId: effectiveWarehouseId,
@@ -224,7 +232,7 @@ export async function getWarehouseProducts(
       location: row.location ?? null,
       supplier: row.supplier ?? null,
       tags: Array.isArray(row.tags) ? row.tags : [],
-      images: Array.isArray(row.images) ? (row.images as string[]) : [],
+      images,
       color: row.color != null ? String(row.color).trim() || null : null,
       version: Number(row.version ?? 0),
       createdAt: String(row.created_at ?? ''),

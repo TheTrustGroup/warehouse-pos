@@ -84,7 +84,11 @@ function Phase1LoadingScreen() {
   );
 }
 
-/** Lightweight health check to wake serverless before the main load. No auth; failures ignored. */
+/**
+ * Lightweight health check to wake serverless before the main load.
+ * No auth; failures are ignored. Must NOT reset application state, context, or trigger refetches
+ * when health fails — otherwise a flaky health endpoint would cause request storms.
+ */
 function apiWarmup(): Promise<void> {
   return apiRequest({
     baseUrl: API_BASE_URL,
