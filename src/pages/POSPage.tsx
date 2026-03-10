@@ -220,10 +220,12 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     };
   }, []);
 
+  /** Timeout high enough for serverless cold start + products DB (avoids "connection lost" on slow first load). */
+  const API_FETCH_TIMEOUT_MS = 40_000;
   const apiFetch = useCallback(
     async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12_000);
+      const timeout = setTimeout(() => controller.abort(), API_FETCH_TIMEOUT_MS);
       const callerSignal = init?.signal;
       if (callerSignal) {
         if (callerSignal.aborted) {
@@ -269,6 +271,8 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const loadProductsAbortRef = useRef<AbortController | null>(null);
   const productsCacheRef = useRef<{ wid: string; list: POSProduct[]; at: number } | null>(null);
   const PRODUCTS_CACHE_TTL_MS = 30_000;
+  /** First page smaller so request completes before timeout (cold start); then 250 per page. */
+  const PRODUCTS_FIRST_PAGE_LIMIT = 50;
   const PRODUCTS_PAGE_LIMIT = 250;
 
   function normalizeProductItem(item: unknown): POSProduct {
@@ -305,12 +309,14 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         if (!silent) setLoading(false);
         const allPages: POSProduct[] = [];
         let totalFromApi: number | undefined;
-        for (let offset = 0; ; offset += PRODUCTS_PAGE_LIMIT) {
+        let offset = 0;
+        let pageLimit = PRODUCTS_FIRST_PAGE_LIMIT;
+        while (true) {
           if (signal?.aborted || !isMounted.current) return;
           const revalidate = await apiFetch<
             POSProduct[] | { data?: POSProduct[]; products?: POSProduct[]; total?: number }
           >(
-            `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=${PRODUCTS_PAGE_LIMIT}&offset=${offset}`,
+            `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${Number(offset) || 0}`,
             { signal }
           ).catch(() => null);
           if (signal?.aborted || !isMounted.current) return;
@@ -321,7 +327,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           if (typeof (revalidate as { total?: number }).total === 'number') totalFromApi = (revalidate as { total: number }).total;
           const page = rawList.map((item) => normalizeProductItem(item));
           allPages.push(...page);
-          if (page.length < PRODUCTS_PAGE_LIMIT || (typeof totalFromApi === 'number' && allPages.length >= totalFromApi)) break;
+          if (page.length < pageLimit || (typeof totalFromApi === 'number' && allPages.length >= totalFromApi)) break;
+          offset += page.length;
+          pageLimit = PRODUCTS_PAGE_LIMIT;
         }
         if (allPages.length > 0) {
           productsCacheRef.current = { wid, list: allPages, at: Date.now() };
@@ -336,12 +344,14 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       try {
         const allPages: POSProduct[] = [];
         let totalFromApi: number | undefined;
-        for (let offset = 0; ; offset += PRODUCTS_PAGE_LIMIT) {
+        let offset = 0;
+        let pageLimit = PRODUCTS_FIRST_PAGE_LIMIT;
+        while (true) {
           if (signal?.aborted) return;
           const data = await apiFetch<
             POSProduct[] | { data?: POSProduct[]; products?: POSProduct[]; total?: number }
           >(
-            `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=${PRODUCTS_PAGE_LIMIT}&offset=${offset}`,
+            `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${Number(offset) || 0}`,
             { signal }
           );
           if (signal?.aborted) return;
@@ -351,7 +361,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           if (typeof (data as { total?: number }).total === 'number') totalFromApi = (data as { total: number }).total;
           const page = rawList.map((item) => normalizeProductItem(item));
           allPages.push(...page);
-          if (page.length < PRODUCTS_PAGE_LIMIT || (typeof totalFromApi === 'number' && allPages.length >= totalFromApi)) break;
+          if (page.length < pageLimit || (typeof totalFromApi === 'number' && allPages.length >= totalFromApi)) break;
+          offset += page.length;
+          pageLimit = PRODUCTS_PAGE_LIMIT;
         }
         if (isMounted.current) {
           productsCacheRef.current = { wid, list: allPages, at: Date.now() };

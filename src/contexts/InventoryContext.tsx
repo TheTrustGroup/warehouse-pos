@@ -70,8 +70,9 @@ export async function fetchProductsForWarehouse(
   let offset = 0;
   for (;;) {
     const viewSuffix = initialOnly ? '&view=list' : '';
-    const path = `${apiBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${offset}${viewSuffix}`;
-    const adminPath = `${adminBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${offset}${viewSuffix}`;
+    const safeOffset = Number(offset) || 0;
+    const path = `${apiBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${safeOffset}${viewSuffix}`;
+    const adminPath = `${adminBase}?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${safeOffset}${viewSuffix}`;
     let raw: { data?: Product[]; total?: number } | Product[] | null = null;
     try {
       raw = await apiGet<{ data?: Product[]; total?: number } | Product[]>(API_BASE_URL, path, getOpts);
