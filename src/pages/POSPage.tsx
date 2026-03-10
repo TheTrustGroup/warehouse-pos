@@ -425,24 +425,16 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         if (loadProductsAbortRef.current === ctrl) loadProductsAbortRef.current = null;
       };
     }
-    // Reuse InventoryContext products when already loaded to avoid duplicate fetch (was causing second 29MB request).
-    const hasInventoryForWarehouse =
-      currentWarehouseId === wid && safeInventoryProducts.length > 0;
-    if (hasInventoryForWarehouse) {
-      setProducts(safeInventoryProducts.map(productToPOSProduct));
-      setProductsLoadError(null);
-      setLoading(false);
-      // Do not call loadProducts here — context is source of truth; visibility revalidation invalidates React Query so refetch is shared.
-    } else {
-      loadProducts(wid, false, ctrl.signal).catch(() => {
-        if (isMounted.current) setLoading(false);
-      });
-    }
+    // Always load POS product list with limit 250 so full catalog shows. Do not reuse InventoryContext
+    // (context only has 50 initially), otherwise POS would show "50 of 50" when there are 200+ products.
+    loadProducts(wid, false, ctrl.signal).catch(() => {
+      if (isMounted.current) setLoading(false);
+    });
     return () => {
       ctrl.abort();
       if (loadProductsAbortRef.current === ctrl) loadProductsAbortRef.current = null;
     };
-  }, [warehouse.id, currentWarehouseId, loadProducts, safeInventoryProducts, saleResult]);
+  }, [warehouse.id, loadProducts, saleResult]);
 
   // NEXT 4: show toast when another cashier broadcasts low-stock, then dismiss
   const processedAlertCountRef = useRef(0);
