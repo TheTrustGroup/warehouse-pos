@@ -32,7 +32,6 @@ import { useWarehouse } from '../contexts/WarehouseContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useInventory } from '../contexts/InventoryContext';
 import { usePresence } from '../contexts/PresenceContext';
-import type { Product } from '../types';
 
 import type { Warehouse } from '../components/pos/SessionScreen';
 import POSHeader from '../components/pos/POSHeader';
@@ -120,25 +119,6 @@ function applySaleDeduction(
   });
 }
 
-/** Map InventoryContext Product to POSProduct so POS can show immediately when phase-2 or cache already has data. */
-function productToPOSProduct(p: Product): POSProduct {
-  const color =
-    (p.variants?.color != null ? String(p.variants.color).trim() : '') || null;
-  return {
-    id: p.id,
-    name: p.name,
-    sku: p.sku,
-    sizeKind: p.sizeKind ?? 'na',
-    quantity: Number(p.quantity) ?? 0,
-    quantityBySize: p.quantityBySize ?? undefined,
-    sellingPrice: Number(p.sellingPrice) ?? 0,
-    category: p.category ?? undefined,
-    images: Array.isArray(p.images) ? p.images : [],
-    color: color || undefined,
-    barcode: p.barcode != null ? String(p.barcode) : null,
-  };
-}
-
 function fmt(n: number): string {
   return `GH₵${Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -159,11 +139,8 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const queryClient = useQueryClient();
   const { currentWarehouse, currentWarehouseId, loadError: warehouseLoadError, refreshWarehouses } = useWarehouse();
   const { user, tryRefreshSession } = useAuth();
-  const { products: inventoryProducts } = useInventory();
+  useInventory(); // POS loads its own product list (limit 250); context still required by layout.
   const triedRefreshRef = useRef(false);
-
-  // Defensive: context can be empty before first load; avoid .length/.map on undefined.
-  const safeInventoryProducts = Array.isArray(inventoryProducts) ? inventoryProducts : [];
 
   const warehouse: Warehouse = currentWarehouse ?? {
     id: currentWarehouseId,
