@@ -222,7 +222,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     list = list.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
     // Preserve last known quantityBySize when refetch returns empty for sized products (avoids "No sizes recorded" flash).
     const prevSizes = lastQuantityBySizeRef.current;
-    return list.map((p) => {
+    const withSizes = list.map((p) => {
       if (p.sizeKind !== 'sized') return p;
       const qbs = p.quantityBySize ?? [];
       if (qbs.length > 0) return p;
@@ -230,6 +230,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (!kept || kept.length === 0) return p;
       return { ...p, quantityBySize: kept };
     });
+    // Dedupe by id so background refetch or loadMore never shows duplicate cards.
+    return Array.from(new Map(withSizes.map((p) => [p.id, p])).values());
   }, [offlineEnabled, offline.products, queryList]);
 
   useEffect(() => {

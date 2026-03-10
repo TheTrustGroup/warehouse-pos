@@ -117,7 +117,14 @@ All of these go through the same Supabase client and CORS layer (`lib/cors.ts`).
 - **Dashboard:** Uses an internal timeout (~22s) and returns 503 with `Retry-After` if stats take too long. Dashboard stats can be cached (e.g. Redis) when configured.
 - **Network:** Slow or flaky networks hit timeouts and retries; circuit opens after many failures and blocks for cooldown.
 
-### 5.3 Timeouts (summary)
+### 5.3 What you should see (recent performance work)
+
+- **Initial load:** Only the **first 50 products** are fetched (not the full list). You should see “X products (50 loaded) · Page 1 of Y” and a faster first paint. “Load more” fetches the next 250.
+- **List view:** The first products request uses `view=list` (slimmer payload: no description, location, supplier, tags). You won’t see a UI change; network payload is smaller.
+- **No duplicate cards:** The products list is deduped by id so background refetch or “Load more” never shows the same product twice.
+- **CDN / image optimization:** Supabase Storage public URLs are automatically rewritten to the Image Transform API (thumb/medium/full). Store product image URLs in Supabase Storage and put the public URL in `product.images[]`; see `docs/CDN_AND_IMAGE_OPTIMIZATION.md` for how to set it up.
+
+### 5.4 Timeouts (summary)
 
 | Layer        | Typical value | Notes |
 |-------------|----------------|--------|
@@ -139,6 +146,7 @@ All of these go through the same Supabase client and CORS layer (`lib/cors.ts`).
 | Server stability & 503/500 | `docs/SERVER_STABILITY_AND_AVAILABILITY.md` |
 | DB access on server | `inventory-server/lib/supabase/admin.ts`, `inventory-server/lib/data/warehouseProducts.ts` |
 | Routing & lazy load  | `src/App.tsx` |
+| CDN / image optimization | `src/lib/productImageUrl.ts`, `docs/CDN_AND_IMAGE_OPTIMIZATION.md` |
 
 ---
 

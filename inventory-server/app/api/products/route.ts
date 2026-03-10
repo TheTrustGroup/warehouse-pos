@@ -19,6 +19,7 @@ import {
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
 import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 import { getCachedProducts, setCachedProducts, notifyProductsUpdated, isProductsCacheAvailable } from '@/lib/cache/productsCache';
+import { uploadProductImages } from '@/lib/storage/productImages';
 
 export const dynamic = 'force-dynamic';
 /** Higher than DB statement_timeout (10s) so we return a clean 504/503 instead of Vercel 504. Requires Vercel Pro for >10s. */
@@ -217,7 +218,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-/** POST /api/products — create product (body: warehouseId, name, sku, ...). */
+/** POST /api/products — create product (body: warehouseId, name, sku, ...). Base64 images are uploaded to Storage and replaced with public URLs. */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const auth = await requireAuth(req);
   if (auth instanceof NextResponse) return withCors(auth, req);
@@ -245,8 +246,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const productId = (typeof body.id === 'string' && body.id.trim() ? body.id.trim() : crypto.randomUUID()) as string;
+  let imagesToSave: string[] = Array.isArray(body.images) ? (body.images as string[]) : [];
   try {
-    const created = await createWarehouseProduct({ ...body, warehouseId: effectiveWarehouseId });
+    imagesToSave = await uploadProductImages(imagesToSave, productId);
+  } catch (e) {
+    console.error('[POST /api/products] image upload failed:', e instanceof Error ? e.message : e);
+    // Continue with original images (e.g. base64) so create still succeeds
+  }
+
+  try {
+    const created = await createWarehouseProduct({
+      ...body,
+      warehouseId: effectiveWarehouseId,
+      id: productId,
+      images: imagesToSave,
+    });
     await notifyInventoryUpdated(effectiveWarehouseId);
     await notifyProductsUpdated(effectiveWarehouseId);
     return withCors(NextResponse.json(created, { status: 201, headers: h }), req);
@@ -289,11 +304,17 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Normalize array fields so backend never receives scalars (avoids type errors in DB/RPC).
+  // Normalize array fields; upload base64 images to Storage and replace with public URLs.
+  let imagesToSave: string[] = Array.isArray(body.images) ? body.images : [];
+  try {
+    imagesToSave = await uploadProductImages(imagesToSave, productId);
+  } catch (e) {
+    console.error('[PUT /api/products] image upload failed:', e instanceof Error ? e.message : e);
+  }
   const normalizedBody: PutProductBody & { warehouseId?: string; warehouse_id?: string } = {
     ...body,
     tags: Array.isArray(body.tags) ? body.tags : [],
-    images: Array.isArray(body.images) ? body.images : [],
+    images: imagesToSave,
     quantityBySize: Array.isArray(body.quantityBySize) ? body.quantityBySize : undefined,
   };
 
