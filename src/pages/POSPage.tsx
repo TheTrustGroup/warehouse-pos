@@ -272,7 +272,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const productsCacheRef = useRef<{ wid: string; list: POSProduct[]; at: number } | null>(null);
   const PRODUCTS_CACHE_TTL_MS = 30_000;
   /** First page smaller so request completes before timeout (cold start); then 250 per page. */
-  const PRODUCTS_FIRST_PAGE_LIMIT = 50;
+  const PRODUCTS_FIRST_PAGE_LIMIT = 250;
   const PRODUCTS_PAGE_LIMIT = 250;
 
   function normalizeProductItem(item: unknown): POSProduct {
