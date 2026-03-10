@@ -47,8 +47,8 @@ function normalizeProductRow(p: any): Product {
   });
 }
 
-/** Default page size for initial load (API-side pagination to avoid 29MB fetch). */
-const INITIAL_PRODUCTS_PAGE_SIZE = 50;
+/** Default page size for initial load so new products (e.g. by name) stay visible after save; 250 matches API max. */
+const INITIAL_PRODUCTS_PAGE_SIZE = 250;
 
 /** In-flight products fetches by logical key to prevent duplicate concurrent requests. */
 const productsFetchInFlight = new Map<string, Promise<{ list: Product[]; total?: number }>>();
@@ -716,9 +716,18 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       logInventoryCreate({ productId: resolvedId, sku: productData.sku ?? '', listLength: queryList.length + 1 });
       const today = new Date().toISOString().split('T')[0];
-      queryClient.invalidateQueries({ queryKey: queryKeys.products(warehouseId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
       queryClient.refetchQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
+      // Refetch products so server is source of truth; then ensure new product stays visible if it's outside first page (e.g. name order puts it after first 50).
+      await queryClient.refetchQueries({ queryKey: queryKeys.products(warehouseId) });
+      queryClient.setQueryData(queryKeys.products(warehouseId), (old: { list: Product[]; total?: number } | undefined) => {
+        if (!old?.list) return old;
+        if (old.list.some((p) => p.id === resolvedId)) return old;
+        return {
+          list: [normalized, ...old.list],
+          total: typeof old.total === 'number' ? old.total + 1 : old.total,
+        };
+      });
       invalidateProducts();
       showToast('success', 'Product saved.');
       if (import.meta.env?.DEV) {
