@@ -536,6 +536,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       productsCacheRef.current = null;
       if (isValidWarehouseId(warehouse.id)) loadProducts(warehouse.id, true);
       if (!isMounted.current) return;
+      showToast('Sale complete. Stock updated. Receipt ready.', 'ok');
       setSaleResult((prev) =>
         prev
           ? {
@@ -677,6 +678,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   }
 
   function handleClearCart() {
+    if (cart.length > 0 && !window.confirm(`Clear cart? ${cart.length} item${cart.length === 1 ? '' : 's'} will be removed. You can add items again from the product list.`)) {
+      return;
+    }
     setCart([]);
     setCartOpen(false);
   }

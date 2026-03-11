@@ -757,6 +757,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
             sizeCodes={sizeCodes}
             disabled={readOnlyMode}
             showValidation
+            onConfirmRemoveSizeBreakdown={() =>
+              window.confirm(
+                'Switch to one size? This will remove the size breakdown (e.g. S, M, L). Continue?'
+              )
+            }
           />
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">

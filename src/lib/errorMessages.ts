@@ -74,6 +74,9 @@ export function getUserFriendlyMessage(error: unknown): string {
   if (str.includes('saved locally') || str.includes('add_product_saved_locally')) {
     return 'Product was saved on this device. Sync when online to save to server.';
   }
+  if ((str.includes('duplicate') && str.includes('sku')) || (str.includes('sku') && str.includes('already exists'))) {
+    return 'A product with this SKU already exists. Use a unique SKU or edit the existing product.';
+  }
   if (str.includes('delete') && str.includes('fail')) {
     return 'Could not delete. Try again or refresh the list.';
   }

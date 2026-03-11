@@ -505,6 +505,8 @@ export default function ProductModal({
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const hasInitialized = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** Count of size rows when modal opened (for confirm before removing size breakdown). */
+  const initialSizeCountRef = useRef(0);
 
   useEffect(() => {
     if (!isOpen) {
@@ -516,7 +518,9 @@ export default function ProductModal({
     }
     if (hasInitialized.current) return;
     hasInitialized.current = true;
-    setForm(buildInitialForm(product));
+    const initial = buildInitialForm(product);
+    initialSizeCountRef.current = Array.isArray(product?.quantityBySize) ? product.quantityBySize.length : 0;
+    setForm(initial);
     setAttempted(false);
     setErrors({});
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -570,6 +574,20 @@ export default function ProductModal({
     setAttempted(true);
     if (!validate()) {
       scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    const hadMultipleSizes = initialSizeCountRef.current >= 2;
+    const nowFewerSizes =
+      form.sizes.sizeKind !== 'sized' ||
+      form.sizes.quantityBySize.length < initialSizeCountRef.current;
+    if (
+      product?.id &&
+      hadMultipleSizes &&
+      nowFewerSizes &&
+      !window.confirm(
+        'This will remove the size breakdown (e.g. S, M, L). The product will show as one quantity. Continue?'
+      )
+    ) {
       return;
     }
 
@@ -900,6 +918,11 @@ export default function ProductModal({
               sizeCodes={sizeCodes}
               onChange={sizes => set('sizes', sizes)}
               showValidation={attempted}
+              onConfirmRemoveSizeBreakdown={() =>
+                window.confirm(
+                  'Switch to one size? This will remove the size breakdown (e.g. S, M, L). Continue?'
+                )
+              }
             />
 
             {/* ── Divider ── */}

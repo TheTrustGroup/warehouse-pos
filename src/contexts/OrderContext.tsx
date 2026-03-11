@@ -332,6 +332,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
           createdAt: savedRaw.createdAt ? new Date(savedRaw.createdAt) : order.createdAt,
         };
         setOrders(prev => prev.map(o => (o.id === orderId ? updatedOrder : o)));
+        showToast('success', `Driver ${driverName} assigned. Order is now out for delivery.`);
       } catch (error) {
         if (is404(error)) {
           const updatedOrder: Order = {

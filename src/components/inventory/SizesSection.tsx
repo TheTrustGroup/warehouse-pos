@@ -34,6 +34,8 @@ interface SizesSectionProps {
   onChange: (next: SizesSectionValue) => void;
   disabled?: boolean;
   showValidation?: boolean;     // pass true when user attempts submit
+  /** When switching to "One size" or "NA" with 2+ size rows, call this; if it returns false, do not switch. */
+  onConfirmRemoveSizeBreakdown?: () => boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -176,6 +178,7 @@ export default function SizesSection({
   onChange,
   disabled = false,
   showValidation = false,
+  onConfirmRemoveSizeBreakdown,
 }: SizesSectionProps) {
 
   // Focus the last added row's size input
@@ -199,6 +202,14 @@ export default function SizesSection({
     if (kind === value.sizeKind) return;
 
     if (kind === 'na' || kind === 'one_size') {
+      if (
+        value.sizeKind === 'sized' &&
+        value.quantityBySize.length >= 2 &&
+        onConfirmRemoveSizeBreakdown &&
+        !onConfirmRemoveSizeBreakdown()
+      ) {
+        return;
+      }
       // Carry total quantity over, clear size rows
       const carried =
         value.sizeKind === 'sized'

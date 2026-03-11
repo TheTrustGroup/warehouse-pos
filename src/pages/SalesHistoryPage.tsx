@@ -16,6 +16,7 @@ import { apiGet, apiPost } from '../lib/apiClient';
 import { printReceipt } from '../lib/printReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
+import { useToast } from '../contexts/ToastContext';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { PERMISSIONS } from '../types/permissions';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -306,6 +307,7 @@ const FALLBACK_WAREHOUSES = [
 export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPageProps) {
   const { hasPermission, hasRole } = useAuth();
   const { warehouses: contextWarehouses, currentWarehouseId } = useWarehouse();
+  const { showToast } = useToast();
   const canVoid = hasPermission(PERMISSIONS.POS.VOID_TRANSACTION);
   const canClearHistory = hasRole(['admin', 'super_admin']);
 
@@ -344,11 +346,13 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
       const list = Array.isArray(data) ? data : (data as { data?: Sale[] }).data ?? [];
       setSales(list.filter((s): s is Sale => s != null && typeof s === 'object'));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load sales');
+      const errMsg = e instanceof Error ? e.message : 'Failed to load sales';
+      setError(errMsg);
+      showToast('error', errMsg);
     } finally {
       setLoading(false);
     }
-  }, [warehouseId, dateFilter, apiBaseUrl]);
+  }, [warehouseId, dateFilter, apiBaseUrl, showToast]);
 
   useEffect(() => { fetchSales(); }, [fetchSales]);
 
@@ -388,6 +392,9 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
 
   async function handleVoid(sale: Sale) {
     if (!apiBaseUrl || !canVoid) return;
+    if (!window.confirm('Void this sale? Stock will be restored to inventory and the sale will be marked void. This cannot be undone.')) {
+      return;
+    }
     setVoidingId(sale.id);
     setError(null);
     try {
@@ -396,9 +403,11 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
       setSales(prev =>
         prev.map(s => (s.id === sale.id ? { ...s, voidedAt: new Date().toISOString() } : s))
       );
+      showToast('success', 'Sale voided. Stock restored to inventory.');
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : `Void failed`;
+      const msg = e instanceof Error ? e.message : 'Void failed. Check your connection and try again.';
       setError(msg);
+      showToast('error', msg);
     } finally {
       setVoidingId(null);
     }
@@ -439,8 +448,11 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
       await apiPost<unknown>(base, '/api/admin/clear-sales-history', { confirm: 'CLEAR_ALL_SALES' });
       setSales([]);
       fetchSales();
+      showToast('success', 'Sales history cleared. Reports will reflect the change.');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Clear failed');
+      const errMsg = e instanceof Error ? e.message : 'Clear failed. Try again or check your connection.';
+      setError(errMsg);
+      showToast('error', errMsg);
     } finally {
       setClearHistoryLoading(false);
     }

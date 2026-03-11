@@ -8,6 +8,7 @@ import { CategoryManagement } from '../components/settings/CategoryManagement';
 import { LocalStorageCacheView } from '../components/settings/LocalStorageCacheView';
 import { AdminDashboard } from '../components/settings/AdminDashboard';
 import { useSettings } from '../contexts/SettingsContext';
+import { useToast } from '../contexts/ToastContext';
 import { Button } from '../components/ui/Button';
 
 type SettingsTab = 'business' | 'system' | 'users' | 'categories' | 'cache' | 'admin';
@@ -21,6 +22,7 @@ export function Settings() {
     tabParam && TAB_IDS.includes(tabParam) ? tabParam : 'business'
   );
   const { resetToDefaults } = useSettings();
+  const { showToast } = useToast();
 
   // Update tab when URL param changes
   useEffect(() => {
@@ -45,9 +47,9 @@ export function Settings() {
   ];
 
   const handleReset = () => {
-    if (confirm('Reset all settings to defaults? This cannot be undone.')) {
+    if (window.confirm('Reset all settings to defaults? Business profile, system preferences, and local cache settings will be restored. This cannot be undone.')) {
       resetToDefaults();
-      alert('Settings reset successfully!');
+      showToast('success', 'Settings reset to defaults. Refresh the page if you don’t see changes.');
     }
   };
 

@@ -358,6 +358,7 @@ export function Orders() {
                       size="sm"
                       variant="danger"
                       onClick={() => {
+                        if (!window.confirm('Mark this delivery as failed? Stock will be returned. You can add a reason in the next step.')) return;
                         const reason = prompt('Reason for failure:');
                         if (reason) markAsFailed(order.id, reason);
                       }}
@@ -374,6 +375,7 @@ export function Orders() {
                     size="sm"
                     variant="secondary"
                     onClick={() => {
+                      if (!window.confirm('Cancel this order? Stock will be returned if it was already deducted. This cannot be undone.')) return;
                       const reason = prompt('Reason for cancellation (optional):') ?? '';
                       cancelOrder(order.id, reason.trim() || 'Cancelled by user');
                     }}

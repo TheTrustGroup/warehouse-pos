@@ -16,6 +16,7 @@ import { API_BASE_URL } from '../lib/api';
 import { apiGet, apiPatch } from '../lib/apiClient';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { isValidWarehouseId } from '../lib/warehouseId';
+import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -262,13 +263,15 @@ export default function DeliveriesPage({ warehouseId: propWarehouseId = '', apiB
   const [actionLoading,  setActionLoading]  = useState<string | null>(null);
   const [toast,          setToast]          = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const isMounted = useRef(true);
-
-  useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
+  const showToastRef = useRef<(msg: string, type: 'success' | 'error') => void>(() => {});
 
   function showToast(msg: string, type: 'success' | 'error') {
     setToast({ msg, type });
     setTimeout(() => { if (isMounted.current) setToast(null); }, 3000);
   }
+  showToastRef.current = showToast;
+
+  useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
 
   // ── Load all pending + dispatched deliveries ────────────────────────────
 
@@ -287,7 +290,11 @@ export default function DeliveriesPage({ warehouseId: propWarehouseId = '', apiB
       const list = Array.isArray(json) ? json : (json?.data ?? []);
       if (isMounted.current) setDeliveries(list as Delivery[]);
     } catch (e: unknown) {
-      if (isMounted.current) setError(e instanceof Error ? e.message : 'Failed to load deliveries');
+      if (isMounted.current) {
+        const errMsg = getUserFriendlyMessage(e);
+        setError(errMsg);
+        showToastRef.current(errMsg, 'error');
+      }
     } finally {
       if (isMounted.current) setLoading(false);
     }
@@ -308,10 +315,15 @@ export default function DeliveriesPage({ warehouseId: propWarehouseId = '', apiB
           ? prev.filter(d => d.id !== saleId)
           : prev.map(d => d.id === saleId ? { ...d, deliveryStatus: newStatus } : d)
       );
-      const msg = newStatus === 'delivered' ? '✓ Marked as delivered' : newStatus === 'dispatched' ? '✓ Marked as dispatched' : '✓ Delivery cancelled';
+      const msg =
+        newStatus === 'delivered'
+          ? 'Delivery marked as delivered. It will no longer appear in the active list.'
+          : newStatus === 'dispatched'
+            ? 'Marked as dispatched. Customer can track delivery.'
+            : 'Delivery cancelled. Sale remains recorded.';
       showToast(msg, 'success');
     } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Action failed', 'error');
+      showToast(getUserFriendlyMessage(e), 'error');
     } finally {
       setActionLoading(null);
     }

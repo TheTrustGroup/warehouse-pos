@@ -223,7 +223,7 @@ function DeleteDialog({
             </p>
             <p className="text-[13px] text-[var(--edk-ink-2)] mt-1 leading-relaxed">
               <span className="font-semibold text-[var(--edk-ink)]">&quot;{product.name}&quot;</span> will be
-              permanently removed from inventory. This cannot be undone.
+              permanently removed from inventory and reports. This cannot be undone.
             </p>
           </div>
         </div>
@@ -525,9 +525,9 @@ export default function InventoryPage(_props: InventoryPageProps) {
     setConfirmDelete(null);
     try {
       await contextDeleteProduct(product.id);
-      showToast(`"${product.name}" deleted`, 'success');
+      showToast(`"${product.name}" deleted. Stock removed from inventory and reports.`, 'success');
     } catch (e: unknown) {
-      showToast(getUserFriendlyMessage(e), 'error');
+      showToast(getUserFriendlyMessage(e) + ' You can refresh the list and try again.', 'error');
     }
   }
 
@@ -553,11 +553,15 @@ export default function InventoryPage(_props: InventoryPageProps) {
           quantity,
         } as Parameters<typeof contextUpdateProduct>[1]);
         lastSaveTimeRef.current = Date.now();
-        showToast(`${payload.name} updated`, 'success');
+        const sizeCount = payload.sizeKind === 'sized' && quantityBySize.length > 0 ? quantityBySize.length : 0;
+        showToast(
+          sizeCount > 0 ? `"${payload.name}" saved with ${sizeCount} size${sizeCount === 1 ? '' : 's'}.` : `"${payload.name}" updated.`,
+          'success'
+        );
       } catch (e: unknown) {
         const msg = getUserFriendlyMessage(e);
         if (!(isAnyApiCircuitDegraded() && /server|unavailable|writes disabled|connection is restored/i.test(msg)))
-          showToast(msg, 'error');
+          showToast(msg + ' Check your connection or try again.', 'error');
         throw e;
       }
     } else {
@@ -580,11 +584,15 @@ export default function InventoryPage(_props: InventoryPageProps) {
           images: rest.images ?? [],
         } as Parameters<typeof contextAddProduct>[0]);
         lastSaveTimeRef.current = Date.now();
-        showToast(`${payload.name} added`, 'success');
+        const sizeCount = payload.sizeKind === 'sized' && quantityBySize.length > 0 ? quantityBySize.length : 0;
+        showToast(
+          sizeCount > 0 ? `"${payload.name}" added with ${sizeCount} size${sizeCount === 1 ? '' : 's'}.` : `"${payload.name}" added.`,
+          'success'
+        );
       } catch (e: unknown) {
         const msg = getUserFriendlyMessage(e);
         if (!(isAnyApiCircuitDegraded() && /server|unavailable|writes disabled|connection is restored/i.test(msg)))
-          showToast(msg, 'error');
+          showToast(msg + ' Check your connection or try again.', 'error');
         throw e;
       }
     }
