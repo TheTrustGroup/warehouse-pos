@@ -13,6 +13,7 @@ import { isValidId } from '@/lib/validation';
 import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 import { getSizeCodes } from '@/lib/data/sizeCodes';
 import { deleteWarehouseProduct } from '@/lib/data/warehouseProducts';
+import { uploadProductImages } from '@/lib/storage/productImages';
 
 function withCors(res: NextResponse, req: NextRequest): NextResponse {
   const h = corsHeaders(req);
@@ -106,6 +107,17 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
 
   // Normalize array/object fields so RPC never receives scalars (avoids "cannot get array length of a scalar").
   body = normalizeProductBody(body);
+
+  // Upload any base64 images to Storage and replace with public URLs (same as POST create).
+  const rawImages = Array.isArray(body.images) ? (body.images as string[]) : [];
+  if (rawImages.length > 0) {
+    try {
+      body = { ...body, images: await uploadProductImages(rawImages, id) };
+    } catch (e) {
+      console.error('[PUT /api/products/:id] image upload failed:', e instanceof Error ? e.message : e);
+      // Continue with original images so update still succeeds
+    }
+  }
 
   const bodyWarehouseId = String(body.warehouseId ?? body.warehouse_id ?? '').trim();
   const wid = await getEffectiveWarehouseId(auth, bodyWarehouseId || undefined);

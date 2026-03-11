@@ -1,6 +1,6 @@
 /**
  * Product image URL helper — CDN-ready.
- * For list/grid use 'thumb'; for detail/lightbox use 'full'.
+ * Use 'medium' (400px) for list/grid/cards to avoid blur; 'full' for detail/lightbox.
  * - Data URLs (base64): returned as-is.
  * - Supabase Storage public URLs: rewritten to the Image Transform API (thumb/medium/full).
  *   Requires Supabase Pro for transforms. See docs/CDN_AND_IMAGE_OPTIMIZATION.md.

@@ -4,6 +4,7 @@ import { useInventory } from '../../contexts/InventoryContext';
 import { usePOS } from '../../contexts/POSContext';
 import { formatCurrency, getCategoryDisplay } from '../../lib/utils';
 import { safeProductImageUrl, EMPTY_IMAGE_DATA_URL } from '../../lib/imageUpload';
+import { getProductImageUrl } from '../../lib/productImageUrl';
 import { Button } from '../ui/Button';
 
 /** Products from useInventory() are used as POSProduct-compatible (see SizePickerSheet POSProduct). */
@@ -111,7 +112,7 @@ export function ProductSearch() {
               const hasImage = safeSrc && safeSrc !== EMPTY_IMAGE_DATA_URL;
               return hasImage ? (
                 <img
-                  src={safeSrc}
+                  src={getProductImageUrl(safeSrc, 'medium')}
                   alt=""
                   loading="lazy"
                   className="w-full h-24 object-cover rounded-lg mb-2"

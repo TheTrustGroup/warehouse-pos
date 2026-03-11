@@ -155,7 +155,7 @@ export function ProductTableView({
                   <td className="px-4 py-3 align-middle">
                     {Array.isArray(product.images) && product.images[0] ? (
                       <img 
-                        src={getProductImageUrl(product.images[0], 'thumb')} 
+                        src={getProductImageUrl(product.images[0], 'medium')} 
                         alt={product.name}
                         loading="lazy"
                         className="w-14 h-14 rounded-lg object-cover shadow-sm border-2 border-white/80"

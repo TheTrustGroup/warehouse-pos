@@ -9,6 +9,7 @@
 // ============================================================
 
 import { safeProductImageUrl, EMPTY_IMAGE_DATA_URL } from '../../lib/imageUpload';
+import { getProductImageUrl } from '../../lib/productImageUrl';
 import { type POSProduct } from './SizePickerSheet';
 import { LOW_STOCK_THRESHOLD } from '../../lib/stockConstants';
 
@@ -116,7 +117,7 @@ export default function POSProductCard({ product, onSelect }: POSProductCardProp
       <div className="relative w-full aspect-square bg-[var(--edk-bg)] overflow-hidden">
         {hasImage ? (
           <img
-            src={safeSrc}
+            src={getProductImageUrl(safeSrc, 'medium')}
             alt={product.name}
             width={256}
             height={256}
