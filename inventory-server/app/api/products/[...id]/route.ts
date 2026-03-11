@@ -136,7 +136,7 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     // warehouse_products has no warehouse_id — one row per product. Look up by id only.
     const { data: existingRow } = await db
       .from('warehouse_products')
-      .select('id, version, size_kind')
+      .select('id, version, size_kind, images')
       .eq('id', id)
       .maybeSingle();
 
@@ -145,6 +145,13 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
         NextResponse.json({ error: 'Product not found' }, { status: 404 }),
         req
       );
+    }
+
+    // When client sends empty images (e.g. list view omitted them), preserve existing so we never wipe product images on update.
+    const rawImagesNow = Array.isArray(body.images) ? (body.images as string[]) : [];
+    if (rawImagesNow.length === 0) {
+      const existingImages = Array.isArray((existingRow as { images?: unknown }).images) ? (existingRow as { images: string[] }).images : [];
+      if (existingImages.length > 0) body.images = existingImages;
     }
 
     const existing = existingRow as { id?: string; version?: number; size_kind?: string };

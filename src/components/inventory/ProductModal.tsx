@@ -593,6 +593,10 @@ export default function ProductModal({
 
     setIsSubmitting(true);
     try {
+      // When user has 2+ size rows, always send sized so multiple sizes never revert to one_size (belt-and-suspenders with server).
+      const quantityBySize = form.sizes.quantityBySize ?? [];
+      const sizeKind =
+        quantityBySize.length >= 2 ? 'sized' : form.sizes.sizeKind;
       const payload = {
         ...(product?.id ? { id: product.id } : {}),
         name: form.name.trim(),
@@ -603,9 +607,9 @@ export default function ProductModal({
         sellingPrice: Number(form.sellingPrice) || 0,
         costPrice: Number(form.costPrice) || 0,
         reorderLevel: Number(form.reorderLevel) || 0,
-        sizeKind: form.sizes.sizeKind,
+        sizeKind,
         quantity: form.sizes.quantity,
-        quantityBySize: form.sizes.quantityBySize,
+        quantityBySize,
         location: { warehouse: defaultWarehouseId ?? '', ...form.location },
         supplier: form.supplier,
         images: form.images,

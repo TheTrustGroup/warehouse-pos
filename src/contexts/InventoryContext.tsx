@@ -776,6 +776,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
       const isSized = updates.sizeKind === 'sized' || updated.sizeKind === 'sized';
       const payload = { ...productToPayload(updated), warehouseId: (updates.warehouseId ?? warehouseId ?? '').trim() || '' } as Record<string, unknown>;
+      // Never send empty images when product had images (list view may omit them); server will then preserve existing.
+      if (
+        Array.isArray(updates.images) &&
+        updates.images.length === 0 &&
+        Array.isArray(product.images) &&
+        product.images.length > 0
+      ) {
+        payload.images = product.images;
+      }
       // Always send quantityBySize when product is sized so the server applies the new sizes (add/change/clear).
       if (isSized) {
         payload.quantityBySize = Array.isArray(updates.quantityBySize)
