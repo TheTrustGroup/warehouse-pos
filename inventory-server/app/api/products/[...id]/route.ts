@@ -264,12 +264,33 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
       }
     }
 
+    // Ensure by_size table is written even if RPC only updated product row (some setups don't persist p_quantity_by_size).
+    if (sizesToWrite !== null) {
+      await db.from('warehouse_inventory_by_size').delete().eq('warehouse_id', wid).eq('product_id', id);
+      if (sizesToWrite.length > 0) {
+        const { error: bySizeErr } = await db.from('warehouse_inventory_by_size').insert(
+          sizesToWrite.map(r => ({
+            warehouse_id: wid,
+            product_id: id,
+            size_code: r.sizeCode,
+            quantity: Math.max(0, r.quantity),
+            updated_at: now,
+          }))
+        );
+        if (bySizeErr) throw new Error(`Failed to save sizes: ${bySizeErr.message}`);
+      }
+      await db.from('warehouse_inventory').upsert(
+        { warehouse_id: wid, product_id: id, quantity: totalQty, updated_at: now },
+        { onConflict: 'warehouse_id,product_id' }
+      );
+    }
+
     const updated = await fetchOne(db, id, wid);
     if (!updated)
       return withCors(NextResponse.json({ error: 'Product not found after update' }, { status: 404 }), req);
 
-    const qtyBySize = Array.isArray(updated.quantityBySize) ? updated.quantityBySize : [];
-    if (sizesToWrite && sizesToWrite.length > 0 && qtyBySize.length === 0) {
+    // Always return the sizes we wrote so the client never gets stale data (RPC/fetchOne can lag or omit by_size).
+    if (sizesToWrite && sizesToWrite.length > 0) {
       updated.quantityBySize = sizesToWrite.map(r => ({
         sizeCode: r.sizeCode, sizeLabel: r.sizeCode, quantity: r.quantity,
       }));
