@@ -861,7 +861,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.timeEnd('Total Update Time');
       }
       // Refetch in background so the modal can close immediately; don't await.
-      const postSaveDelayMs = isSized ? 2000 : 500;
+      const postSaveDelayMs = isSized ? 5000 : 2000;
       setTimeout(() => {
         invalidateProducts();
         queryClient.refetchQueries({ queryKey: queryKeys.products(warehouseId) });
