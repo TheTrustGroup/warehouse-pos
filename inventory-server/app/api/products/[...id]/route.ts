@@ -161,6 +161,7 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
 
     const effectiveSK = singleOneSize ? 'one_size' : (hasSizesInBody ? 'sized' : sizeKind);
     const validSizes  = effectiveSK === 'sized' ? filterSizes(rawSizes) : [];
+    let effectiveSKForRow = effectiveSK;
 
     let sizesToWrite: Array<{ sizeCode: string; quantity: number }> | null;
     let totalQty: number;
@@ -182,8 +183,24 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
         totalQty = (cur ?? []).reduce((s: number, r: { quantity?: number }) => s + Number(r.quantity ?? 0), 0);
       }
     } else {
-      sizesToWrite = [];
-      totalQty     = Number(body.quantity ?? 0);
+      // Prevent false save: if product currently has multiple sizes (or one real size), don't wipe when request says na/one_size.
+      const { data: existingBySize } = await db
+        .from('warehouse_inventory_by_size')
+        .select('size_code, quantity')
+        .eq('warehouse_id', wid)
+        .eq('product_id', id);
+      const existingRows = (existingBySize ?? []) as Array<{ size_code: string; quantity: number }>;
+      const hasMultipleRealSizes =
+        existingRows.length > 1 ||
+        (existingRows.length === 1 && !/^ONE_?SIZE$/i.test(String(existingRows[0]?.size_code ?? '').trim()));
+      if (hasMultipleRealSizes) {
+        sizesToWrite = null;
+        totalQty = existingRows.reduce((s, r) => s + Number(r.quantity ?? 0), 0);
+        effectiveSKForRow = 'sized';
+      } else {
+        sizesToWrite = [];
+        totalQty     = Number(body.quantity ?? 0);
+      }
     }
 
     // Validate size codes against catalog before DB write (trigger would reject invalid codes)
@@ -209,7 +226,7 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
       }
     }
 
-    const productRow = buildRow(body, id, wid, effectiveSK, now, currentVersion + 1);
+    const productRow = buildRow(body, id, wid, effectiveSKForRow, now, currentVersion + 1);
 
     const { error: rpcErr } = await db.rpc('update_warehouse_product_atomic', {
       p_id:               id,

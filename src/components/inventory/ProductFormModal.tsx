@@ -98,6 +98,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
   useEffect(() => {
     formDataImagesRef.current = formData.images;
   }, [formData.images]);
+  /** Count of real size rows when modal opened (for confirm before removing size breakdown). */
+  const initialRealSizesCountRef = useRef(0);
   /** Only focus first field when modal first opens; avoid re-running on every render (unstable onClose) so typing doesn't lose focus / dismiss keyboard. */
   const didInitialFocusRef = useRef(false);
   /** Track last focused form field so we can restore focus when mobile browser or re-render steals it. */
@@ -148,7 +150,9 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
     if (currentProduct) {
       const rawQtyBySize = (currentProduct.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
       const hasRealSizes = rawQtyBySize.some((q) => !isSyntheticOneSizeRow(q.sizeCode ?? ''));
-      const qtyBySize = hasRealSizes ? rawQtyBySize.filter((q) => !isSyntheticOneSizeRow(q.sizeCode ?? '')) : rawQtyBySize;
+      const realSizesOnly = rawQtyBySize.filter((q) => !isSyntheticOneSizeRow(q.sizeCode ?? ''));
+      initialRealSizesCountRef.current = realSizesOnly.length;
+      const qtyBySize = hasRealSizes ? realSizesOnly : rawQtyBySize;
       const validImages = Array.isArray(currentProduct.images)
         ? currentProduct.images.filter(
             (img): img is string =>
@@ -188,6 +192,7 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
         imagesLengthRef.current = validImages.length;
       }
     } else {
+      initialRealSizesCountRef.current = 0;
       setFormData((prev) => ({
         sku: generateSKU(),
         barcode: '',
@@ -419,6 +424,11 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
       .filter((r) => !isSyntheticOneSizeRow(r.sizeCode ?? ''));
     if (formData.sizeKind === 'sized' && validSizeRows.length === 0) {
       showToast('error', 'Add at least one size row to save.');
+      return;
+    }
+    const hadMultipleSizes = initialRealSizesCountRef.current >= 2;
+    const nowFewerSizes = validSizeRows.length < initialRealSizesCountRef.current;
+    if (product?.id && hadMultipleSizes && nowFewerSizes && !window.confirm('This will remove the size breakdown (e.g. S, M, L). The product will show as one quantity. Continue?')) {
       return;
     }
     const name = nameRef.current?.value ?? formData.name;
