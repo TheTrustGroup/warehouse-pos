@@ -3,7 +3,6 @@ import { Search, Scan, Package } from 'lucide-react';
 import { useInventory } from '../../contexts/InventoryContext';
 import { usePOS } from '../../contexts/POSContext';
 import { formatCurrency, getCategoryDisplay } from '../../lib/utils';
-import { safeProductImageUrl, EMPTY_IMAGE_DATA_URL } from '../../lib/imageUpload';
 import { getProductImageUrl } from '../../lib/productImageUrl';
 import { Button } from '../ui/Button';
 
@@ -108,11 +107,11 @@ export function ProductSearch() {
           >
             {(() => {
               const firstImage = (product.images ?? [])[0];
-              const safeSrc = firstImage ? safeProductImageUrl(firstImage) : '';
-              const hasImage = safeSrc && safeSrc !== EMPTY_IMAGE_DATA_URL;
+              const imageSrc = firstImage ? getProductImageUrl(firstImage, 'medium') : '';
+              const hasImage = Boolean(imageSrc);
               return hasImage ? (
                 <img
-                  src={getProductImageUrl(safeSrc, 'medium')}
+                  src={imageSrc}
                   alt=""
                   loading="lazy"
                   className="w-full h-24 object-cover rounded-lg mb-2"

@@ -23,7 +23,7 @@ import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { resetAllApiCircuitBreakers } from '../lib/circuit';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
-import { getProductImageDisplayUrl } from '../lib/imageUpload';
+import { getProductImageUrl } from '../lib/productImageUrl';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { normalizeQuantityBySize } from '../lib/utils';
 import { onUnauthorized } from '../lib/onUnauthorized';
@@ -577,11 +577,23 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   function handleAddToCart(input: CartLineInput) {
     const key = buildCartKey(input.productId, input.sizeCode ?? null);
+    const maxAdd = getRemainingForProduct(
+      products,
+      cart,
+      input.productId,
+      input.sizeCode ?? null,
+      0
+    );
+    if (maxAdd <= 0) {
+      showToast('No stock left for this item', 'err');
+      return;
+    }
+    const qtyToAdd = Math.min(input.qty, maxAdd);
     setCart((prev) => {
       const exists = prev.find((l) => l.key === key);
       if (exists)
         return prev.map((l) =>
-          l.key === key ? { ...l, qty: l.qty + input.qty } : l
+          l.key === key ? { ...l, qty: l.qty + qtyToAdd } : l
         );
       return [
         ...prev,
@@ -593,7 +605,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           sizeCode: input.sizeCode ?? null,
           sizeLabel: input.sizeLabel ?? null,
           unitPrice: input.unitPrice,
-          qty: input.qty,
+          qty: qtyToAdd,
           imageUrl: input.imageUrl ?? null,
         },
       ];
@@ -606,7 +618,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       cart,
       input.productId,
       input.sizeCode ?? null,
-      input.qty
+      qtyToAdd
     );
     if (remaining <= LOW_STOCK_BROADCAST_THRESHOLD) {
       const broadcastKey = buildCartKey(input.productId, input.sizeCode ?? null);
@@ -627,20 +639,22 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   function handleUpdateQty(key: string, delta: number) {
     const line = cart.find((l) => l.key === key);
+    if (!line) return;
+    const newQty = line.qty + delta;
+    if (newQty <= 0) {
+      setCart((prev) => prev.filter((l) => l.key !== key));
+      return;
+    }
+    const maxQty =
+      line.qty +
+      getRemainingForProduct(products, cart, line.productId, line.sizeCode ?? null, 0);
+    const cappedQty = Math.min(newQty, maxQty);
     setCart((prev) =>
-      prev.map((l) =>
-        l.key === key ? { ...l, qty: Math.max(1, l.qty + delta) } : l
-      )
+      prev.map((l) => (l.key === key ? { ...l, qty: cappedQty } : l))
     );
-    if (delta > 0 && line) {
-      const remaining = getRemainingForProduct(
-        products,
-        cart,
-        line.productId,
-        line.sizeCode ?? null,
-        delta
-      );
-      if (remaining <= LOW_STOCK_BROADCAST_THRESHOLD) {
+    if (delta > 0 && cappedQty > 0) {
+      const remainingAfterUpdate = maxQty - cappedQty;
+      if (remainingAfterUpdate <= LOW_STOCK_BROADCAST_THRESHOLD) {
         const broadcastKey = buildCartKey(line.productId, line.sizeCode ?? null);
         const now = Date.now();
         const last = lastLowStockBroadcastRef.current;
@@ -650,7 +664,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
             productName: line.name,
             sizeCode: line.sizeCode ?? null,
             sizeLabel: line.sizeLabel ?? null,
-            remaining,
+            remaining: remainingAfterUpdate,
             productId: line.productId,
           });
         }
@@ -905,7 +919,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
                 {cart.map((l) => (
                   <li key={l.key} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-[var(--edk-bg)]">
                     <div className="w-10 h-10 rounded-[var(--edk-radius-sm)] bg-[var(--edk-bg)] border border-[var(--edk-border)] flex-shrink-0 overflow-hidden">
-                      {l.imageUrl ? <img src={getProductImageDisplayUrl(l.imageUrl, { width: 80, height: 80, resize: 'cover' })} alt="" className="w-full h-full object-cover" /> : null}
+                      {l.imageUrl ? <img src={getProductImageUrl(l.imageUrl, 'thumb')} alt="" className="w-full h-full object-cover" /> : null}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-semibold truncate">{l.name}</p>

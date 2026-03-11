@@ -13,7 +13,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { type SalePayload } from './CartSheet';
-import { safeProductImageUrl } from '../../lib/imageUpload';
+import { getProductImageUrl } from '../../lib/productImageUrl';
 import { buildReceiptHtml } from '../../lib/receiptTemplate';
 
 // ── Extended sale type (POSPage sets receiptId from server) ────────────────
@@ -186,7 +186,7 @@ function ReceiptLine({ line }: { line: CompletedSaleLine }) {
       {hasImg ? (
         <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-slate-100 border border-slate-200">
           <img
-            src={safeProductImageUrl(line.imageUrl!)}
+            src={getProductImageUrl(line.imageUrl!, 'thumb')}
             alt={line.name}
             className="w-full h-full object-cover"
             onError={() => setImgError(true)}

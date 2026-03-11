@@ -152,12 +152,14 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     const sizeKind       = normSK(body, existing.size_kind ?? '');
     const rawSizes       = parseRawSizes(body);
 
+    // When client sends non-empty quantityBySize, treat as sized so we never wipe multiple sizes (fix: sizes reverting to quantity-only).
+    const hasSizesInBody = rawSizes.length > 0;
     const singleOneSize =
-      sizeKind === 'sized' &&
+      (sizeKind === 'sized' || (hasSizesInBody && rawSizes.length === 1)) &&
       rawSizes.length === 1 &&
       /^ONE_?SIZE$/i.test(rawSizes[0]?.sizeCode ?? '');
 
-    const effectiveSK = singleOneSize ? 'one_size' : sizeKind;
+    const effectiveSK = singleOneSize ? 'one_size' : (hasSizesInBody ? 'sized' : sizeKind);
     const validSizes  = effectiveSK === 'sized' ? filterSizes(rawSizes) : [];
 
     let sizesToWrite: Array<{ sizeCode: string; quantity: number }> | null;

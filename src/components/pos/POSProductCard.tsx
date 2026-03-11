@@ -8,7 +8,6 @@
 // cashier needs: image, name, price, stock status.
 // ============================================================
 
-import { safeProductImageUrl, EMPTY_IMAGE_DATA_URL } from '../../lib/imageUpload';
 import { getProductImageUrl } from '../../lib/productImageUrl';
 import { type POSProduct } from './SizePickerSheet';
 import { LOW_STOCK_THRESHOLD } from '../../lib/stockConstants';
@@ -91,8 +90,8 @@ export default function POSProductCard({ product, onSelect }: POSProductCardProp
   const status = getStockStatus(product);
   const isOut = status === 'out';
   const firstImage = (product.images ?? [])[0];
-  const safeSrc = firstImage ? safeProductImageUrl(firstImage) : '';
-  const hasImage = safeSrc && safeSrc !== EMPTY_IMAGE_DATA_URL;
+  const imageSrc = firstImage ? getProductImageUrl(firstImage, 'medium') : '';
+  const hasImage = Boolean(imageSrc);
 
   const stockLabel = isOut ? 'Out of stock' : qty <= 5 ? `${qty} left` : `${qty} in stock`;
 
@@ -117,7 +116,7 @@ export default function POSProductCard({ product, onSelect }: POSProductCardProp
       <div className="relative w-full aspect-square bg-[var(--edk-bg)] overflow-hidden">
         {hasImage ? (
           <img
-            src={getProductImageUrl(safeSrc, 'medium')}
+            src={imageSrc}
             alt={product.name}
             width={256}
             height={256}
