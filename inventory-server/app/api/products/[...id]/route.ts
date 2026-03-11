@@ -339,7 +339,7 @@ async function fetchOne(db: DB, id: string, wid: string) {
     .sort((a, b) => a.sizeCode.localeCompare(b.sizeCode));
 
   const pAny = p as Record<string, unknown>;
-  let qty = sizes.length > 0
+  const qty = sizes.length > 0
     ? sizes.reduce((s, r) => s + r.quantity, 0)
     : Number((invRow as { quantity?: number } | null)?.quantity ?? 0);
 

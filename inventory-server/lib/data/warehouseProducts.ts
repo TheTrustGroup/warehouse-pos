@@ -199,7 +199,7 @@ export async function getWarehouseProducts(
     const rowId = String(row.id ?? '');
     let sizes = (sizeMap[rowId] ?? []).sort((a, b) => a.sizeCode.localeCompare(b.sizeCode, undefined, { numeric: true }));
     const hasSizeRows = sizes.length > 0;
-    let totalQuantity = hasSizeRows ? sizes.reduce((s, r) => s + r.quantity, 0) : (invMap[rowId] ?? 0);
+    const totalQuantity = hasSizeRows ? sizes.reduce((s, r) => s + r.quantity, 0) : (invMap[rowId] ?? 0);
     const rawSizeKind = String(row.size_kind ?? 'na');
     // When product has no per-size rows but has quantity in warehouse_inventory, return a synthetic "One size" row so sizes "come back" in inventory and user can add more when editing.
     let sizeKind = rawSizeKind;
