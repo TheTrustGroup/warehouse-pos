@@ -821,11 +821,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         ? normalizeProduct(fromApi as Record<string, unknown>)
         : updated;
       const apiHasImages = Array.isArray(normalized.images) && normalized.images.length > 0;
-      // Keep images from our update if API response omits them (e.g. backend doesn't return base64)
-      const withImages =
+      // Keep images from our update if API response omits them (e.g. backend doesn't return base64).
+      // If result would be empty, preserve from local store so size-only updates don't wipe displayed images.
+      const resolvedImages =
         apiHasImages
-          ? normalized
-          : { ...normalized, images: payloadImages.length > 0 ? payloadImages : (Array.isArray(updated.images) ? updated.images : []) };
+          ? (normalized.images as string[])
+          : payloadImages.length > 0
+            ? payloadImages
+            : (Array.isArray(updated.images) && updated.images.length > 0 ? updated.images : getProductImages(id) ?? []);
+      const withImages = { ...normalized, images: resolvedImages };
       const sizeKind = updates.sizeKind ?? (withImages as Product).sizeKind ?? 'na';
       const rawApiSizes = (withImages as Product).quantityBySize;
       const apiQuantityBySize = Array.isArray(rawApiSizes) ? rawApiSizes : [];
