@@ -251,37 +251,30 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     }
 
     const productRow = buildRow(body, id, wid, effectiveSKForRow, now, currentVersion + 1);
+    const { warehouse_id: _omitWid, ...rowForProducts } = productRow as Record<string, unknown> & { warehouse_id?: string };
+    void _omitWid;
 
-    const { error: rpcErr } = await db.rpc('update_warehouse_product_atomic', {
-      p_id:               id,
-      p_warehouse_id:     wid,
-      p_row:              productRow,
-      p_current_version:  currentVersion,
-      p_quantity:         totalQty,
-      p_quantity_by_size: sizesToWrite !== null ? JSON.stringify(sizesToWrite) : null,
-    });
+    // Single code path: direct table updates (no RPC). Version check for optimistic lock.
+    const { data: updatedProduct, error: upErr } = await db
+      .from('warehouse_products')
+      .update(rowForProducts)
+      .eq('id', id)
+      .eq('version', currentVersion)
+      .select('id')
+      .maybeSingle();
 
-    if (rpcErr) {
-      if (rpcErr.code === '42883' || rpcErr.message?.includes('does not exist')) {
-        await manualUpdate(db, id, wid, productRow, totalQty, sizesToWrite, now);
-      } else if (/scalar|array length|array_length/i.test(rpcErr.message ?? '')) {
-        // RPC expected array but received scalar (e.g. jsonb); fallback to direct update.
-        await manualUpdate(db, id, wid, productRow, totalQty, sizesToWrite, now);
-      } else if (rpcErr.message?.includes('someone else') || rpcErr.code === 'P0001') {
-        return withCors(
-          NextResponse.json(
-            { error: 'This product was modified by someone else. Please refresh and try again.' },
-            { status: 409 }
-          ),
-          req
-        );
-      } else {
-        console.error('[PUT /api/products/:id] RPC error:', rpcErr.code, rpcErr.message);
-        return withCors(NextResponse.json({ error: rpcErr.message }, { status: 500 }), req);
-      }
+    if (upErr) throw new Error(`Failed to update product: ${upErr.message}`);
+    if (!updatedProduct) {
+      return withCors(
+        NextResponse.json(
+          { error: 'This product was modified by someone else. Please refresh and try again.' },
+          { status: 409 }
+        ),
+        req
+      );
     }
 
-    // Ensure by_size table is written even if RPC only updated product row (some setups don't persist p_quantity_by_size).
+    // Write by_size and warehouse_inventory (single source of truth for update path).
     if (sizesToWrite !== null) {
       await db.from('warehouse_inventory_by_size').delete().eq('warehouse_id', wid).eq('product_id', id);
       if (sizesToWrite.length > 0) {
@@ -412,43 +405,6 @@ async function fetchOne(db: DB, id: string, wid: string) {
 
   const rowWithSizes = sizes.length > 0 ? { ...pAny, size_kind: 'sized' as string } : pAny;
   return toShape({ ...rowWithSizes, warehouse_id: wid }, qty, sizes);
-}
-
-async function manualUpdate(
-  db: DB, id: string, wid: string,
-  row: Record<string, unknown>, qty: number,
-  sizeRows: Array<{ sizeCode: string; quantity: number }> | null,
-  now: string
-) {
-  // Update by id only so it works when warehouse_products has no warehouse_id (one row per product).
-  const { warehouse_id: _omit, ...rowWithoutWarehouse } = row as Record<string, unknown> & { warehouse_id?: string };
-  void _omit;
-  const { error: upErr } = await db
-    .from('warehouse_products')
-    .update(rowWithoutWarehouse)
-    .eq('id', id);
-
-  if (upErr) throw new Error(`Failed to update product: ${upErr.message}`);
-
-  await db.from('warehouse_inventory').upsert(
-    { warehouse_id: wid, product_id: id, quantity: qty, updated_at: now },
-    { onConflict: 'warehouse_id,product_id' }
-  );
-
-  if (sizeRows !== null) {
-    await db.from('warehouse_inventory_by_size').delete()
-      .eq('warehouse_id', wid).eq('product_id', id);
-    if (sizeRows.length > 0) {
-      const { error: insErr } = await db.from('warehouse_inventory_by_size').insert(
-        sizeRows.map(r => ({
-          warehouse_id: wid, product_id: id,
-          size_code: r.sizeCode, quantity: Math.max(0, r.quantity),
-          updated_at: now,
-        }))
-      );
-      if (insErr) throw new Error(`Failed to save sizes: ${insErr.message}`);
-    }
-  }
 }
 
 function ensureImagesArray(images: unknown): string[] {
