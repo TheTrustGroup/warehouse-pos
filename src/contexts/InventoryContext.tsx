@@ -860,12 +860,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         console.timeEnd('State Update (update)');
         console.timeEnd('Total Update Time');
       }
-      // Refetch in background so the modal can close immediately; don't await.
-      const postSaveDelayMs = isSized ? 5000 : 2000;
-      setTimeout(() => {
-        invalidateProducts();
-        queryClient.refetchQueries({ queryKey: queryKeys.products(warehouseId) });
-      }, postSaveDelayMs);
     } catch (err) {
       const status = (err as { status?: number })?.status;
       const msg =
