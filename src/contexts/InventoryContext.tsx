@@ -774,8 +774,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return;
       }
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
-      const isSized = updates.sizeKind === 'sized' || updated.sizeKind === 'sized';
+      const hasMultipleSizes = Array.isArray(updates.quantityBySize) && updates.quantityBySize.length >= 2;
+      const isSized = hasMultipleSizes || updates.sizeKind === 'sized' || updated.sizeKind === 'sized';
       const payload = { ...productToPayload(updated), warehouseId: (updates.warehouseId ?? warehouseId ?? '').trim() || '' } as Record<string, unknown>;
+      // When 2+ sizes from form, force sized so server never collapses to one_size.
+      if (hasMultipleSizes) payload.sizeKind = 'sized';
       // Never send empty images when product had images (list view may omit them); server will then preserve existing.
       if (
         Array.isArray(updates.images) &&

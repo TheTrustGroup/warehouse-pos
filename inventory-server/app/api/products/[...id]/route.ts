@@ -150,7 +150,17 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     // When client sends empty images (e.g. list view omitted them), preserve existing so we never wipe product images on update.
     const rawImagesNow = Array.isArray(body.images) ? (body.images as string[]) : [];
     if (rawImagesNow.length === 0) {
-      const existingImages = Array.isArray((existingRow as { images?: unknown }).images) ? (existingRow as { images: string[] }).images : [];
+      const rawExisting = (existingRow as { images?: unknown }).images;
+      let existingImages: string[] = [];
+      if (Array.isArray(rawExisting)) existingImages = rawExisting as string[];
+      else if (typeof rawExisting === 'string') {
+        try {
+          const parsed = JSON.parse(rawExisting) as unknown;
+          if (Array.isArray(parsed)) existingImages = parsed as string[];
+        } catch {
+          // ignore
+        }
+      }
       if (existingImages.length > 0) body.images = existingImages;
     }
 
@@ -161,13 +171,18 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
 
     // When client sends non-empty quantityBySize, treat as sized so we never wipe multiple sizes (fix: sizes reverting to quantity-only).
     const hasSizesInBody = rawSizes.length > 0;
-    const singleOneSize =
+    // If client sends 2+ size rows, always treat as sized and write all rows (including ONE_SIZE) so multiple sizes never collapse to one.
+    const forceSized = rawSizes.length >= 2;
+    const singleOneSize = !forceSized &&
       (sizeKind === 'sized' || (hasSizesInBody && rawSizes.length === 1)) &&
       rawSizes.length === 1 &&
       /^ONE_?SIZE$/i.test(rawSizes[0]?.sizeCode ?? '');
 
-    const effectiveSK = singleOneSize ? 'one_size' : (hasSizesInBody ? 'sized' : sizeKind);
-    const validSizes  = effectiveSK === 'sized' ? filterSizes(rawSizes) : [];
+    const effectiveSK = singleOneSize ? 'one_size' : (forceSized || hasSizesInBody ? 'sized' : sizeKind);
+    // When 2+ rows: write all (include ONE_SIZE). Otherwise only non-ONE_SIZE (catalog) rows.
+    const validSizes  = effectiveSK === 'sized'
+      ? (forceSized ? rawSizes : filterSizes(rawSizes))
+      : [];
     let effectiveSKForRow = effectiveSK;
 
     let sizesToWrite: Array<{ sizeCode: string; quantity: number }> | null;
@@ -210,12 +225,14 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
       }
     }
 
-    // Validate size codes against catalog before DB write (trigger would reject invalid codes)
+    // Validate size codes against catalog before DB write (trigger would reject invalid codes). ONE_?SIZE is always allowed (synthetic/legacy).
     if (sizesToWrite && sizesToWrite.length > 0) {
       const catalog = await getSizeCodes();
       const allowed = new Set(catalog.map((r) => String(r.size_code).toUpperCase().trim()));
+      allowed.add('ONE_SIZE');
+      allowed.add('ONESIZE');
       const invalid = sizesToWrite
-        .map((r) => r.sizeCode?.trim().toUpperCase())
+        .map((r) => r.sizeCode?.trim().toUpperCase().replace(/\s+/g, ''))
         .filter((code) => code && !allowed.has(code));
       if (invalid.length > 0) {
         const unique = [...new Set(invalid)];
@@ -434,6 +451,19 @@ async function manualUpdate(
   }
 }
 
+function ensureImagesArray(images: unknown): string[] {
+  if (Array.isArray(images)) return images as string[];
+  if (typeof images === 'string') {
+    try {
+      const parsed = JSON.parse(images) as unknown;
+      if (Array.isArray(parsed)) return parsed as string[];
+    } catch {
+      // ignore
+    }
+  }
+  return [];
+}
+
 function toShape(row: Record<string, unknown>, quantity: number, sizes: SizeEntry[]) {
   return {
     id:           String(row.id ?? ''),
@@ -452,7 +482,7 @@ function toShape(row: Record<string, unknown>, quantity: number, sizes: SizeEntr
     location:     row.location ?? null,
     supplier:     row.supplier ?? null,
     tags:         Array.isArray(row.tags)   ? row.tags   : [],
-    images:       Array.isArray(row.images) ? row.images : [],
+    images:       ensureImagesArray(row.images),
     version:      Number(row.version ?? 0),
     createdAt:    String(row.created_at  ?? ''),
     updatedAt:    String(row.updated_at  ?? ''),
