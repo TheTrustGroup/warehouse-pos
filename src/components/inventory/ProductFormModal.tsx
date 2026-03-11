@@ -147,7 +147,8 @@ export function ProductFormModal({ isOpen, onClose, onSubmit, product, readOnlyM
 
     if (currentProduct) {
       const rawQtyBySize = (currentProduct.quantityBySize ?? []).map((q: QuantityBySizeItem) => ({ sizeCode: q.sizeCode, quantity: q.quantity }));
-      const qtyBySize = rawQtyBySize.filter((q) => !isSyntheticOneSizeRow(q.sizeCode ?? ''));
+      const hasRealSizes = rawQtyBySize.some((q) => !isSyntheticOneSizeRow(q.sizeCode ?? ''));
+      const qtyBySize = hasRealSizes ? rawQtyBySize.filter((q) => !isSyntheticOneSizeRow(q.sizeCode ?? '')) : rawQtyBySize;
       const validImages = Array.isArray(currentProduct.images)
         ? currentProduct.images.filter(
             (img): img is string =>

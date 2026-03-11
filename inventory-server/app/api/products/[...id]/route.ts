@@ -330,7 +330,7 @@ async function fetchOne(db: DB, id: string, wid: string) {
     .eq('warehouse_id', wid)
     .eq('product_id', id);
 
-  const sizes: SizeEntry[] = ((sd ?? []) as Array<{ size_code: string; quantity: number; size_codes?: { size_label?: string } | null }>)
+  let sizes: SizeEntry[] = ((sd ?? []) as Array<{ size_code: string; quantity: number; size_codes?: { size_label?: string } | null }>)
     .map(r => ({
       sizeCode:  String(r.size_code),
       sizeLabel: String(r.size_codes?.size_label ?? r.size_code),
@@ -339,12 +339,17 @@ async function fetchOne(db: DB, id: string, wid: string) {
     .sort((a, b) => a.sizeCode.localeCompare(b.sizeCode));
 
   const pAny = p as Record<string, unknown>;
-  const isSized = (pAny.size_kind as string) === 'sized' && sizes.length > 0;
-  const qty = isSized
+  let qty = sizes.length > 0
     ? sizes.reduce((s, r) => s + r.quantity, 0)
     : Number((invRow as { quantity?: number } | null)?.quantity ?? 0);
 
-  return toShape({ ...pAny, warehouse_id: wid }, qty, sizes);
+  // When no per-size rows but we have quantity, return a synthetic "One size" row so sizes "come back" in inventory and user can add more when editing.
+  if (sizes.length === 0 && qty > 0) {
+    sizes = [{ sizeCode: 'ONE_SIZE', sizeLabel: 'One size', quantity: qty }];
+  }
+
+  const rowWithSizes = sizes.length > 0 ? { ...pAny, size_kind: 'sized' as string } : pAny;
+  return toShape({ ...rowWithSizes, warehouse_id: wid }, qty, sizes);
 }
 
 async function manualUpdate(

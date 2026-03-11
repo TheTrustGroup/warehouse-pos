@@ -197,12 +197,16 @@ export async function getWarehouseProducts(
 
   const data = rows.map((row) => {
     const rowId = String(row.id ?? '');
-    const sizes = (sizeMap[rowId] ?? []).sort((a, b) => a.sizeCode.localeCompare(b.sizeCode, undefined, { numeric: true }));
+    let sizes = (sizeMap[rowId] ?? []).sort((a, b) => a.sizeCode.localeCompare(b.sizeCode, undefined, { numeric: true }));
     const hasSizeRows = sizes.length > 0;
-    const totalQuantity = hasSizeRows ? sizes.reduce((s, r) => s + r.quantity, 0) : (invMap[rowId] ?? 0);
-    // When product is marked sized but has no per-size rows (only warehouse_inventory qty), return as one_size so UI shows "One size · N" instead of "No sizes recorded".
+    let totalQuantity = hasSizeRows ? sizes.reduce((s, r) => s + r.quantity, 0) : (invMap[rowId] ?? 0);
     const rawSizeKind = String(row.size_kind ?? 'na');
-    const sizeKind = rawSizeKind === 'sized' && !hasSizeRows && totalQuantity > 0 ? 'one_size' : rawSizeKind;
+    // When product has no per-size rows but has quantity in warehouse_inventory, return a synthetic "One size" row so sizes "come back" in inventory and user can add more when editing.
+    let sizeKind = rawSizeKind;
+    if (!hasSizeRows && totalQuantity > 0) {
+      sizes = [{ sizeCode: 'ONE_SIZE', sizeLabel: 'One size', quantity: totalQuantity }];
+      sizeKind = 'sized';
+    }
 
     if (options.lowStock && totalQuantity > (Number(row.reorder_level ?? 0) || 3)) return null;
     if (options.outOfStock && totalQuantity > 0) return null;
@@ -288,7 +292,7 @@ export async function getProductById(
     .eq('warehouse_id', warehouseId)
     .eq('product_id', productId);
   const sizeRows = (sizeData ?? []) as Array<{ size_code: string; quantity: number }>;
-  const sizes = sizeRows.map((s) => ({
+  let sizes = sizeRows.map((s) => ({
     sizeCode: String(s.size_code),
     sizeLabel: String(s.size_code),
     quantity: Number(s.quantity ?? 0),
@@ -296,7 +300,12 @@ export async function getProductById(
   const hasSizeRows = sizes.length > 0;
   quantity = hasSizeRows ? sizes.reduce((s, x) => s + x.quantity, 0) : Number((invRow as { quantity?: number } | null)?.quantity ?? 0);
   const rawSizeKind = String(r.size_kind ?? 'na');
-  const sizeKind = rawSizeKind === 'sized' && !hasSizeRows && quantity > 0 ? 'one_size' : rawSizeKind;
+  let sizeKind = rawSizeKind;
+  // When no per-size rows but we have quantity, return a synthetic "One size" row so sizes show again in inventory and user can add more when editing.
+  if (!hasSizeRows && quantity > 0) {
+    sizes = [{ sizeCode: 'ONE_SIZE', sizeLabel: 'One size', quantity }];
+    sizeKind = 'sized';
+  }
 
   return {
     id: String(r.id ?? ''),
