@@ -176,7 +176,6 @@ export async function getWarehouseProducts(
 
   const invData = (invRes as { data?: { product_id: string; quantity?: number }[] | null }).data ?? [];
   const sizeData = (sizeRes as { data?: SizeRow[] | null }).data ?? [];
-  console.log('[sizeData]', sizeData.length, 'rows for', productIds.length, 'products');
   const invMap: Record<string, number> = {};
   for (const inv of invData) {
     const pid = String(inv.product_id ?? '');

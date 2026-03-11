@@ -117,7 +117,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const view = viewParam === 'list' ? 'list' as const : undefined;
 
       const cacheParams = { warehouseId, limit, offset, q, category, lowStock: lowStock || undefined, outOfStock: outOfStock || undefined, view };
-      const cached = await getCachedProducts(cacheParams);
+      const cached = view === 'list' ? null : await getCachedProducts(cacheParams);
       if (cached != null && typeof cached === 'object' && 'data' in cached) {
         const res = NextResponse.json(cached, { headers: h });
         res.headers.set('Cache-Control', 'private, no-store, max-age=0');
@@ -143,11 +143,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         });
         const payload = { data: result.data, total: result.total };
         const payloadSize = JSON.stringify(payload).length;
-        /** Upstash default max request size is 10MB. Only cache when under this limit to avoid "max request size exceeded". See https://upstash.com/docs/redis/troubleshooting/max_request_size_exceeded */
-        const MAX_CACHE_PAYLOAD_BYTES = 10_485_760;
+        /** Don't cache list view — always fresh from DB so quantityBySize is correct (avoids ONE_SIZE from stale Redis). */
         let setOk = false;
-        if (payloadSize <= MAX_CACHE_PAYLOAD_BYTES) {
-          setOk = await setCachedProducts(cacheParams, payload);
+        if (view !== 'list') {
+          const MAX_CACHE_PAYLOAD_BYTES = 10_485_760;
+          if (payloadSize <= MAX_CACHE_PAYLOAD_BYTES) {
+            setOk = await setCachedProducts(cacheParams, payload);
+          }
         }
         const res = NextResponse.json(payload, { headers: h });
         res.headers.set('Cache-Control', 'private, no-store, max-age=0');
@@ -155,13 +157,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         res.headers.set('X-Data-Warehouse-Id', warehouseId);
         res.headers.set('X-Cache', 'MISS');
         res.headers.set('X-Payload-Bytes', String(payloadSize));
-        const redisStatus = !isProductsCacheAvailable()
-          ? 'unavailable'
-          : payloadSize > MAX_CACHE_PAYLOAD_BYTES
-            ? 'MISS (payload too large)'
-            : !setOk
-              ? 'MISS (set failed)'
-              : 'MISS';
+        const redisStatus = view === 'list'
+          ? 'skip (list view)'
+          : !isProductsCacheAvailable()
+            ? 'unavailable'
+            : payloadSize > 10_485_760
+              ? 'MISS (payload too large)'
+              : !setOk
+                ? 'MISS (set failed)'
+                : 'MISS';
         res.headers.set('X-Redis', redisStatus);
         return logAndReturn(withCors(res, req));
       } catch (e) {

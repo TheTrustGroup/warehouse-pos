@@ -11,6 +11,7 @@ import { corsHeaders } from '@/lib/cors';
 import { requireAuth, requireAdmin, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { isValidId } from '@/lib/validation';
 import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
+import { notifyProductsUpdated } from '@/lib/cache/productsCache';
 import { getSizeCodes } from '@/lib/data/sizeCodes';
 import { deleteWarehouseProduct } from '@/lib/data/warehouseProducts';
 import { uploadProductImages } from '@/lib/storage/productImages';
@@ -308,6 +309,7 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     }
 
     await notifyInventoryUpdated(wid);
+    await notifyProductsUpdated(wid);
     return withCors(NextResponse.json(updated), req);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Internal server error';
@@ -346,6 +348,7 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
   try {
     await deleteWarehouseProduct(id, wid);
     await notifyInventoryUpdated(wid);
+    await notifyProductsUpdated(wid);
     return withCors(NextResponse.json({ success: true, id }), req);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
