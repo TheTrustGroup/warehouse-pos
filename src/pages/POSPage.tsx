@@ -100,12 +100,11 @@ function applySaleDeduction(
       const updatedSizes = (p.quantityBySize ?? []).map((row) => {
         const line = saleLines.find(
           (l) =>
-            l.sizeCode &&
-            row.sizeCode &&
-            l.sizeCode.toUpperCase() === row.sizeCode.toUpperCase()
+            (l.sizeCode ?? '').toString().toUpperCase() === (row.sizeCode ?? '').toString().toUpperCase()
         );
+        const soldQty = line?.qty ?? 0;
         return line
-          ? { ...row, quantity: Math.max(0, row.quantity - line.qty) }
+          ? { ...row, quantity: Math.max(0, row.quantity - soldQty) }
           : row;
       });
       return {
@@ -247,6 +246,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   const loadProductsAbortRef = useRef<AbortController | null>(null);
   const productsCacheRef = useRef<{ wid: string; list: POSProduct[]; at: number } | null>(null);
+  const postSaleRefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const PRODUCTS_CACHE_TTL_MS = 30_000;
   /** First page smaller so request completes before timeout (cold start); then 250 per page. */
   const PRODUCTS_FIRST_PAGE_LIMIT = 250;
@@ -383,6 +383,16 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [warehouse.id, loadProducts]);
 
+  // Clear post-sale refetch timeout on unmount.
+  useEffect(() => {
+    return () => {
+      if (postSaleRefetchTimeoutRef.current != null) {
+        clearTimeout(postSaleRefetchTimeoutRef.current);
+        postSaleRefetchTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const wid = warehouse.id?.trim();
     if (!wid || !isValidWarehouseId(wid)) return;
@@ -394,14 +404,9 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     setCategory('all');
     setSizeFilter('');
     setColorFilter('');
-    // While sale-success screen is showing, do not overwrite products from context: refetch may fail
-    // ("network connection lost") and context could be stale or wrong; keep optimistic post-sale list.
+    // While sale-success screen is showing, do not refetch — optimistic state stays for at least 5 seconds (refetch scheduled in onSuccess).
     if (saleResult != null) {
-      loadProducts(wid, true, ctrl.signal).catch(() => {
-        if (isMounted.current) setLoading(false);
-      });
       return () => {
-        ctrl.abort();
         if (loadProductsAbortRef.current === ctrl) loadProductsAbortRef.current = null;
       };
     }
@@ -537,7 +542,14 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       productsCacheRef.current = null;
-      if (isValidWarehouseId(warehouse.id)) loadProducts(warehouse.id, true);
+      // Refetch after 5s so optimistic state is not immediately overwritten.
+      const wid = warehouse.id?.trim();
+      if (isValidWarehouseId(wid)) {
+        postSaleRefetchTimeoutRef.current = setTimeout(() => {
+          postSaleRefetchTimeoutRef.current = null;
+          if (isMounted.current) loadProducts(wid, true);
+        }, 5000);
+      }
       if (!isMounted.current) return;
       showToast('Sale complete. Stock updated. Receipt ready.', 'ok');
       setSaleResult((prev) =>

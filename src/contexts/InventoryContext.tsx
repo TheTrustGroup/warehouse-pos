@@ -117,13 +117,6 @@ export async function fetchProductsForWarehouse(
 /** Seed/placeholder product ID that may exist in cache but not on production API; skip verify to avoid 404. */
 const SEED_PLACEHOLDER_PRODUCT_ID = '00000000-0000-0000-0000-000000000101';
 
-/** True when quantityBySize is exactly one row and it's the RPC fallback "One size" / "ONESIZE" (so we should prefer cache's real sizes). */
-function isOnlySyntheticOneSize(quantityBySize: unknown): boolean {
-  if (!Array.isArray(quantityBySize) || quantityBySize.length !== 1) return false;
-  const code = String((quantityBySize[0] as { sizeCode?: string })?.sizeCode ?? '').trim().replace(/\s+/g, '').toUpperCase();
-  return code === 'ONESIZE' || code === 'ONE_SIZE';
-}
-
 import { saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
 import { reportError } from '../lib/errorReporting';
 import { useInventoryRealtime } from '../hooks/useInventoryRealtime';
@@ -834,16 +827,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const sizeKind = updates.sizeKind ?? (withImages as Product).sizeKind ?? 'na';
       const rawApiSizes = (withImages as Product).quantityBySize;
       const apiQuantityBySize = Array.isArray(rawApiSizes) ? rawApiSizes : [];
-      const apiHasRealSizes = apiQuantityBySize.length > 0 && !isOnlySyntheticOneSize(apiQuantityBySize);
-      const formSentSizes = Array.isArray(updates.quantityBySize) && updates.quantityBySize.length > 0;
-      // When user saved multiple sizes: prefer API if it returned real sizes; else use form data so UI shows S/M/L immediately (avoids ONESIZE × N until refetch)
-      const quantityBySize =
-        apiHasRealSizes
-          ? apiQuantityBySize
-          : formSentSizes
-            ? updates.quantityBySize!
-            : apiQuantityBySize.length > 0 ? apiQuantityBySize : [];
-      const finalProduct = { ...withImages, sizeKind, quantityBySize } as Product;
+      // Use exact quantityBySize from API response — do not merge with previous state.
+      const finalProduct = { ...withImages, sizeKind, quantityBySize: apiQuantityBySize } as Product;
       const newList = products.map((p) => (p.id === id ? finalProduct : p));
       if (payloadImages.length > 0) setProductImages(id, payloadImages);
       setProductsQueryData(() => ({ list: newList, total: undefined }));
@@ -859,7 +844,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const today = new Date().toISOString().split('T')[0];
       queryClient.invalidateQueries({ queryKey: queryKeys.products(warehouseId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
-      queryClient.refetchQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
       showToast('success', 'Product updated.');
       if (import.meta.env?.DEV) {
         console.timeEnd('State Update (update)');
