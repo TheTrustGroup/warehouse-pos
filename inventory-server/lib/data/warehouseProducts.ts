@@ -166,24 +166,18 @@ export async function getWarehouseProducts(
       .from('warehouse_inventory')
       .select('product_id, quantity', selectOpts())
       .eq('warehouse_id', effectiveWarehouseId)
-      .in('product_id', productIds),
+      .in('product_id', productIds)
+      .limit(5000),
     db
       .from('warehouse_inventory_by_size')
       .select('product_id, size_code, quantity', selectOpts())
       .eq('warehouse_id', effectiveWarehouseId)
-      .in('product_id', productIds),
+      .in('product_id', productIds)
+      .limit(5000),
   ]);
 
   const invData = (invRes as { data?: { product_id: string; quantity?: number }[] | null }).data ?? [];
   const sizeData = (sizeRes as { data?: SizeRow[] | null }).data ?? [];
-  console.log('[wibs-debug]', {
-    productCount: productIds.length,
-    sizeRowCount: sizeData.length,
-    hasAdidas: productIds.includes('14e36d43-c554-4649-bfdc-ce1720d73f5e'),
-    adidasSizeRows: sizeData.filter(
-      r => r.product_id === '14e36d43-c554-4649-bfdc-ce1720d73f5e'
-    )
-  });
   const invMap: Record<string, number> = {};
   for (const inv of invData) {
     const pid = String(inv.product_id ?? '');
