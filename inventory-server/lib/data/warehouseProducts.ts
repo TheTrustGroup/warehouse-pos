@@ -71,6 +71,12 @@ function getDb(): SupabaseClient {
   return getSupabase();
 }
 
+/** True when size code represents "one size" (any casing). Ensures API returns stable sizeKind/quantityBySize so UI does not flash. */
+function isOneSizeCode(code: string): boolean {
+  const n = String(code ?? '').trim().replace(/\s+/g, '_').toUpperCase();
+  return n === 'ONE_SIZE' || n === 'ONESIZE';
+}
+
 /** Turn DB constraint errors into clear 400-style messages for the client. */
 function normalizeDbConstraintError(dbMessage: string, action: 'create' | 'update', code?: string): string {
   if (code === '23505' || /unique constraint|duplicate key value|already exists/i.test(dbMessage)) {
@@ -205,7 +211,12 @@ export async function getWarehouseProducts(
     let sizeKind = rawSizeKind;
     if (!hasSizeRows && totalQuantity > 0) {
       sizes = [{ sizeCode: 'ONE_SIZE', sizeLabel: 'One size', quantity: totalQuantity }];
-      sizeKind = 'sized';
+      sizeKind = 'one_size';
+    }
+    // Normalize single one-size row to sizeKind 'one_size' so UI never flips between "sized" and "one_size" (stops flash).
+    if (sizes.length === 1 && isOneSizeCode(sizes[0].sizeCode)) {
+      sizeKind = 'one_size';
+      sizes = [{ sizeCode: 'ONE_SIZE', sizeLabel: 'One size', quantity: sizes[0].quantity }];
     }
 
     if (options.lowStock && totalQuantity > (Number(row.reorder_level ?? 0) || 3)) return null;
@@ -304,7 +315,12 @@ export async function getProductById(
   // When no per-size rows but we have quantity, return a synthetic "One size" row so sizes show again in inventory and user can add more when editing.
   if (!hasSizeRows && quantity > 0) {
     sizes = [{ sizeCode: 'ONE_SIZE', sizeLabel: 'One size', quantity }];
-    sizeKind = 'sized';
+    sizeKind = 'one_size';
+  }
+  // Normalize single one-size row to sizeKind 'one_size' so UI never flips (stops flash).
+  if (sizes.length === 1 && isOneSizeCode(sizes[0].sizeCode)) {
+    sizeKind = 'one_size';
+    sizes = [{ sizeCode: 'ONE_SIZE', sizeLabel: 'One size', quantity: sizes[0].quantity }];
   }
 
   return {

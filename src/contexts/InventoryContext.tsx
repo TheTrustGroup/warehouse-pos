@@ -22,17 +22,17 @@ import { useWarehouse } from './WarehouseContext';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
-import { getCategoryDisplay, normalizeProductLocation, normalizeQuantityBySize } from '../lib/utils';
+import { getCategoryDisplay, normalizeProductLocation, normalizeProductToOneSizeDisplay, normalizeQuantityBySize } from '../lib/utils';
 import { parseProductsResponse } from '../lib/apiSchemas';
 import { useInventory as useOfflineInventory } from '../hooks/useInventory';
 import { getProductImages, setProductImages } from '../lib/productImagesStore';
 
 /** React Query is the only cache for products; invalidate on Realtime and after mutations. */
 
-/** Normalize API row to Product (for use in fetchProductsForWarehouse). */
+/** Normalize API row to Product (for use in fetchProductsForWarehouse). Stabilize one-size so UI does not flash. */
 function normalizeProductRow(p: any): Product {
   const rawSizes = p.quantityBySize ?? p.quantity_by_size;
-  return normalizeProductLocation({
+  const normalized = normalizeProductLocation({
     ...p,
     images: Array.isArray(p.images) ? p.images : [],
     quantity: Number(p.quantity ?? 0) || 0,
@@ -45,6 +45,7 @@ function normalizeProductRow(p: any): Product {
     sizeKind: (p.sizeKind ?? p.size_kind ?? 'na') as 'na' | 'one_size' | 'sized',
     quantityBySize: normalizeQuantityBySize(rawSizes),
   });
+  return normalizeProductToOneSizeDisplay(normalized) as Product;
 }
 
 /** Default page size for initial load so new products (e.g. by name) stay visible after save; 250 matches API max. */
@@ -236,15 +237,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       list = list.map((p) => (p.id === updated.product.id ? updated.product : p));
     }
     list = list.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
-    // Preserve last known quantityBySize when refetch returns empty for sized products (avoids "No sizes recorded" flash).
+    // Preserve last known quantityBySize when refetch returns empty for sized or one_size (avoids "No sizes recorded" / one_size flash).
     const prevSizes = lastQuantityBySizeRef.current;
     const withSizes = list.map((p) => {
-      if (p.sizeKind !== 'sized') return p;
       const qbs = p.quantityBySize ?? [];
-      if (qbs.length > 0) return p;
+      const shouldPreserve = (p.sizeKind === 'sized' || p.sizeKind === 'one_size') && qbs.length === 0;
+      if (!shouldPreserve) {
+        return normalizeProductToOneSizeDisplay(p) as Product;
+      }
       const kept = prevSizes.get(p.id);
-      if (!kept || kept.length === 0) return p;
-      return { ...p, quantityBySize: kept };
+      if (!kept || kept.length === 0) return normalizeProductToOneSizeDisplay(p) as Product;
+      return normalizeProductToOneSizeDisplay({ ...p, quantityBySize: kept }) as Product;
     });
     // Dedupe by id so background refetch or loadMore never shows duplicate cards.
     return Array.from(new Map(withSizes.map((p) => [p.id, p])).values());
@@ -253,7 +256,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     products.forEach((p) => {
       const qbs = p.quantityBySize;
-      if (p.sizeKind === 'sized' && Array.isArray(qbs) && qbs.length > 0) {
+      if ((p.sizeKind === 'sized' || p.sizeKind === 'one_size') && Array.isArray(qbs) && qbs.length > 0) {
         lastQuantityBySizeRef.current.set(
           p.id,
           qbs.map((r) => ({ sizeCode: r.sizeCode, quantity: r.quantity }))
@@ -374,7 +377,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /** Always set sizeKind and quantityBySize so Sizes column/card never show blank for One size / Multiple sizes. */
   const normalizeProduct = (p: any): Product => {
     const rawSizes = p.quantityBySize ?? p.quantity_by_size;
-    return normalizeProductLocation({
+    const normalized = normalizeProductLocation({
       ...p,
       images: Array.isArray(p.images) ? p.images : [],
       quantity: Number(p.quantity ?? 0) || 0,
@@ -387,6 +390,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       sizeKind: (p.sizeKind ?? p.size_kind ?? 'na') as 'na' | 'one_size' | 'sized',
       quantityBySize: normalizeQuantityBySize(rawSizes),
     });
+    return normalizeProductToOneSizeDisplay(normalized) as Product;
   };
 
   const LOAD_MORE_PAGE_SIZE = 250;

@@ -25,7 +25,7 @@ import { resetAllApiCircuitBreakers } from '../lib/circuit';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
 import { getProductImageUrl } from '../lib/productImageUrl';
 import { isValidWarehouseId } from '../lib/warehouseId';
-import { normalizeQuantityBySize } from '../lib/utils';
+import { normalizeProductToOneSizeDisplay, normalizeQuantityBySize } from '../lib/utils';
 import { onUnauthorized } from '../lib/onUnauthorized';
 import { printReceipt, formatReceiptDate } from '../lib/printReceipt';
 import { useWarehouse } from '../contexts/WarehouseContext';
@@ -266,13 +266,17 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     const rawSizes = row.quantityBySize ?? row.quantity_by_size;
     const quantityBySize = normalizeQuantityBySize(rawSizes);
     const base = item as POSProduct;
-    return {
+    const kind = (row.sizeKind ?? row.size_kind ?? base.sizeKind) as 'na' | 'one_size' | 'sized' | undefined;
+    // Preserve last known quantityBySize when API returns empty for sized/one_size (avoids flash).
+    const keptSizes = quantityBySize.length > 0 ? quantityBySize : (base.quantityBySize ?? []);
+    const product: POSProduct = {
       ...base,
       color: color || null,
       barcode: row.barcode != null ? String(row.barcode) : null,
-      sizeKind: (row.sizeKind ?? row.size_kind ?? base.sizeKind) as 'na' | 'one_size' | 'sized' | undefined,
-      quantityBySize: quantityBySize.length > 0 ? quantityBySize : base.quantityBySize,
+      sizeKind: kind,
+      quantityBySize: keptSizes,
     };
+    return normalizeProductToOneSizeDisplay(product) as POSProduct;
   }
 
   const loadProducts = useCallback(
