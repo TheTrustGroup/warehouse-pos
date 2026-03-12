@@ -176,6 +176,14 @@ export async function getWarehouseProducts(
 
   const invData = (invRes as { data?: { product_id: string; quantity?: number }[] | null }).data ?? [];
   const sizeData = (sizeRes as { data?: SizeRow[] | null }).data ?? [];
+  console.log('[wibs-debug]', {
+    productCount: productIds.length,
+    sizeRowCount: sizeData.length,
+    hasAdidas: productIds.includes('14e36d43-c554-4649-bfdc-ce1720d73f5e'),
+    adidasSizeRows: sizeData.filter(
+      r => r.product_id === '14e36d43-c554-4649-bfdc-ce1720d73f5e'
+    )
+  });
   const invMap: Record<string, number> = {};
   for (const inv of invData) {
     const pid = String(inv.product_id ?? '');
