@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Receipt } from 'lucide-react';
-import { apiGet, apiPost } from '../lib/apiClient';
+import { apiGet, apiPost, apiPatch } from '../lib/apiClient';
 import { printReceipt } from '../lib/printReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
@@ -52,6 +52,7 @@ interface Sale {
   itemCount: number;
   soldBy: string | null;
   createdAt: string;
+  status?: string | null;
   voidedAt?: string | null;
   lines: SaleLine[];
 }
@@ -200,7 +201,7 @@ function SaleRow({
   voiding: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const isVoided = Boolean(sale.voidedAt);
+  const isVoided = sale.status === 'voided' || Boolean(sale.voidedAt);
 
   return (
     <div className="rounded-[var(--edk-radius)] overflow-hidden border border-[var(--edk-border)] bg-[var(--edk-surface)]">
@@ -344,7 +345,11 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
         { maxRetries: 3, timeoutMs: 20_000 }
       );
       const list = Array.isArray(data) ? data : (data as { data?: Sale[] }).data ?? [];
-      setSales(list.filter((s): s is Sale => s != null && typeof s === 'object'));
+      setSales(
+        list
+          .filter((s): s is Sale => s != null && typeof s === 'object')
+          .map((s) => ({ ...s, status: (s as { status?: string }).status ?? null }))
+      );
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : 'Failed to load sales';
       setError(errMsg);
@@ -399,9 +404,9 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
     setError(null);
     try {
       const base = apiBaseUrl.replace(/\/$/, '');
-      await apiPost<unknown>(base, '/api/sales/void', { saleId: sale.id, warehouseId: sale.warehouseId });
+      await apiPatch<unknown>(base, '/api/sales', { saleId: sale.id, warehouseId: sale.warehouseId, action: 'void' });
       setSales(prev =>
-        prev.map(s => (s.id === sale.id ? { ...s, voidedAt: new Date().toISOString() } : s))
+        prev.map(s => (s.id === sale.id ? { ...s, status: 'voided', voidedAt: new Date().toISOString() } : s))
       );
       showToast('success', 'Sale voided. Stock restored to inventory.');
     } catch (e: unknown) {

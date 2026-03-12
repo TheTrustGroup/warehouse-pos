@@ -289,7 +289,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     const auth = await requireAuth(req);
     if (auth instanceof NextResponse) return withCors(auth, req);
 
-    let body: { saleId?: string; deliveryStatus?: string; warehouseId?: string };
+    let body: { saleId?: string; deliveryStatus?: string; warehouseId?: string; action?: string };
     try {
       body = await req.json();
     } catch {
@@ -298,13 +298,10 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
 
     const saleId = body?.saleId?.trim();
     const deliveryStatus = body?.deliveryStatus?.trim()?.toLowerCase();
+    const action = body?.action?.trim()?.toLowerCase();
     const warehouseId = body?.warehouseId?.trim();
 
     if (!saleId) return fail(400, 'saleId is required.');
-    const validStatuses = ['dispatched', 'delivered', 'cancelled'];
-    if (!deliveryStatus || !validStatuses.includes(deliveryStatus)) {
-      return fail(400, 'deliveryStatus must be one of: dispatched, delivered, cancelled.');
-    }
 
     const scope = await getScopeForUser(auth.email);
     const allowed = scope.allowedWarehouseIds;
@@ -313,7 +310,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     const db = getSupabase();
     const { data: saleRow, error: fetchErr } = await db
       .from('sales')
-      .select('id, warehouse_id, delivery_status')
+      .select('id, warehouse_id, delivery_status, status')
       .eq('id', saleId)
       .maybeSingle();
 
@@ -329,6 +326,24 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     }
     if (warehouseId && saleWarehouseId && warehouseId !== saleWarehouseId) {
       return fail(400, 'Warehouse does not match sale.');
+    }
+
+    if (action === 'void') {
+      const { error: rpcErr } = await db.rpc('void_sale', { p_sale_id: saleId });
+      if (rpcErr) {
+        console.error('[PATCH /api/sales] void_sale', rpcErr);
+        return fail(500, rpcErr.message ?? 'Failed to void sale.');
+      }
+      logApiResponse(req, 200, Date.now() - start);
+      return withCors(
+        NextResponse.json({ success: true, status: 'voided' }, { status: 200, headers: h }),
+        req
+      );
+    }
+
+    const validStatuses = ['dispatched', 'delivered', 'cancelled'];
+    if (!deliveryStatus || !validStatuses.includes(deliveryStatus)) {
+      return fail(400, 'deliveryStatus must be one of: dispatched, delivered, cancelled.');
     }
 
     if (deliveryStatus === 'delivered') {
