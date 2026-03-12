@@ -20,6 +20,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
 import { getApiHeaders, API_BASE_URL } from '../lib/api';
 import { resetAllApiCircuitBreakers } from '../lib/circuit';
 import { getUserFriendlyMessage } from '../lib/errorMessages';
@@ -537,18 +538,23 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         );
       }
     },
-    onSuccess: (result, _vars: SaleMutationVars) => {
+    onSuccess: (result, vars: SaleMutationVars) => {
       if (isMounted.current) setCharging(false);
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      const wid = warehouse.id?.trim();
+      // Update products cache optimistically; do not invalidate or refetch for 10s.
+      if (isValidWarehouseId(wid)) {
+        queryClient.setQueryData(queryKeys.products(wid), (old: { list: POSProduct[]; total?: number } | undefined) => ({
+          list: applySaleDeduction(old?.list ?? [], vars.payload.lines),
+          total: old?.total,
+        }));
+      }
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       productsCacheRef.current = null;
-      // Refetch after 5s so optimistic state is not immediately overwritten.
-      const wid = warehouse.id?.trim();
       if (isValidWarehouseId(wid)) {
         postSaleRefetchTimeoutRef.current = setTimeout(() => {
           postSaleRefetchTimeoutRef.current = null;
           if (isMounted.current) loadProducts(wid, true);
-        }, 5000);
+        }, 10_000);
       }
       if (!isMounted.current) return;
       showToast('Sale complete. Stock updated. Receipt ready.', 'ok');

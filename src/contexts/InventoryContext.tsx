@@ -11,7 +11,7 @@
  * No "saved" without confirmed 2xx. Offline path still uses local-first; ADD_PRODUCT_SAVED_LOCALLY for that flow.
  */
 import { createContext, useContext, useState, useRef, ReactNode, useEffect, useMemo, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Product } from '../types';
 import { getStoredData, isStorageAvailable } from '../lib/storage';
 import { API_BASE_URL } from '../lib/api';
@@ -213,7 +213,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     queryFn: ({ signal }) =>
       fetchProductsForWarehouse(warehouseId, { signal, initialPageSize: INITIAL_PRODUCTS_PAGE_SIZE }),
     enabled: isValidWarehouseId(warehouseId),
-    staleTime: PRODUCTS_QUERY_STALE_MS,
+    staleTime: PRODUCTS_QUERY_STALE_MS, // consider data fresh for 30s
+    placeholderData: keepPreviousData, // show previous data while refetching
     gcTime: PRODUCTS_QUERY_GC_MS,
     retry: 2, // 1 initial + 2 retries = 3 total; aligns with circuit breaker opening at 3 failures
   });
@@ -229,15 +230,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       list = list.map((p) => (p.id === updated.product.id ? updated.product : p));
     }
     list = list.filter((p) => !recentlyDeletedIdsRef.current.has(p.id));
-    // Preserve last known quantityBySize when refetch returns empty for sized or one_size (avoids "No sizes recorded" / one_size flash).
+    // Only preserve previous sizes when NEW data has sizeKind 'one_size' with no sizes BUT previous had multiple sizes (avoids overwriting real sized product with bad one_size refetch).
     const prevSizes = lastQuantityBySizeRef.current;
     const withSizes = list.map((p) => {
       const qbs = p.quantityBySize ?? [];
-      const shouldPreserve = (p.sizeKind === 'sized' || (Array.isArray(p.quantityBySize) && p.quantityBySize.length > 1) || p.sizeKind === 'one_size') && qbs.length === 0;
-      if (!shouldPreserve) return p;
       const kept = prevSizes.get(p.id);
-      if (!kept || kept.length === 0) return p;
-      return { ...p, quantityBySize: kept };
+      const shouldPreserve =
+        p.sizeKind === 'one_size' && qbs.length === 0 && (kept != null && kept.length > 1);
+      if (!shouldPreserve) return p;
+      return { ...p, quantityBySize: kept! };
     });
     // Dedupe by id so background refetch or loadMore never shows duplicate cards.
     return Array.from(new Map(withSizes.map((p) => [p.id, p])).values());
