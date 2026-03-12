@@ -76,7 +76,7 @@ function getRemainingForProduct(
   const key = buildCartKey(productId, sizeCode);
   const inCart = cart.find((l) => l.key === key)?.qty ?? 0;
   const totalInCart = inCart + extraQty;
-  if (p.sizeKind === 'sized' && sizeCode) {
+  if ((p.sizeKind === 'sized' || (Array.isArray(p.quantityBySize) && p.quantityBySize.length > 1)) && sizeCode) {
     const row = p.quantityBySize?.find(
       (r) => r.sizeCode?.toUpperCase() === (sizeCode ?? '').toUpperCase()
     );
@@ -96,7 +96,7 @@ function applySaleDeduction(
   return products.map((p) => {
     const saleLines = lines.filter((l) => l.productId === p.id);
     if (saleLines.length === 0) return p;
-    if (p.sizeKind === 'sized') {
+    if (p.sizeKind === 'sized' || (Array.isArray(p.quantityBySize) && p.quantityBySize.length > 1)) {
       const updatedSizes = (p.quantityBySize ?? []).map((row) => {
         const line = saleLines.find(
           (l) =>
@@ -562,7 +562,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       showToast('Product not found for this barcode', 'err');
       return;
     }
-    const isSized = product.sizeKind === 'sized' && (product.quantityBySize?.length ?? 0) > 0;
+    const isSized = (product.sizeKind === 'sized' || (Array.isArray(product.quantityBySize) && product.quantityBySize.length > 1)) && (product.quantityBySize?.length ?? 0) > 0;
     if (isSized) {
       setActiveProduct(structuredClone(product));
     } else {

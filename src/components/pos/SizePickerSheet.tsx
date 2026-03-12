@@ -43,7 +43,7 @@ export default function SizePickerSheet({ product, onAdd, onClose }: SizePickerS
 
   if (!product) return null;
 
-  const isSized = product.sizeKind === 'sized' && (product.quantityBySize?.length ?? 0) > 0;
+  const isSized = (product.sizeKind === 'sized' || (Array.isArray(product.quantityBySize) && product.quantityBySize.length > 1)) && (product.quantityBySize?.length ?? 0) > 0;
   const sizes = product.quantityBySize ?? [];
 
   const handleAdd = (sizeCode: string | null, sizeLabel: string | null) => {

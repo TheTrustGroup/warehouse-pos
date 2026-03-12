@@ -240,7 +240,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const prevSizes = lastQuantityBySizeRef.current;
     const withSizes = list.map((p) => {
       const qbs = p.quantityBySize ?? [];
-      const shouldPreserve = (p.sizeKind === 'sized' || p.sizeKind === 'one_size') && qbs.length === 0;
+      const shouldPreserve = (p.sizeKind === 'sized' || (Array.isArray(p.quantityBySize) && p.quantityBySize.length > 1) || p.sizeKind === 'one_size') && qbs.length === 0;
       if (!shouldPreserve) return p;
       const kept = prevSizes.get(p.id);
       if (!kept || kept.length === 0) return p;
@@ -253,7 +253,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     products.forEach((p) => {
       const qbs = p.quantityBySize;
-      if ((p.sizeKind === 'sized' || p.sizeKind === 'one_size') && Array.isArray(qbs) && qbs.length > 0) {
+      if ((p.sizeKind === 'sized' || (Array.isArray(p.quantityBySize) && p.quantityBySize.length > 1) || p.sizeKind === 'one_size') && Array.isArray(qbs) && qbs.length > 0) {
         lastQuantityBySizeRef.current.set(
           p.id,
           qbs.map((r) => ({ sizeCode: r.sizeCode, quantity: r.quantity }))
@@ -776,7 +776,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
       const hasMultipleSizes = Array.isArray(updates.quantityBySize) && updates.quantityBySize.length >= 2;
-      const isSized = hasMultipleSizes || updates.sizeKind === 'sized' || updated.sizeKind === 'sized';
+      const isSized = hasMultipleSizes || updates.sizeKind === 'sized' || (Array.isArray(updates.quantityBySize) && updates.quantityBySize.length > 1) || updated.sizeKind === 'sized' || (Array.isArray(updated.quantityBySize) && updated.quantityBySize.length > 1);
       const payload = { ...productToPayload(updated), warehouseId: (updates.warehouseId ?? warehouseId ?? '').trim() || '' } as Record<string, unknown>;
       // When 2+ sizes from form, force sized so server never collapses to one_size.
       if (hasMultipleSizes) payload.sizeKind = 'sized';
