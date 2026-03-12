@@ -276,6 +276,11 @@ async function handleUpdate(req: NextRequest, ctx: RouteCtx) {
     }
 
     // Write by_size and warehouse_inventory (single source of truth for update path).
+    await db.rpc('set_config', {
+      setting: 'app.hardened_inventory',
+      value: 'on',
+      is_local: true,
+    });
     if (sizesToWrite !== null) {
       await db.from('warehouse_inventory_by_size').delete().eq('warehouse_id', wid).eq('product_id', id);
       if (sizesToWrite.length > 0) {

@@ -225,6 +225,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const hasDelivery = body.deliverySchedule != null && typeof body.deliverySchedule === 'object';
     const db = getSupabase();
+    await db.rpc('set_config', {
+      setting: 'app.hardened_inventory',
+      value: 'on',
+      is_local: true,
+    });
     const { data, error } = await db.rpc('record_sale', {
       p_warehouse_id: effectiveWarehouseId,
       p_lines: rpcLines,
