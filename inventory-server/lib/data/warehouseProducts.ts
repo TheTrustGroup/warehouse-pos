@@ -106,6 +106,25 @@ function isStatementTimeoutError(err: { message?: string }): boolean {
 
 type SizeRow = { product_id: string; size_code: string; quantity: number };
 
+async function fetchAllSizeRows(
+  db: SupabaseClient,
+  warehouseId: string,
+  productIds: string[]
+): Promise<SizeRow[]> {
+  const BATCH = 100;
+  const results: SizeRow[] = [];
+  for (let i = 0; i < productIds.length; i += BATCH) {
+    const batch = productIds.slice(i, i + BATCH);
+    const { data } = await db
+      .from('warehouse_inventory_by_size')
+      .select('product_id, size_code, quantity')
+      .eq('warehouse_id', warehouseId)
+      .in('product_id', batch);
+    if (data) results.push(...(data as SizeRow[]));
+  }
+  return results;
+}
+
 /**
  * List products for a warehouse.
  * Single-path query: products + LEFT JOIN semantics for warehouse_inventory_by_size (same warehouse_id).
@@ -161,23 +180,18 @@ export async function getWarehouseProducts(
   }
 
   // 2) Same warehouse_id: fetch warehouse_inventory (for one-size fallback) and warehouse_inventory_by_size (for quantity_by_size + total_quantity).
-  const [invRes, sizeRes] = await Promise.all([
+  const [invRes, allSizeRows] = await Promise.all([
     db
       .from('warehouse_inventory')
       .select('product_id, quantity', selectOpts())
       .eq('warehouse_id', effectiveWarehouseId)
       .in('product_id', productIds)
       .limit(5000),
-    db
-      .from('warehouse_inventory_by_size')
-      .select('product_id, size_code, quantity', selectOpts())
-      .eq('warehouse_id', effectiveWarehouseId)
-      .in('product_id', productIds)
-      .limit(5000),
+    fetchAllSizeRows(db, effectiveWarehouseId, productIds),
   ]);
 
   const invData = (invRes as { data?: { product_id: string; quantity?: number }[] | null }).data ?? [];
-  const sizeData = (sizeRes as { data?: SizeRow[] | null }).data ?? [];
+  const sizeData = allSizeRows;
   const invMap: Record<string, number> = {};
   for (const inv of invData) {
     const pid = String(inv.product_id ?? '');
