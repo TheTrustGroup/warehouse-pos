@@ -67,28 +67,6 @@ export function getLocationDisplay(location: { aisle?: string; rack?: string; bi
 /** One size row for normalizeQuantityBySize result. */
 type NormalizedSizeRow = { sizeCode: string; sizeLabel?: string; quantity: number };
 
-/** True when size code represents "one size" (any casing). Used to stabilize one_size vs sized display and avoid flash. */
-export function isOneSizeCode(code: string): boolean {
-  const n = String(code ?? '').trim().replace(/\s+/g, '_').toUpperCase();
-  return n === 'ONE_SIZE' || n === 'ONESIZE';
-}
-
-/**
- * Normalize product so "one size" is always sizeKind 'one_size' with a single ONE_SIZE row.
- * Stops UI flashing between "sized" and "one_size" when API or cache returns inconsistent shapes.
- */
-export function normalizeProductToOneSizeDisplay<T extends { sizeKind?: string; quantityBySize?: Array<{ sizeCode: string; sizeLabel?: string; quantity: number }> }>(p: T): T {
-  const kind = (p.sizeKind ?? 'na') as string;
-  const qbs = p.quantityBySize ?? [];
-  if (kind !== 'sized' || qbs.length !== 1) return p;
-  if (!isOneSizeCode(qbs[0].sizeCode)) return p;
-  return {
-    ...p,
-    sizeKind: 'one_size',
-    quantityBySize: [{ sizeCode: 'ONE_SIZE', sizeLabel: 'One size', quantity: qbs[0].quantity }],
-  };
-}
-
 /**
  * Normalize raw sizes from API (camelCase or snake_case) to { sizeCode, sizeLabel?, quantity }[].
  * Use when building Product from API so "No sizes recorded" does not show for sized products.

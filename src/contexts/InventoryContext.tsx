@@ -22,17 +22,17 @@ import { useWarehouse } from './WarehouseContext';
 import { isValidWarehouseId } from '../lib/warehouseId';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
-import { getCategoryDisplay, normalizeProductLocation, normalizeProductToOneSizeDisplay, normalizeQuantityBySize } from '../lib/utils';
+import { getCategoryDisplay, normalizeProductLocation, normalizeQuantityBySize } from '../lib/utils';
 import { parseProductsResponse } from '../lib/apiSchemas';
 import { useInventory as useOfflineInventory } from '../hooks/useInventory';
 import { getProductImages, setProductImages } from '../lib/productImagesStore';
 
 /** React Query is the only cache for products; invalidate on Realtime and after mutations. */
 
-/** Normalize API row to Product (for use in fetchProductsForWarehouse). Stabilize one-size so UI does not flash. */
+/** Normalize API row to Product (for use in fetchProductsForWarehouse). */
 function normalizeProductRow(p: any): Product {
   const rawSizes = p.quantityBySize ?? p.quantity_by_size;
-  const normalized = normalizeProductLocation({
+  return normalizeProductLocation({
     ...p,
     images: Array.isArray(p.images) ? p.images : [],
     quantity: Number(p.quantity ?? 0) || 0,
@@ -45,7 +45,6 @@ function normalizeProductRow(p: any): Product {
     sizeKind: (p.sizeKind ?? p.size_kind ?? 'na') as 'na' | 'one_size' | 'sized',
     quantityBySize: normalizeQuantityBySize(rawSizes),
   });
-  return normalizeProductToOneSizeDisplay(normalized) as Product;
 }
 
 /** Default page size for initial load so new products (e.g. by name) stay visible after save; 250 matches API max. */
@@ -242,12 +241,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const withSizes = list.map((p) => {
       const qbs = p.quantityBySize ?? [];
       const shouldPreserve = (p.sizeKind === 'sized' || p.sizeKind === 'one_size') && qbs.length === 0;
-      if (!shouldPreserve) {
-        return normalizeProductToOneSizeDisplay(p) as Product;
-      }
+      if (!shouldPreserve) return p;
       const kept = prevSizes.get(p.id);
-      if (!kept || kept.length === 0) return normalizeProductToOneSizeDisplay(p) as Product;
-      return normalizeProductToOneSizeDisplay({ ...p, quantityBySize: kept }) as Product;
+      if (!kept || kept.length === 0) return p;
+      return { ...p, quantityBySize: kept };
     });
     // Dedupe by id so background refetch or loadMore never shows duplicate cards.
     return Array.from(new Map(withSizes.map((p) => [p.id, p])).values());
@@ -390,7 +387,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       sizeKind: (p.sizeKind ?? p.size_kind ?? 'na') as 'na' | 'one_size' | 'sized',
       quantityBySize: normalizeQuantityBySize(rawSizes),
     });
-    return normalizeProductToOneSizeDisplay(normalized) as Product;
+    return normalized as Product;
   };
 
   const LOAD_MORE_PAGE_SIZE = 250;
