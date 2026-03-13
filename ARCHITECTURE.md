@@ -223,3 +223,31 @@ Navigation is defined once in `src/config/navigation.tsx` and imported by Sideba
 - **POS optimistic update after sale**: After a successful sale, the POS product list (or React Query cache) is not always updated immediately to reflect new quantities; user may need to refresh or switch warehouse to see correct stock. Consider invalidating products query or updating cache on successful POST /api/sales for the current warehouse.
 
 For data integrity (drift between warehouse_inventory and warehouse_inventory_by_size), see **docs/DATA_INTEGRITY_PRODUCT_DRIFT.md**. For deployment and env, see **docs/ENGINEERING_RULES.md** and **docs/DEPLOY_AND_STOCK_VERIFY.md**.
+
+---
+
+## 8. DEBUGGING LESSONS LEARNED
+
+### The Supabase 1000-row limit
+
+Supabase/PostgREST silently caps `.in()` query results at 1000 rows regardless of `.limit()` calls on the query itself. With 250+ products each having multiple sizes, warehouse_inventory_by_size queries were truncated, causing products beyond the first ~150 to fall back to ONE_SIZE. **Fix:** fetch in batches of 100 using a loop (fetchAllSizeRows in warehouseProducts.ts).
+
+### is_hardened_context() does not work from Next.js
+
+The DB function `is_hardened_context()` checks `current_setting('request.jwt.claim.role') = 'service_role'`. This GUC is only set automatically in Supabase Edge Functions. When calling from Next.js API routes (even with the service role key), this setting is never populated, so `is_hardened_context()` always returns false. This caused all BEFORE triggers to run in strict mode, silently blocking UPDATE operations on warehouse_inventory_by_size and preventing inventory deduction. **Fix:** remove all validation triggers; keep only the single normalizer (trg_normalize_size_code).
+
+### Redis cache was masking the real data
+
+The products list was cached in Redis for 5 minutes. Even after fixing the DB write path, the UI kept showing stale ONE_SIZE data from the cache. **Fix:** skip Redis entirely for view=list requests. Always read fresh from DB for the inventory list.
+
+### Two versions of record_sale RPC
+
+At one point two versions of record_sale existed in the DB with different signatures (one with p_customer_email, one with p_delivery_schedule). Supabase resolved the call by matching parameters, but this caused unpredictable behavior. Always drop old function versions when replacing RPCs.
+
+### Warehouse ID mismatch between reads and writes
+
+Products are stored in warehouse_products without a warehouse_id (one row per product). Inventory is per-warehouse in warehouse_inventory and warehouse_inventory_by_size. If the client uses a different warehouse_id for reads vs writes, sizes appear missing even though the data exists. Always verify currentWarehouseId is consistent across all API calls in the same session.
+
+### React Query cache race condition
+
+After saving a product, the code had a setTimeout that refetched the product list after 500–2000ms. This caused a race where the refetch returned stale data and overwrote the correct optimistic update. **Fix:** remove the delayed refetch entirely. Use only invalidateQueries immediately after save and let React Query refetch naturally.
