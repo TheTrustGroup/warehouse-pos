@@ -185,6 +185,7 @@ Navigation is defined once in `src/config/navigation.tsx` and imported by Sideba
 - **By_size fetched in batches of 100**: getWarehouseProducts fetches warehouse_inventory_by_size for the current page’s product IDs in chunks of 100 (BATCH = 100 in warehouseProducts.ts) to stay under PostgREST/Supabase row limits and avoid timeouts on large catalogs.
 - **List view skips Redis**: The products list endpoint does not cache when view=list so that quantityBySize is always from the DB and the list never shows stale “One size” or wrong quantities from a cached payload.
 - **Triggers simplified to single normalizer**: All previous “enforce” triggers on warehouse_inventory_by_size were replaced by one BEFORE trigger that only normalizes size_code (uppercase, trim). Size validation is done in the API against size_codes; complex business rules live in RPCs and application code.
+- **warehouse_products has no warehouse_id**: Products are global; inventory is per-warehouse. This means a product edit (name, images, prices) affects all warehouses simultaneously. Only quantity (warehouse_inventory, warehouse_inventory_by_size) is per-warehouse. This is intentional — products are shared, stock is not.
 
 ---
 
@@ -221,6 +222,8 @@ Navigation is defined once in `src/config/navigation.tsx` and imported by Sideba
 - **Cancel delivery restore logic**: When a delivery is cancelled (PATCH /api/sales, deliveryStatus = 'cancelled'), release_delivery_reservations is called. Confirm that reserved stock is fully restored and visible in inventory and that edge cases (partial cancel, double cancel) are handled.
 - **Draft/pending sale preserve logic**: Preserving draft or pending sales across refresh or navigation is not fully documented or implemented; may require client persistence (e.g. localStorage) and/or a backend “draft” state.
 - **POS optimistic update after sale**: After a successful sale, the POS product list (or React Query cache) is not always updated immediately to reflect new quantities; user may need to refresh or switch warehouse to see correct stock. Consider invalidating products query or updating cache on successful POST /api/sales for the current warehouse.
+- **ONE_SIZE flash on first load**: Even with batched by_size fetching, a brief flash can occur on first page load before React Query hydrates. Fix with keepPreviousData: true on the products query and staleTime: 30000 so the previous data shows while fresh data loads.
+- **POS size picker depends on sizeKind**: The POS size picker only opens when sizeKind === 'sized'. If the API ever returns one_size for a product with multiple real sizes, POS will not show size buttons. Safeguard: SizePickerSheet and barcode scan handler also check quantityBySize.length > 1 as a fallback.
 
 For data integrity (drift between warehouse_inventory and warehouse_inventory_by_size), see **docs/DATA_INTEGRITY_PRODUCT_DRIFT.md**. For deployment and env, see **docs/ENGINEERING_RULES.md** and **docs/DEPLOY_AND_STOCK_VERIFY.md**.
 
