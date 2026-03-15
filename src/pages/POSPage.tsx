@@ -199,10 +199,13 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
 
   /** Timeout high enough for serverless cold start + products DB (avoids "connection lost" on slow first load). */
   const API_FETCH_TIMEOUT_MS = 40_000;
+  /** Longer timeout for POST /api/sales so checkouts with many items can complete. */
+  const API_SALES_TIMEOUT_MS = 45_000;
   const apiFetch = useCallback(
-    async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
+    async <T = unknown>(path: string, init?: RequestInit, options?: { timeoutMs?: number }): Promise<T> => {
+      const timeoutMs = options?.timeoutMs ?? API_FETCH_TIMEOUT_MS;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), API_FETCH_TIMEOUT_MS);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       const callerSignal = init?.signal;
       if (callerSignal) {
         if (callerSignal.aborted) {
@@ -455,15 +458,49 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   };
 
   const saleMutation = useMutation({
-    mutationFn: async ({ payload }: SaleMutationVars): Promise<SaleMutationResult> => {
+    mutationFn: async ({ payload, productsSnapshot }: SaleMutationVars): Promise<SaleMutationResult> => {
       if (!isValidWarehouseId(payload.warehouseId)) {
         throw new Error('Warehouse not loaded. Please wait and try again.');
       }
+      // Pre-sale stock check; on failure we throw so onError rolls back optimistic UI
+      try {
+        const verifyRes = await apiFetch<{ valid: boolean; conflicts?: Array<{ product_id: string; size_code: string | null; requested: number; available: number }> }>(
+          '/api/products/verify-stock',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              warehouse_id: payload.warehouseId,
+              items: payload.lines.map((l) => ({
+                product_id: l.productId,
+                size_code: l.sizeCode ?? undefined,
+                quantity: l.qty,
+              })),
+            }),
+          }
+        );
+        if (!verifyRes.valid && Array.isArray(verifyRes.conflicts) && verifyRes.conflicts.length > 0) {
+          const first = verifyRes.conflicts[0];
+          const product = productsSnapshot.find((p) => p.id === first.product_id);
+          const name = product?.name ?? first.product_id;
+          const sizeLabel = first.size_code ? ` - ${first.size_code}` : '';
+          const err = new Error(
+            `Stock has changed since you added this item. ${name}${sizeLabel}: Only ${first.available} available. Update your cart and try again.`
+          ) as Error & { status?: number };
+          err.status = 422;
+          throw err;
+        }
+      } catch (e) {
+        if (e instanceof Error && (e as Error & { status?: number }).status === 422) throw e;
+        console.warn('[POS] verify-stock failed, proceeding with sale:', e);
+      }
       const idempotencyKey = `pos-${payload.warehouseId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const result = await apiFetch<SaleMutationResult>('/api/sales', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-        body: JSON.stringify({
+      const result = await apiFetch<SaleMutationResult>(
+        '/api/sales',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+          body: JSON.stringify({
           warehouseId: payload.warehouseId,
           customerName: payload.customerName || null,
           customerEmail: payload.customerEmail || null,
@@ -485,28 +522,14 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           })),
           deliverySchedule: payload.deliverySchedule ?? null,
         }),
-      });
+        },
+        { timeoutMs: API_SALES_TIMEOUT_MS }
+      );
       return result;
     },
-    onMutate: async ({ payload, cartSnapshot, productsSnapshot }: SaleMutationVars) => {
-      const previousProducts = productsSnapshot;
-      const previousCart = cartSnapshot;
-      setProducts(applySaleDeduction(productsSnapshot, payload.lines));
-      setCart([]);
-      setCartOpen(false);
-      await new Promise((r) => setTimeout(r, 50));
-      if (!isMounted.current) return { previousCart, previousProducts };
-      setSaleResult({
-        ...payload,
-        saleId: undefined,
-        receiptId: 'Pending…',
-        completedAt: new Date().toISOString(),
-        lines: payload.lines.map((l) => ({
-          ...l,
-          key: buildCartKey(l.productId, l.sizeCode ?? null),
-        })),
-      });
-      return { previousCart, previousProducts };
+    onMutate: async ({ cartSnapshot, productsSnapshot }: SaleMutationVars) => {
+      // Optimistic update is done in handleCharge before calling the mutation so deduction feels instant.
+      return { previousCart: cartSnapshot, previousProducts: productsSnapshot };
     },
     onError: (err: unknown, _vars: SaleMutationVars, context: { previousCart: CartLine[]; previousProducts: POSProduct[] } | undefined) => {
       if (isMounted.current) setCharging(false);
@@ -520,13 +543,17 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
         setCart(context.previousCart);
       }
       setSaleResult(null);
-      if (status === 409 || status === 422) {
+      if (status === 422 && message.includes('Stock has changed')) {
+        showToast(message, 'err');
+      } else if (status === 409 || status === 422) {
         showToast('Insufficient stock for one or more items. Adjust the cart and try again.', 'err');
-      } else       if (status === 401) {
+      } else if (status === 401) {
         showToast('Session expired. Please log in again.', 'err');
       } else if (status === 404) {
         showToast('Sales API not found. Ensure the backend is deployed and VITE_API_BASE_URL points to it.', 'warn');
-      } else if (message.includes('timed out') || /fetch|network|load failed/i.test(message)) {
+      } else if (message.includes('timed out')) {
+        showToast('Sale took too long (many items). Try again or split into smaller sales.', 'warn');
+      } else if (/fetch|network|load failed/i.test(message)) {
         showToast("Can't reach the server. Check your connection and tap Charge again.", 'warn');
       } else if (status === 500 && (detail || message) && message !== `HTTP ${status}`) {
         showToast(detail ? `Sale failed: ${detail}` : message, 'err');
@@ -720,50 +747,42 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       return;
     }
 
-    // Pre-sale stock check so we don't sell out-of-stock when mobile data is stale
-    try {
-      const verifyRes = await apiFetch<{ valid: boolean; conflicts?: Array<{ product_id: string; size_code: string | null; requested: number; available: number }> }>(
-        '/api/products/verify-stock',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            warehouse_id: payload.warehouseId,
-            items: payload.lines.map((l) => ({
-              product_id: l.productId,
-              size_code: l.sizeCode ?? undefined,
-              quantity: l.qty,
-            })),
-          }),
-        }
-      );
-      if (!verifyRes.valid && Array.isArray(verifyRes.conflicts) && verifyRes.conflicts.length > 0) {
-        const first = verifyRes.conflicts[0];
-        const product = products.find((p) => p.id === first.product_id);
-        const name = product?.name ?? first.product_id;
-        const sizeLabel = first.size_code ? ` - ${first.size_code}` : '';
-        showToast(
-          `Stock has changed since you added this item. ${name}${sizeLabel}: Only ${first.available} available. Update your cart and try again.`,
-          'err'
-        );
-        setCharging(false);
-        return;
-      }
-    } catch (e) {
-      console.warn('[POS] verify-stock failed, proceeding with sale:', e);
-      // Proceed with sale; record_sale will still enforce stock server-side
+    // Optimistic update: deduct stock and show success screen immediately so deduction feels instant.
+    const previousCart = cart;
+    const previousProducts = products;
+    const deductedProducts = applySaleDeduction(products, payload.lines);
+    setProducts(deductedProducts);
+    setCart([]);
+    setCartOpen(false);
+    setSaleResult({
+      ...payload,
+      saleId: undefined,
+      receiptId: 'Pending…',
+      completedAt: new Date().toISOString(),
+      lines: payload.lines.map((l) => ({
+        ...l,
+        key: buildCartKey(l.productId, l.sizeCode ?? null),
+      })),
+    });
+    const wid = payload.warehouseId;
+    if (isValidWarehouseId(wid)) {
+      productsCacheRef.current = { wid, list: deductedProducts, at: Date.now() };
+      queryClient.setQueryData(queryKeys.products(wid), (old: { list: POSProduct[]; total?: number } | undefined) => ({
+        list: deductedProducts,
+        total: old?.total,
+      }));
     }
 
     try {
       await saleMutation.mutateAsync({
         payload,
-        cartSnapshot: cart,
-        productsSnapshot: products,
+        cartSnapshot: previousCart,
+        productsSnapshot: previousProducts,
       });
     } catch (err) {
       // Mutation already ran onError (toast + rollback); prevent unhandled rejection / error boundary
       const msg = getUserFriendlyMessage(err);
-      if (msg && !/sale didn't reach|session expired|insufficient stock|not found|connection/i.test(msg)) {
+      if (msg && !/sale didn't reach|session expired|insufficient stock|not found|connection|sale took too long|stock has changed/i.test(msg)) {
         showToast(msg, 'err');
       }
     } finally {
