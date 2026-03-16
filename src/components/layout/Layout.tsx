@@ -203,12 +203,14 @@ function LayoutContent() {
           )}
         </div>
       )}
-      {/* Main: offset by sidebar and topbar; on mobile add bottom padding for tab bar */}
+      {/* Main: offset by sidebar and topbar; mobile 52px topbar + clear bottom nav (64px + safe area + 16px) */}
       <main
-        className={`lg:ml-[var(--edk-sidebar-w)] pt-16 lg:pt-6 pl-[max(0.75rem,var(--safe-left))] pr-[max(0.75rem,var(--safe-right))] lg:px-6 min-h-[calc(var(--min-h-viewport)-var(--edk-topbar-h))] max-w-[1600px] overflow-x-hidden ${
-          showDegradedBanner || showSyncingBar ? 'mt-0' : isPOS ? 'mt-0' : 'mt-[calc(var(--edk-topbar-h)+var(--safe-top))]'
+        className={`lg:ml-[var(--edk-sidebar-w)] pt-[52px] md:pt-16 lg:pt-6 pl-[max(0.75rem,var(--safe-left))] pr-[max(0.75rem,var(--safe-right))] lg:px-6 min-h-[calc(var(--min-h-viewport)-var(--edk-topbar-h))] max-w-[1600px] overflow-x-hidden overflow-y-auto ${
+          showDegradedBanner || showSyncingBar ? 'mt-0' : isPOS ? 'mt-0' : isMobile ? 'mt-0' : 'mt-[calc(var(--edk-topbar-h)+var(--safe-top))]'
         } ${
-          isMobile ? 'pb-[max(4rem,calc(var(--safe-bottom)+4rem))]' : 'pb-[max(3rem,calc(var(--safe-bottom)+3rem))]'
+          isMobile
+            ? 'pb-[calc(64px+env(safe-area-inset-bottom,0px)+16px)]'
+            : 'pb-[max(3rem,calc(var(--safe-bottom)+3rem))]'
         }`}
       >
         <Outlet />
