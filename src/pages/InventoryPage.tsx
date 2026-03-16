@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Package, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Package, AlertTriangle } from 'lucide-react';
 import ProductCard, { ProductCardSkeleton } from '../components/inventory/ProductCard';
 import ProductModal from '../components/inventory/ProductModal';
 import { type SizeCode } from '../components/inventory/SizesSection';
@@ -335,8 +335,6 @@ export default function InventoryPage(_props: InventoryPageProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sort, setSort] = useState<SortKey>('name_asc');
   const [sortOpen, setSortOpen] = useState(false);
-  const [sizeDropdownOpen, setSizeDropdownOpen] = useState(false);
-  const [colorDropdownOpen, setColorDropdownOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
@@ -732,7 +730,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
         </div>
       )}
 
-      {/* Filter toolbar: category pills, Size/Color as styled buttons (no native select), sort */}
+      {/* Filter toolbar: category pills, Size/Color dropdowns, sort, results count */}
       <div className="flex flex-wrap items-center gap-2 mb-5">
         <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
           {(['all', ...CATEGORIES] as string[]).map((cat) => (
@@ -749,80 +747,31 @@ export default function InventoryPage(_props: InventoryPageProps) {
               {cat === 'all' ? 'All' : cat}
             </button>
           ))}
+          <select
+            value={sizeFilter}
+            onChange={(e) => setSizeFilter(e.target.value)}
+            className="h-[30px] pl-2.5 pr-6 rounded-[20px] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] min-w-[100px] cursor-pointer appearance-none bg-no-repeat bg-[length:10px_6px] bg-[right_10px_center]"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238A8784' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")` }}
+            aria-label="Filter by size"
+          >
+            <option value="">Size: All</option>
+            {uniqueSizes.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <select
+            value={colorFilter}
+            onChange={(e) => setColorFilter(e.target.value)}
+            className="h-[30px] pl-2.5 pr-6 rounded-[20px] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] min-w-[100px] cursor-pointer appearance-none bg-no-repeat bg-[length:10px_6px] bg-[right_10px_center]"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238A8784' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")` }}
+            aria-label="Filter by color"
+          >
+            <option value="">Color: All</option>
+            {COLOR_OPTIONS.filter((c) => c !== 'All').map((c) => (
+              <option key={c} value={c === 'Uncategorized' ? 'uncategorized' : c}>{c}</option>
+            ))}
+          </select>
           <div className="relative flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => { setSizeDropdownOpen((o) => !o); setColorDropdownOpen(false); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E0DED8] bg-white text-[12px] font-medium text-[#3A3832] min-w-[100px]"
-              aria-label="Filter by size"
-            >
-              Size: {sizeFilter || 'All'}
-              <ChevronDown size={12} className="text-[#9B9890]" />
-            </button>
-            {sizeDropdownOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setSizeDropdownOpen(false)} aria-hidden />
-                <div className="absolute left-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-[#E0DED8] py-1.5 min-w-[120px] max-h-[200px] overflow-y-auto">
-                  <button
-                    type="button"
-                    onClick={() => { setSizeFilter(''); setSizeDropdownOpen(false); }}
-                    className={`w-full px-4 py-2 text-left text-[13px] font-medium ${!sizeFilter ? 'text-[#1B6FE8] bg-[#EBF2FD]' : 'text-[#3A3832] hover:bg-[#EEEDE9]'}`}
-                  >
-                    All
-                  </button>
-                  {uniqueSizes.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => { setSizeFilter(s); setSizeDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-[13px] font-medium ${sizeFilter === s ? 'text-[#1B6FE8] bg-[#EBF2FD]' : 'text-[#3A3832] hover:bg-[#EEEDE9]'}`}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-          <div className="relative flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => { setColorDropdownOpen((o) => !o); setSizeDropdownOpen(false); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E0DED8] bg-white text-[12px] font-medium text-[#3A3832] min-w-[100px]"
-              aria-label="Filter by color"
-            >
-              Color: {colorFilter ? (colorFilter === 'uncategorized' ? 'Uncategorized' : colorFilter) : 'All'}
-              <ChevronDown size={12} className="text-[#9B9890]" />
-            </button>
-            {colorDropdownOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setColorDropdownOpen(false)} aria-hidden />
-                <div className="absolute left-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-[#E0DED8] py-1.5 min-w-[140px] max-h-[200px] overflow-y-auto">
-                  <button
-                    type="button"
-                    onClick={() => { setColorFilter(''); setColorDropdownOpen(false); }}
-                    className={`w-full px-4 py-2 text-left text-[13px] font-medium ${!colorFilter ? 'text-[#1B6FE8] bg-[#EBF2FD]' : 'text-[#3A3832] hover:bg-[#EEEDE9]'}`}
-                  >
-                    All
-                  </button>
-                  {COLOR_OPTIONS.filter((c) => c !== 'All').map((c) => {
-                    const value = c === 'Uncategorized' ? 'uncategorized' : c;
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => { setColorFilter(value); setColorDropdownOpen(false); }}
-                        className={`w-full px-4 py-2 text-left text-[13px] font-medium ${colorFilter === value ? 'text-[#1B6FE8] bg-[#EBF2FD]' : 'text-[#3A3832] hover:bg-[#EEEDE9]'}`}
-                      >
-                        {c}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-          <div className="relative flex-shrink-0 ml-auto">
             <button
               type="button"
               onClick={() => setSortOpen((o) => !o)}
@@ -968,10 +917,10 @@ export default function InventoryPage(_props: InventoryPageProps) {
           </div>
         )}
 
-        {/* Product grid — mobile: single column full width; desktop: 2–3 columns */}
+        {/* Product grid — EDK card style: 10px radius, 4:3 image, hover lift */}
         {!loading && !error && displayed.length > 0 && (
           <>
-            <div className="flex flex-col gap-3 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-3.5">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5">
               {displayed.map(product => (
                 <ProductCard
                   key={product.id}

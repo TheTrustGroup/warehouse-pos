@@ -3,7 +3,7 @@
 // Uses WarehouseContext for warehouseId. Data via React Query (useDashboardQuery).
 // ============================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { DollarSign, Package, AlertTriangle, Receipt, ShoppingCart, CheckCircle, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useWarehouse } from '../contexts/WarehouseContext';
@@ -20,75 +20,6 @@ import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 function formatGHC(n: number): string {
   return 'GH₵' + n.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-const MOBILE_BREAKPOINT = 768;
-function useIsMobile(): boolean {
-  const [mobile, setMobile] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
-  );
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
-    const handler = () => setMobile(mq.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-  return mobile;
-}
-
-/** Mobile-only stat card per spec: rounded-xl, 10px label, 26px value, blue/red/default. */
-function DashboardStatCardMobile({
-  label,
-  value,
-  variant = 'default',
-  valueColor,
-  loading,
-}: {
-  label: string;
-  value: string | number;
-  variant?: 'blue' | 'default';
-  valueColor?: 'red' | 'blue';
-  loading?: boolean;
-}) {
-  if (loading) {
-    return (
-      <div className="rounded-xl border-[0.5px] border-[#E0DED8] bg-white p-3 animate-pulse">
-        <div className="h-3 w-16 bg-[#E0DED8] rounded mb-1.5" />
-        <div className="h-7 w-20 bg-[#E0DED8] rounded" />
-      </div>
-    );
-  }
-  return (
-    <div
-      className={`rounded-xl border-[0.5px] p-3 ${
-        variant === 'blue'
-          ? 'bg-[#1B6FE8] border-[#1B6FE8]'
-          : 'bg-white border-[#E0DED8]'
-      }`}
-    >
-      <p
-        className={`text-[10px] font-semibold uppercase tracking-[0.08em] mb-1.5 ${
-          variant === 'blue' ? 'text-white/70' : 'text-[#9B9890]'
-        }`}
-      >
-        {label}
-      </p>
-      <p
-        className={`font-display text-[26px] leading-none ${
-          variant === 'blue'
-            ? 'text-white'
-            : valueColor === 'blue'
-              ? 'text-[#1B6FE8]'
-              : valueColor === 'red'
-                ? 'text-[#E83B2E]'
-                : 'text-[#1A1916]'
-        }`}
-        style={{ fontFamily: "'Bebas Neue', 'Barlow Condensed', sans-serif" }}
-      >
-        {value}
-      </p>
-    </div>
-  );
 }
 
 /** Rounded/compact so large amounts fit in the stat card (e.g. GH₵585.5K, GH₵1.2M). */
@@ -144,7 +75,6 @@ function LowStockTable({ items }: { items: DashboardLowStockItem[] }) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
   const { currentWarehouseId, currentWarehouse, warehouses } = useWarehouse();
   const { hasRole, user } = useAuth();
   const { presenceList, isSubscribed } = usePresence();
@@ -157,6 +87,7 @@ export default function DashboardPage() {
   const { dashboard, todayByWarehouse, isLoading: loading, error: queryError, refetch } = useDashboardQuery(warehouseId);
   const error = queryError?.message ?? null;
 
+  // Refetch when Dashboard is opened so Stock Alerts reflect latest inventory (e.g. after editing product sizes).
   useEffect(() => {
     if (isWarehouseValid) refetch();
   }, [isWarehouseValid, refetch]);
@@ -171,78 +102,64 @@ export default function DashboardPage() {
       }
     : null;
 
-  const statLoading = !isWarehouseValid || (loading && !dashboard);
-  const firstTwoWarehouses = warehouses.slice(0, 2);
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-[var(--edk-bg)] p-3 sm:p-4">
       <div className="max-w-5xl mx-auto space-y-4">
 
-        {/* ── Header: mobile = DASHBOARD + subtitle + New sale in header; desktop = original ── */}
-        <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1
-              className="text-[26px] tracking-[0.04em] text-[#1A1916]"
-              style={{ fontFamily: "'Bebas Neue', 'Barlow Condensed', sans-serif" }}
-            >
-              {isMobile ? 'DASHBOARD' : 'Dashboard'}
-            </h1>
-            <p className="text-[12px] text-[#9B9890] mt-0.5">
-              {isMobile ? `${warehouseName} · ${roleLabel ?? 'User'}` : 'Inventory stats, stock alerts, and today\'s sales for this warehouse.'}
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+              <h1
+                className="text-[18px] font-bold tracking-tight text-[var(--edk-ink)]"
+                style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+              >
+                Dashboard
+              </h1>
+              {roleLabel != null && (
+                <Badge variant="gray" size="sm">
+                  {roleLabel}
+                </Badge>
+              )}
+            </div>
+            <p className="text-[12px] text-[var(--edk-ink-2)]">
+              Inventory stats, stock alerts, and today&apos;s sales for this warehouse.
             </p>
           </div>
-          <button
-            type="button"
+
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => navigate('/pos')}
-            className="bg-[#1A1916] text-white text-[13px] font-semibold px-3 py-2 rounded-lg flex items-center gap-1 whitespace-nowrap mt-1"
+            leftIcon={<ShoppingCart className="w-4 h-4" strokeWidth={2} />}
+            className="shadow-[0_2px_8px_var(--edk-red-soft)]"
           >
-            <ShoppingCart size={13} strokeWidth={2} />
             New sale
-          </button>
+          </Button>
         </div>
 
-        {!isMobile && (
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--edk-green)]" aria-hidden />
-            <p className="text-[12px] font-semibold text-[var(--edk-ink-2)]">
-              {!isWarehouseValid ? (
-                <>Loading warehouse…</>
-              ) : (
-                <>Inventory stats for: <span className="text-[var(--edk-ink)] font-bold">{warehouseName}</span></>
-              )}
-            </p>
-            {isWarehouseValid && loading && (
-              <span className="flex items-center gap-2 text-[12px] text-[var(--edk-ink-3)]">
-                <LoadingSpinner size="sm" />
-                Loading…
-              </span>
+        {/* ── Warehouse label ── */}
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--edk-green)]" aria-hidden />
+          <p className="text-[12px] font-semibold text-[var(--edk-ink-2)]">
+            {!isWarehouseValid ? (
+              <>Loading warehouse…</>
+            ) : (
+              <>Inventory stats for: <span className="text-[var(--edk-ink)] font-bold">{warehouseName}</span></>
             )}
-          </div>
-        )}
+          </p>
+          {isWarehouseValid && loading && (
+            <span className="flex items-center gap-2 text-[12px] text-[var(--edk-ink-3)]">
+              <LoadingSpinner size="sm" />
+              Loading…
+            </span>
+          )}
+        </div>
 
-        {/* ── Today's Sales by Location: mobile = compact card; desktop = full grid ── */}
+        {/* ── Today's Sales by Location ── */}
         {warehouses.length > 0 && (
-          isMobile && firstTwoWarehouses.length > 0 ? (
-            <div className="bg-white rounded-2xl border-[0.5px] border-[#E0DED8] p-3 mb-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#9B9890] mb-2">
-                Today&apos;s Sales by Location
-              </p>
-              <div className="flex gap-6">
-                {firstTwoWarehouses.map((w) => {
-                  const amount = todayByWarehouse[w.id] ?? 0;
-                  const hasSales = !loading && amount > 0;
-                  return (
-                    <div key={w.id}>
-                      <p className="text-[11px] text-[#9B9890]">{w.name}</p>
-                      <p className={`text-[15px] font-semibold ${hasSales ? 'text-[#1B6FE8]' : 'text-[#9B9890]'}`}>
-                        {loading ? '—' : formatGHCCompact(amount)}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
           <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
             <div className="px-4 py-3 border-b border-[var(--edk-border)]">
               <h2 className="text-[14px] font-bold text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
@@ -261,7 +178,6 @@ export default function DashboardPage() {
               ))}
             </div>
           </div>
-          )
         )}
 
         {/* ── Active cashiers (admin only, Supabase Realtime Presence) ── */}
@@ -327,64 +243,36 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Stat cards: mobile 2×2 with mobile spec; desktop original ── */}
-        {isMobile ? (
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <DashboardStatCardMobile
-              label="Stock Value"
-              value={stats ? formatGHCCompact(stats.totalStockValue) : '—'}
-              variant="blue"
-              loading={statLoading}
-            />
-            <DashboardStatCardMobile
-              label="Products"
-              value={stats?.totalProducts ?? '—'}
-              loading={statLoading}
-            />
-            <DashboardStatCardMobile
-              label="Low Stock"
-              value={stats ? stats.lowStockCount + stats.outOfStockCount : '—'}
-              valueColor="red"
-              loading={statLoading}
-            />
-            <DashboardStatCardMobile
-              label="Today's Sales"
-              value={stats ? formatGHCCompact(stats.todaysSales) : '—'}
-              valueColor="blue"
-              loading={statLoading}
-            />
-          </div>
-        ) : (
+        {/* ── Stat cards ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             label="Total Stock Value"
             value={stats ? formatGHCCompact(stats.totalStockValue) : '—'}
             icon={DollarSign}
             variant="default"
-            loading={statLoading}
+            loading={!isWarehouseValid || (loading && !dashboard)}
           />
           <StatCard
             label="Total Products"
             value={stats?.totalProducts ?? '—'}
             icon={Package}
-            loading={statLoading}
+            loading={!isWarehouseValid || (loading && !dashboard)}
           />
           <StatCard
             label="Low Stock Items"
             value={stats ? stats.lowStockCount + stats.outOfStockCount : '—'}
             icon={AlertTriangle}
             variant={stats && stats.lowStockCount + stats.outOfStockCount > 0 ? 'amber' : 'default'}
-            loading={statLoading}
+            loading={!isWarehouseValid || (loading && !dashboard)}
           />
           <StatCard
             label="Today's Sales"
             value={stats ? formatGHCCompact(stats.todaysSales) : '—'}
             icon={Receipt}
             variant="green"
-            loading={statLoading}
+            loading={!isWarehouseValid || (loading && !dashboard)}
           />
         </div>
-        )}
 
         {/* ── Low stock alerts ── */}
         <div className="rounded-[var(--edk-radius)] border border-[var(--edk-border)] bg-[var(--edk-surface)] overflow-hidden">
