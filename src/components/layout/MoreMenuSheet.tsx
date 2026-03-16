@@ -72,7 +72,9 @@ export function MoreMenuSheet({ open, onClose }: MoreMenuSheetProps) {
         className="absolute bottom-0 left-0 right-0 z-50 max-h-[75dvh] overflow-y-auto rounded-t-2xl bg-[var(--edk-surface)] shadow-xl border-t border-[var(--edk-border)]"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--edk-border)] bg-[var(--edk-surface)] px-4 py-3">
+        <div className="sticky top-0 z-10 pt-2 pb-1 flex flex-col items-center border-b border-[var(--edk-border)] bg-[var(--edk-surface)]">
+          <span className="w-10 h-1 rounded-full bg-[var(--edk-border-mid)] shrink-0 mb-2" aria-hidden />
+          <div className="flex items-center justify-between w-full px-4 py-2">
           <h2 className="text-[14px] font-extrabold uppercase tracking-wide text-[var(--edk-ink)]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
             More
           </h2>
@@ -84,6 +86,7 @@ export function MoreMenuSheet({ open, onClose }: MoreMenuSheetProps) {
           >
             ✕
           </button>
+          </div>
         </div>
 
         <div className="px-4 py-4 space-y-4">
@@ -97,7 +100,7 @@ export function MoreMenuSheet({ open, onClose }: MoreMenuSheetProps) {
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-4 py-3 rounded-xl text-[13px] font-medium transition-colors touch-manipulation min-h-[48px] ${
                       isActive
-                        ? 'bg-[rgba(232,40,26,0.12)] text-[var(--edk-red)]'
+                        ? 'bg-[var(--blue-soft)] text-[var(--blue)]'
                         : 'text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)]'
                     }`
                   }

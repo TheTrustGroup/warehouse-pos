@@ -43,7 +43,7 @@ export function MobileBottomNav({
           className={({ isActive }) =>
             `flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 px-1.5 py-1 rounded-md transition-colors touch-manipulation ${
               isActive
-                ? 'bg-[rgba(232,40,26,0.12)] text-[var(--edk-red)]'
+                ? 'bg-[var(--blue-soft)] text-[var(--blue)]'
                 : 'text-[var(--edk-ink-2)]'
             }`
           }

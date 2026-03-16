@@ -134,7 +134,7 @@ export default function DashboardPage() {
             size="sm"
             onClick={() => navigate('/pos')}
             leftIcon={<ShoppingCart className="w-4 h-4" strokeWidth={2} />}
-            className="shadow-[0_2px_8px_var(--edk-red-soft)]"
+            className="shadow-[0_2px_8px_var(--blue-glow)]"
           >
             New sale
           </Button>

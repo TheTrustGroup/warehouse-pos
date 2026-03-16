@@ -40,8 +40,12 @@
   --edk-amber: #D97706;
   --edk-amber-bg: #FFFBEB;
   --edk-sidebar-w: 240px;
-  --edk-topbar-h: 48px;
+  --edk-topbar-h: 56px;
   --edk-radius: 10px;
+  /* Hunnid Official primary accent (blue); red reserved for danger only */
+  --blue: #2563eb;
+  --blue-soft: rgba(37, 99, 235, 0.15);
+  --blue-glow: rgba(37, 99, 235, 0.35);
   --edk-radius-sm: 6px;
 }
 
@@ -125,10 +129,11 @@
   .btn-primary {
     min-height: var(--touch-min);
     @apply px-6 py-3 rounded-xl font-semibold text-white shadow-primary transition-all duration-200 active:scale-[0.98];
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    background: var(--blue);
   }
   .btn-primary:hover {
-    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
+    box-shadow: 0 6px 16px var(--blue-glow);
+    filter: brightness(1.05);
   }
 
   /* Secondary: de-emphasized, grouped logically */

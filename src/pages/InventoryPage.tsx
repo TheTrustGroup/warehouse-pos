@@ -257,7 +257,7 @@ function StatCard({
     <div
       className={`rounded-[var(--edk-radius)] border px-4 py-4 flex flex-col gap-1 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ${className} ${
         accent
-          ? 'bg-[var(--edk-red)] border-transparent text-white'
+          ? 'bg-[var(--blue)] border-transparent text-white'
           : warning
             ? 'bg-[var(--edk-amber-bg)] border-[rgba(217,119,6,0.15)]'
             : 'bg-[var(--edk-surface)] border-[var(--edk-border)] text-[var(--edk-ink)]'
@@ -698,7 +698,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
           size="sm"
           onClick={openAddModal}
           leftIcon={<PlusIcon />}
-          className="flex-shrink-0 shadow-[0_1px_3px_var(--edk-red-soft)]"
+          className="flex-shrink-0 shadow-[0_1px_3px_var(--blue-soft)]"
         >
           Add product
         </Button>
@@ -797,7 +797,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
                       type="button"
                       onClick={() => { setSort(opt.key); setSortOpen(false); }}
                       className={`w-full px-4 py-2 text-left text-[13px] font-medium transition-colors ${
-                        sort === opt.key ? 'text-[var(--edk-red)] bg-[var(--edk-red-soft)]' : 'text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)]'
+                        sort === opt.key ? 'text-[var(--blue)] bg-[var(--blue-soft)]' : 'text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)]'
                       }`}
                     >
                       {opt.label}
@@ -910,7 +910,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
               variant="ghost"
               size="sm"
               onClick={() => { setSearchParams({}); setCategory('all'); setSizeFilter(''); setColorFilter(''); setCurrentPage(1); }}
-              className="text-[var(--edk-red)] hover:text-[var(--edk-red-hover)]"
+              className="text-[var(--blue)] hover:opacity-80"
             >
               Clear filters
             </Button>
