@@ -15,8 +15,10 @@ function withCors(res: NextResponse, req: NextRequest): NextResponse {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const buildId =
+    process.env.VERCEL_DEPLOYMENT_ID ?? process.env.BUILD_ID ?? 'dev';
   return withCors(
-    NextResponse.json({ status: 'ok' }, { status: 200 }),
+    NextResponse.json({ status: 'ok', buildId }, { status: 200 }),
     request
   );
 }

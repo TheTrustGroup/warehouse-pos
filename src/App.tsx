@@ -26,6 +26,7 @@ import { Layout } from './components/layout/Layout';
 import { LoadingScreen } from './components/ui/LoadingSpinner';
 import { DebugPanel } from './components/debug/DebugPanel';
 import { BrowserCheck } from './components/BrowserCheck';
+import { UpdateBanner } from './components/UpdateBanner';
 import { OnboardingModal } from './components/OnboardingModal';
 import { PERMISSIONS } from './types/permissions';
 import { initIdbErrorRecovery } from './lib/idbErrorRecovery';
@@ -311,6 +312,7 @@ function App() {
   }, []);
   return (
     <BrowserCheck>
+    <UpdateBanner />
     <ToastProvider>
       <ServiceWorkerUpdateListener />
       <VersionCheckListener />
