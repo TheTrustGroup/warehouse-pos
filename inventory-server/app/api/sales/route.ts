@@ -10,6 +10,8 @@ import { logApiResponse } from '@/lib/requestLog';
 import { requireAuth, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { getScopeForUser } from '@/lib/data/userScopes';
 import { getSupabase } from '@/lib/supabase';
+import { notifyProductsUpdated } from '@/lib/cache/productsCache';
+import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 15;
@@ -256,6 +258,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!data || typeof data !== 'object') {
       return fail(500, 'Unexpected response from database.');
     }
+
+    await notifyProductsUpdated(effectiveWarehouseId);
+    await notifyInventoryUpdated(effectiveWarehouseId);
 
     const result = data as { id?: string; receiptId?: string; total?: number; itemCount?: number; status?: string; createdAt?: string };
     const response = {

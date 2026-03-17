@@ -568,14 +568,15 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     onSuccess: (result, vars: SaleMutationVars) => {
       if (isMounted.current) setCharging(false);
       const wid = warehouse.id?.trim();
-      // Update products cache optimistically; do not invalidate or refetch for 10s.
+      // Optimistically update product quantities in cache from sale lines (before refetch).
       if (isValidWarehouseId(wid)) {
         queryClient.setQueryData(queryKeys.products(wid), (old: { list: POSProduct[]; total?: number } | undefined) => ({
           list: applySaleDeduction(old?.list ?? [], vars.payload.lines),
           total: old?.total,
         }));
+        queryClient.invalidateQueries({ queryKey: queryKeys.products(wid) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(wid) });
       }
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       productsCacheRef.current = null;
       if (isValidWarehouseId(wid)) {
         postSaleRefetchTimeoutRef.current = setTimeout(() => {
