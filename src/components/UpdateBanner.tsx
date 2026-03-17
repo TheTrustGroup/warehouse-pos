@@ -123,7 +123,7 @@ export function UpdateBanner() {
           fontSize: '14px',
           fontWeight: 600,
           color: '#fff',
-          backgroundColor: '#2563eb',
+          backgroundColor: '#E8281A',
           border: 'none',
           borderRadius: '6px',
           cursor: 'pointer',

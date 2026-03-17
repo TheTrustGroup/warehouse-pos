@@ -9,18 +9,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        /* Hunnid Official blue — primary accent; red reserved for danger only */
+        /* EDK brand red — primary accent for CTAs and focus */
         primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50: '#fef2f2',
+          100: '#fde8e8',
+          200: '#fbd1d1',
+          300: '#f8a5a5',
+          400: '#f47272',
+          500: '#E8281A',
+          600: '#c41f13',
+          700: '#b91c10',
+          800: '#991b0e',
+          900: '#7f1d0d',
         },
         glass: {
           bg: 'rgba(255, 255, 255, 0.7)',
@@ -62,8 +62,8 @@ export default {
         'glass': '0 8px 32px rgba(0, 0, 0, 0.04)',
         'glass-hover': '0 12px 40px rgba(0, 0, 0, 0.08)',
         'soft': '0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04)',
-        'primary': '0 4px 12px rgba(37, 99, 235, 0.3)',
-        'primary-hover': '0 8px 20px rgba(37, 99, 235, 0.4)',
+        'primary': '0 4px 12px rgba(232, 40, 26, 0.3)',
+        'primary-hover': '0 8px 20px rgba(232, 40, 26, 0.4)',
         'card': '0 1px 3px rgba(0, 0, 0, 0.02), 0 8px 24px rgba(0, 0, 0, 0.04)',
         'card-hover': '0 4px 12px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(0, 0, 0, 0.06)',
         'medium': '0 4px 12px rgba(0, 0, 0, 0.06)',

@@ -177,7 +177,7 @@ function ToastContainer({ toasts }: { toasts: ToastItem[] }) {
   const styles: Record<ToastType, string> = {
     success: 'border-l-emerald-500',
     error:   'border-l-red-500',
-    info:    'border-l-blue-500',
+    info:    'border-l-slate-400',
   };
   const safeToasts = (toasts ?? []).filter((t): t is ToastItem => t != null && typeof t === 'object' && typeof t.type === 'string');
   return (
@@ -257,7 +257,7 @@ function StatCard({
     <div
       className={`rounded-[var(--edk-radius)] border px-4 py-4 flex flex-col gap-1 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ${className} ${
         accent
-          ? 'bg-[var(--blue)] border-transparent text-white'
+          ? 'bg-[var(--edk-red)] border-transparent text-white'
           : warning
             ? 'bg-[var(--edk-amber-bg)] border-[rgba(217,119,6,0.15)]'
             : 'bg-[var(--edk-surface)] border-[var(--edk-border)] text-[var(--edk-ink)]'
@@ -698,7 +698,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
           size="sm"
           onClick={openAddModal}
           leftIcon={<PlusIcon />}
-          className="flex-shrink-0 shadow-[0_1px_3px_var(--blue-soft)]"
+          className="flex-shrink-0 shadow-[0_1px_3px_var(--edk-red-soft)]"
         >
           Add product
         </Button>
@@ -750,8 +750,11 @@ export default function InventoryPage(_props: InventoryPageProps) {
           <select
             value={sizeFilter}
             onChange={(e) => setSizeFilter(e.target.value)}
-            className="h-[30px] pl-2.5 pr-6 rounded-[20px] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] min-w-[100px] cursor-pointer appearance-none bg-no-repeat bg-[length:10px_6px] bg-[right_10px_center]"
-            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238A8784' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")` }}
+            className="h-[30px] pl-2.5 pr-8 rounded-full border border-[var(--edk-border-mid)] text-[12px] font-medium text-[var(--edk-ink-2)] min-w-[100px] cursor-pointer appearance-none bg-no-repeat bg-[length:10px_6px] bg-[right_10px_center]"
+            style={{
+              backgroundColor: 'var(--edk-surface)',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238A8784' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+            }}
             aria-label="Filter by size"
           >
             <option value="">Size: All</option>
@@ -762,8 +765,11 @@ export default function InventoryPage(_props: InventoryPageProps) {
           <select
             value={colorFilter}
             onChange={(e) => setColorFilter(e.target.value)}
-            className="h-[30px] pl-2.5 pr-6 rounded-[20px] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] min-w-[100px] cursor-pointer appearance-none bg-no-repeat bg-[length:10px_6px] bg-[right_10px_center]"
-            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238A8784' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")` }}
+            className="h-[30px] pl-2.5 pr-8 rounded-full border border-[var(--edk-border-mid)] text-[12px] font-medium text-[var(--edk-ink-2)] min-w-[100px] cursor-pointer appearance-none bg-no-repeat bg-[length:10px_6px] bg-[right_10px_center]"
+            style={{
+              backgroundColor: 'var(--edk-surface)',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238A8784' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+            }}
             aria-label="Filter by color"
           >
             <option value="">Color: All</option>
@@ -797,7 +803,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
                       type="button"
                       onClick={() => { setSort(opt.key); setSortOpen(false); }}
                       className={`w-full px-4 py-2 text-left text-[13px] font-medium transition-colors ${
-                        sort === opt.key ? 'text-[var(--blue)] bg-[var(--blue-soft)]' : 'text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)]'
+                        sort === opt.key ? 'text-[var(--edk-red)] bg-[var(--edk-red-soft)]' : 'text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)]'
                       }`}
                     >
                       {opt.label}
@@ -910,7 +916,7 @@ export default function InventoryPage(_props: InventoryPageProps) {
               variant="ghost"
               size="sm"
               onClick={() => { setSearchParams({}); setCategory('all'); setSizeFilter(''); setColorFilter(''); setCurrentPage(1); }}
-              className="text-[var(--blue)] hover:opacity-80"
+              className="text-[var(--edk-red)] hover:opacity-80"
             >
               Clear filters
             </Button>
