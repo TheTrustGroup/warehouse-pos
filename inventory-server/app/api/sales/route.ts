@@ -339,6 +339,8 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
         console.error('[PATCH /api/sales] void_sale', rpcErr);
         return fail(500, rpcErr.message ?? 'Failed to void sale.');
       }
+      await notifyProductsUpdated(saleWarehouseId);
+      await notifyInventoryUpdated(saleWarehouseId);
       logApiResponse(req, 200, Date.now() - start);
       return withCors(
         NextResponse.json({ success: true, status: 'voided' }, { status: 200, headers: h }),

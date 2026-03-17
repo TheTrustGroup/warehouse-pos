@@ -11,9 +11,11 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Receipt } from 'lucide-react';
 import { apiGet, apiPost, apiPatch } from '../lib/apiClient';
 import { printReceipt } from '../lib/printReceipt';
+import { queryKeys } from '../lib/queryKeys';
 import { useAuth } from '../contexts/AuthContext';
 import { useWarehouse } from '../contexts/WarehouseContext';
 import { useToast } from '../contexts/ToastContext';
@@ -306,6 +308,7 @@ const FALLBACK_WAREHOUSES = [
 ];
 
 export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPageProps) {
+  const queryClient = useQueryClient();
   const { hasPermission, hasRole } = useAuth();
   const { warehouses: contextWarehouses, currentWarehouseId } = useWarehouse();
   const { showToast } = useToast();
@@ -408,6 +411,10 @@ export default function SalesHistoryPage({ apiBaseUrl = '' }: SalesHistoryPagePr
       setSales(prev =>
         prev.map(s => (s.id === sale.id ? { ...s, status: 'voided', voidedAt: new Date().toISOString() } : s))
       );
+      if (isValidWarehouseId(sale.warehouseId)) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.products(sale.warehouseId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(sale.warehouseId) });
+      }
       showToast('success', 'Sale voided. Stock restored to inventory.');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Void failed. Check your connection and try again.';
