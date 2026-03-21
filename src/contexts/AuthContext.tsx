@@ -542,9 +542,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.setItem('user_role', normalizedUser.role ?? DEFAULT_ROLE);
         sessionStorage.setItem('user_email', normalizedUser.email ?? '');
       }
-      if (import.meta.env.DEV) {
-        console.log('[Auth] Login success – full user object:', JSON.stringify(normalizedUser, null, 2));
-      }
       const dataAny = data as { token?: string; access_token?: string; data?: { token?: string; access_token?: string } };
       const token =
         responseToken ??
