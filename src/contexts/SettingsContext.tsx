@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { BRAND } from '../config/branding';
 import { getStoredData, setStoredData, removeStoredData } from '../lib/storage';
 
 export interface BusinessSettings {
@@ -34,7 +35,7 @@ interface SettingsContextType {
 const defaultBusinessSettings: BusinessSettings = {
   businessName: 'Extreme Dept Kidz',
   address: 'Accra, Greater Accra, Ghana',
-  phone: '+233 XX XXX XXXX',
+  phone: BRAND.storePhone,
   email: 'info@extremedeptkidz.com',
   taxRate: 15,
   currency: 'GHS',

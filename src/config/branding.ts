@@ -12,4 +12,8 @@ export const BRAND = {
   appSubtitle: 'Inventory & POS',
   /** Used in receipt header and share sheet. */
   receiptTitle: 'Extreme Dept Kidz',
+  /** Customer-facing store line (Ghana mobile). */
+  storePhone: '050 294 2203',
+  /** Public storefront URL (extremedeptkidz.com). */
+  storeWebsite: 'https://extremedeptkidz.com',
 } as const;

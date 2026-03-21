@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Transaction } from '../../types';
+import { BRAND } from '../../config/branding';
 import { formatCurrency, formatDateTime } from '../../lib/utils';
 import { X, Printer, Mail } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -54,7 +55,7 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
             <h1 className="text-2xl font-extrabold gradient-text">Extreme Dept Kidz</h1>
             <p className="text-sm text-slate-600 font-medium">Your trusted kids fashion store</p>
             <p className="text-xs text-slate-500 mt-1">Accra, Ghana</p>
-            <p className="text-xs text-slate-500">Tel: +233 XX XXX XXXX</p>
+            <p className="text-xs text-slate-500">Tel: {BRAND.storePhone}</p>
           </div>
 
           {/* Transaction Info */}
