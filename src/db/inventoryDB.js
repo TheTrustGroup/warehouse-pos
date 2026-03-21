@@ -14,7 +14,22 @@
 
 import Dexie from 'dexie';
 import { v4 as uuidv4 } from 'uuid';
-import { setOfflineQuotaExceeded, isQuotaExceededError } from '../lib/offlineQuota';
+
+function isQuotaExceededError(err) {
+  if (err instanceof DOMException && err.name === 'QuotaExceededError') return true;
+  if (err && typeof err === 'object' && err.name === 'QuotaExceededError') return true;
+  return false;
+}
+
+function notifyStorageQuotaExceeded() {
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('offline-quota-exceeded'));
+    }
+  } catch {
+    // ignore
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Types (JSDoc)
@@ -142,7 +157,7 @@ export function getDB() {
       dbInstance = instance;
       return instance;
     } catch (e) {
-      if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
+      if (isQuotaExceededError(e)) notifyStorageQuotaExceeded();
       if (import.meta.env.DEV) console.warn('[inventoryDB] Dexie init failed:', e);
       return null;
     }
@@ -254,7 +269,7 @@ export async function addProduct(data) {
     });
   } catch (e) {
     if (isTransactionError(e)) clearDbInstance();
-    if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
+    if (isQuotaExceededError(e)) notifyStorageQuotaExceeded();
     throw e;
   }
   return id;
@@ -304,7 +319,7 @@ export async function updateProduct(id, data) {
     });
   } catch (e) {
     if (isTransactionError(e)) clearDbInstance();
-    if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
+    if (isQuotaExceededError(e)) notifyStorageQuotaExceeded();
     throw e;
   }
 }
@@ -337,7 +352,7 @@ export async function deleteProduct(id) {
     });
   } catch (e) {
     if (isTransactionError(e)) clearDbInstance();
-    if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
+    if (isQuotaExceededError(e)) notifyStorageQuotaExceeded();
     throw e;
   }
 }
@@ -345,7 +360,7 @@ export async function deleteProduct(id) {
 /**
  * Mirror product list from API into Dexie (Phase 1: alongside API, UI can still use API/state).
  * Clears products table and bulk-adds with syncStatus: 'synced', serverId = id.
- * Call only when isOfflineEnabled() and after a successful API load. Catches QuotaExceededError.
+ * Call after a successful API load. Catches QuotaExceededError.
  *
  * @param {Array<{ id: string, name?: string, sku?: string, category?: string, price?: number, sellingPrice?: number, quantity?: number, description?: string, images?: string[], createdAt?: Date|string, updatedAt?: Date|string }>} apiProducts - Products from API response
  * @returns {Promise<void>}
@@ -383,7 +398,7 @@ export async function mirrorProductsFromApi(apiProducts) {
     }
   } catch (e) {
     if (isTransactionError(e)) clearDbInstance();
-    if (isQuotaExceededError(e)) setOfflineQuotaExceeded();
+    if (isQuotaExceededError(e)) notifyStorageQuotaExceeded();
     if (import.meta.env.DEV) console.warn('mirrorProductsFromApi failed:', e);
   }
 }

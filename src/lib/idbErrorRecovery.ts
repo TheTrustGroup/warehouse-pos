@@ -7,12 +7,10 @@
  */
 import { clearDbInstance, isTransactionError } from '../db/inventoryDB';
 import { clearLogDbInstance } from '../utils/logger';
-import { clearOfflineDbInstance } from './offlineDb';
 
 function clearAllIdbCaches(): void {
   clearDbInstance();
   clearLogDbInstance();
-  clearOfflineDbInstance();
   if (import.meta.env?.DEV) {
     console.warn('[idb] Cleared DB caches after transaction error; next access will reopen.');
   }

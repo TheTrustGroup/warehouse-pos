@@ -16,7 +16,6 @@ import { RealtimeProvider } from './contexts/RealtimeContext';
 import { PresenceProvider } from './contexts/PresenceContext';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { NetworkStatusProvider } from './contexts/NetworkStatusContext';
-import { QUOTA_EVENT } from './lib/offlineQuota';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { WarehouseGuard } from './components/WarehouseGuard';
 import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
@@ -193,25 +192,6 @@ function VersionCheckListener() {
   return null;
 }
 
-/** Listens for offline storage quota exceeded and shows toast once (INTEGRATION_PLAN). */
-function OfflineQuotaToastListener() {
-  const { showToast } = useToast();
-  const shownRef = useRef(false);
-  useEffect(() => {
-    const handler = () => {
-      if (shownRef.current) return;
-      shownRef.current = true;
-      showToast(
-        'warning',
-        'Local storage is full. Some offline features are disabled. Clear local data in Settings → Admin & logs if needed.'
-      );
-    };
-    window.addEventListener(QUOTA_EVENT, handler);
-    return () => window.removeEventListener(QUOTA_EVENT, handler);
-  }, [showToast]);
-  return null;
-}
-
 /** Listens for sync failures and shows a toast so the user is not left with "Syncing..." and no feedback. */
 function SyncFailureToastListener() {
   const { showToast } = useToast();
@@ -316,7 +296,6 @@ function App() {
     <ToastProvider>
       <ServiceWorkerUpdateListener />
       <VersionCheckListener />
-      <OfflineQuotaToastListener />
       <SyncFailureToastListener />
       <NetworkStatusProvider>
         <SettingsProvider>

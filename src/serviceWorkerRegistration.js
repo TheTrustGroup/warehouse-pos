@@ -5,7 +5,6 @@
 
 import { syncService } from './services/syncService';
 import { reportError } from './lib/errorReporting';
-import { isOfflineEnabled } from './lib/offlineFeatureFlag';
 
 const SW_URL = '/service-worker.js';
 
@@ -49,7 +48,7 @@ export function register(config = {}) {
           if (event.data?.type === 'SW_UPDATED' && config.onUpdate) {
             config.onUpdate();
           }
-          if (event.data?.type === 'SYNC_INVENTORY' && isOfflineEnabled()) {
+          if (event.data?.type === 'SYNC_INVENTORY') {
             syncService.processSyncQueue().catch(() => {});
           }
           if (event.data?.type === 'SW_ERROR') {

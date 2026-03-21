@@ -10,9 +10,6 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { API_BASE_URL } from './lib/api';
 import { initObservability, startHealthPings } from './lib/observability';
 import { initErrorHandlers } from './lib/initErrorHandlers';
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
-import { isOfflineEnabled } from './lib/offlineFeatureFlag';
-
 initSentry({ shouldSend: getErrorReportingConsent });
 
 /** Preconnect to API origin so first /me and product requests avoid DNS+TLS delay. */
@@ -60,12 +57,3 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </React.StrictMode>,
 );
-
-// Register service worker only when offline mode is enabled (INTEGRATION_PLAN Phase 9)
-if (typeof window !== 'undefined' && isOfflineEnabled()) {
-  serviceWorkerRegistration.register({
-    onUpdate: () => {
-      window.dispatchEvent(new CustomEvent('sw-update'));
-    },
-  });
-}

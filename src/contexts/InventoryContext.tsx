@@ -8,7 +8,7 @@
  *
  * STABILITY (Phase 4): Add product uses optimistic UI — insert temp with _pending, then replace with
  * server response on success; on failure remove temp and show error. No full refetch after add.
- * No "saved" without confirmed 2xx. Offline path still uses local-first; ADD_PRODUCT_SAVED_LOCALLY for that flow.
+ * No "saved" without confirmed 2xx. ADD_PRODUCT_SAVED_LOCALLY is reserved for rare local-only fallback flows.
  */
 import { createContext, useContext, useState, useRef, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -24,7 +24,6 @@ import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
 import { getCategoryDisplay, normalizeProductLocation, normalizeQuantityBySize } from '../lib/utils';
 import { parseProductsResponse } from '../lib/apiSchemas';
-import { useInventory as useOfflineInventory } from '../hooks/useInventory';
 import { getProductImages, setProductImages } from '../lib/productImagesStore';
 
 /** React Query is the only cache for products; invalidate on Realtime and after mutations. */
@@ -117,11 +116,8 @@ export async function fetchProductsForWarehouse(
 /** Seed/placeholder product ID that may exist in cache but not on production API; skip verify to avoid 404. */
 const SEED_PLACEHOLDER_PRODUCT_ID = '00000000-0000-0000-0000-000000000101';
 
-import { saveProductsToDb, isIndexedDBAvailable } from '../lib/offlineDb';
-import { reportError } from '../lib/errorReporting';
 import { useInventoryRealtime } from '../hooks/useInventoryRealtime';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
-import { isOfflineEnabled } from '../lib/offlineFeatureFlag';
 import {
   logInventoryCreate,
   logInventoryUpdate,
@@ -190,11 +186,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   /** Phase 6: Single warehouse ID. No sentinel, no placeholder, no label checks. */
   const warehouseId = (currentWarehouseId?.trim?.() && currentWarehouseId) ? currentWarehouseId.trim() : '';
 
-  // Feature flag: when off, use API-only (state); when on, use offline hook (Dexie). INTEGRATION_PLAN Phase 5/7.
-  const offlineEnabled = isOfflineEnabled();
-  const offline = useOfflineInventory();
-  const offlineRef = useRef(offline);
-  offlineRef.current = offline;
   const warehouseIdRef = useRef(warehouseId);
   useEffect(() => {
     warehouseIdRef.current = warehouseId;
@@ -223,7 +214,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const queryTotal = productsQuery.data?.total;
 
   const products = useMemo((): Product[] => {
-    const base = offlineEnabled ? (offline.products ?? []) : queryList;
+    const base = queryList;
     const updated = lastUpdatedProductRef.current;
     let list = base;
     if (updated && Date.now() - updated.at < RECENT_UPDATE_WINDOW_MS) {
@@ -242,7 +233,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     });
     // Dedupe by id so background refetch or loadMore never shows duplicate cards.
     return Array.from(new Map(withSizes.map((p) => [p.id, p])).values());
-  }, [offlineEnabled, offline.products, queryList]);
+  }, [queryList]);
 
   useEffect(() => {
     products.forEach((p) => {
@@ -278,26 +269,24 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     productsRef.current = products;
   }, [products]);
 
-  const isLoading = offlineEnabled ? offline.isLoading : productsQuery.isLoading;
-  const unsyncedCountFromHook = offline.unsyncedCount ?? 0;
+  const isLoading = productsQuery.isLoading;
 
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const [localOnlyIds, setLocalOnlyIds] = useState<Set<string>>(() => new Set());
   const [storagePersistFailed] = useState(false);
   const [savePhase, setSavePhase] = useState<'idle' | 'saving' | 'verifying'>('idle');
-  const isBackgroundRefreshing = !offlineEnabled && (productsQuery.isFetching && !productsQuery.isLoading);
-  const productsTotal = offlineEnabled ? null : (queryTotal ?? null);
+  const isBackgroundRefreshing = productsQuery.isFetching && !productsQuery.isLoading;
+  const productsTotal = queryTotal ?? null;
   const lastSyncAt = productsQuery.dataUpdatedAt ? new Date(productsQuery.dataUpdatedAt) : null;
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const syncRef = useRef<(() => Promise<{ synced: number; failed: number; total: number; syncedIds: string[] }>) | null>(null);
 
   // Only show error after all retries failed (not while a fetch/retry is in progress), so we don't flash "Invalid products response" before a retry succeeds.
   useEffect(() => {
-    if (offlineEnabled) return;
     if (productsQuery.isSuccess) setError(null);
     else if (queryError && !productsQuery.isFetching) setError(queryError instanceof Error ? queryError.message : String(queryError));
-  }, [offlineEnabled, queryError, productsQuery.isSuccess, productsQuery.isFetching]);
+  }, [queryError, productsQuery.isSuccess, productsQuery.isFetching]);
 
   const setProductsQueryData = useCallback(
     (updater: (old: { list: Product[]; total?: number } | undefined) => { list: Product[]; total?: number }) => {
@@ -386,9 +375,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const LOAD_MORE_PAGE_SIZE = 250;
 
-  /** Load next page (250 items). No-op when offline, when no more data, or when already loading. */
+  /** Load next page (250 items). No-op when no more data, or when already loading. */
   const loadMore = useCallback(async () => {
-    if (offlineEnabled || isLoadingMore) return;
+    if (isLoadingMore) return;
     const current = productsRef.current;
     const total = productsTotal;
     const hasMore = total === null || current.length < total;
@@ -429,9 +418,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [offlineEnabled, isLoadingMore, productsTotal, productsPath, setProductsQueryData]);
+  }, [isLoadingMore, productsTotal, productsPath, setProductsQueryData]);
 
-  const hasMore = !offlineEnabled && (productsTotal === null || products.length < productsTotal);
+  const hasMore = productsTotal === null || products.length < productsTotal;
 
   useEffect(() => {
     clearMockData();
@@ -611,16 +600,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     setSavePhase('saving');
     setError(null);
     try {
-      if (offlineEnabled) {
-        const id = await offline.addProduct(productData);
-        const imgs = Array.isArray(productData.images) ? productData.images : [];
-        if (imgs.length > 0) setProductImages(id, imgs);
-        const addedProduct: Product = { ...productData, id, createdAt: new Date(), updatedAt: new Date() } as Product;
-        lastAddedProductRef.current = { product: addedProduct, at: Date.now() };
-        logInventoryCreate({ productId: id, sku: productData.sku ?? '', listLength: products.length + 1 });
-        showToast('success', 'Product saved. Syncing to server when online.');
-        return id;
-      }
       if (!getApiCircuitBreaker('products').allowRequest()) {
         throw new Error('Server is temporarily unavailable. Writes disabled until connection is restored.');
       }
@@ -703,12 +682,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         list: (old?.list ?? []).map((p) => (p.id === tempId ? normalized : p)),
         total: old?.total != null ? old.total + (old.list?.some((p) => p.id === tempId) ? 0 : 1) : undefined,
       }));
-      if (isIndexedDBAvailable()) {
-        const nextList = [normalized, ...(queryList.filter((p) => p.id !== tempId))];
-        saveProductsToDb(nextList).catch((e) => {
-          reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: nextList.length });
-        });
-      }
       logInventoryCreate({ productId: resolvedId, sku: productData.sku ?? '', listLength: queryList.length + 1 });
       const today = new Date().toISOString().split('T')[0];
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(warehouseId, today) });
@@ -762,12 +735,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     setSavePhase('saving');
     setError(null);
     try {
-      if (offlineEnabled) {
-        await offline.updateProduct(id, updates);
-        logInventoryUpdate({ productId: id, sku: product.sku });
-        showToast('success', 'Product updated. Syncing to server when online.');
-        return;
-      }
       const updated: Product = { ...product, ...updates, updatedAt: new Date(), id: product.id };
       const hasMultipleSizes = Array.isArray(updates.quantityBySize) && updates.quantityBySize.length >= 2;
       const isSized = hasMultipleSizes || updates.sizeKind === 'sized' || (Array.isArray(updates.quantityBySize) && updates.quantityBySize.length > 1) || updated.sizeKind === 'sized' || (Array.isArray(updated.quantityBySize) && updated.quantityBySize.length > 1);
@@ -836,11 +803,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const at = Date.now();
       lastUpdatedProductRef.current = { product: finalProduct, at };
       if (isSized) lastSizeUpdateAtRef.current = at;
-      if (isIndexedDBAvailable()) {
-        saveProductsToDb(newList).catch((e) => {
-          reportError(e instanceof Error ? e : new Error(String(e)), { context: 'saveProductsToDb', listLength: newList.length });
-        });
-      }
       logInventoryUpdate({ productId: id, sku: product.sku });
       const today = new Date().toISOString().split('T')[0];
       queryClient.invalidateQueries({ queryKey: queryKeys.products(warehouseId) });
@@ -873,11 +835,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    */
   const deleteProduct = async (id: string) => {
     try {
-      if (offlineEnabled) {
-        await offline.deleteProduct(id);
-        logInventoryDelete({ productId: id });
-        return;
-      }
       try {
         await apiDelete(API_BASE_URL, productByIdPath('/admin/api/products', id));
       } catch {
@@ -913,21 +870,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
    */
   const deleteProducts = async (ids: string[]) => {
     if (ids.length === 0) return;
-    if (offlineEnabled) {
-      const errors: string[] = [];
-      for (const id of ids) {
-        try {
-          await offline.deleteProduct(id);
-          logInventoryDelete({ productId: id });
-        } catch (err) {
-          errors.push(err instanceof Error ? err.message : 'Delete failed');
-        }
-      }
-      if (errors.length > 0) {
-        throw new Error(`Failed to delete ${errors.length} product(s): ${errors[0]}`);
-      }
-      return;
-    }
     const idSet = new Set(ids);
     for (const id of ids) {
       try {
@@ -1042,14 +984,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const refreshProducts = useCallback(
     async (_options?: { silent?: boolean; bypassCache?: boolean; timeoutMs?: number }) => {
-      if (offlineEnabled) return offlineRef.current.forceSync();
       setError(null);
       invalidateProducts();
       if (isValidWarehouseId(warehouseId)) {
         await queryClient.refetchQueries({ queryKey: queryKeys.products(warehouseId) });
       }
     },
-    [offlineEnabled, invalidateProducts, queryClient, warehouseId]
+    [invalidateProducts, queryClient, warehouseId]
   );
 
   return (
@@ -1061,7 +1002,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       updateProduct,
       deleteProduct,
       deleteProducts,
-      undoAddProduct: offlineEnabled ? offline.undoAddProduct : async () => {},
+      undoAddProduct: async () => {},
       getProduct,
       searchProducts,
       filterProducts,
@@ -1069,9 +1010,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       hasMore,
       loadMore,
       isLoadingMore,
-      isBackgroundRefreshing: offlineEnabled ? offline.isSyncing : isBackgroundRefreshing,
+      isBackgroundRefreshing,
       syncLocalInventoryToApi,
-      unsyncedCount: offlineEnabled ? unsyncedCountFromHook + localOnlyIds.size : 0,
+      unsyncedCount: localOnlyIds.size,
       lastSyncAt,
       isUnsynced,
       verifyProductSaved,
