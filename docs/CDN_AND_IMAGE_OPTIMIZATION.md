@@ -4,6 +4,21 @@ How to get resized, fast product images (thumbnails in list/grid, full size in d
 
 ---
 
+## Highlights (read this first)
+
+| Topic | What to know |
+|-------|----------------|
+| **Goal** | Smaller, faster loads via **on-the-fly resize** (not full originals in lists). |
+| **Code** | `src/lib/productImageUrl.ts` — `getProductImageUrl(url, 'thumb' \| 'medium' \| 'full')`. |
+| **Supabase** | **Public bucket** (e.g. `product-images`) + **public object URL** in `product.images[]`. |
+| **Plan** | **Supabase Pro** required for [Image Transformations](https://supabase.com/docs/guides/storage/serving/image-transformations). |
+| **API** | **POST/PUT** `/api/products` uploads base64 to Storage → saves **public URL** to DB. |
+| **Unchanged** | Base64 `data:` URLs; arbitrary HTTP(S) URLs (unless you add CDN logic). |
+
+**URL rewrite in one line:** `.../storage/v1/object/public/...` → `.../storage/v1/render/image/public/...?width=&height=&resize=cover`
+
+---
+
 ## 1. What’s already in place
 
 - **`getProductImageUrl(url, size)`** in `src/lib/productImageUrl.ts`:
