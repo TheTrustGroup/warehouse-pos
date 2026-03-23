@@ -165,6 +165,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
   const [loading, setLoading] = useState(false);
   const [productsLoadError, setProductsLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [sizeFilter, setSizeFilter] = useState('');
   const [colorFilter, setColorFilter] = useState('');
@@ -196,6 +197,12 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
       isMounted.current = false;
     };
   }, []);
+
+  // Keep typing responsive on large catalogs by debouncing filter input.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 100);
+    return () => clearTimeout(t);
+  }, [search]);
 
   /** Timeout high enough for serverless cold start + products DB (avoids "connection lost" on slow first load). */
   const API_FETCH_TIMEOUT_MS = 40_000;
@@ -311,8 +318,10 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           if (typeof (revalidate as { total?: number }).total === 'number') totalFromApi = (revalidate as { total: number }).total;
           const page = rawList.map((item) => normalizeProductItem(item));
           allPages.push(...page);
-          if (page.length < pageLimit || (typeof totalFromApi === 'number' && allPages.length >= totalFromApi)) break;
-          offset += page.length;
+          // Important: backend may filter non-sellable rows after pagination, so "page.length" can be
+          // smaller than pageLimit even when more pages exist. Use raw page size to decide has-more.
+          if (rawList.length < pageLimit || (typeof totalFromApi === 'number' && offset + rawList.length >= totalFromApi)) break;
+          offset += rawList.length;
           pageLimit = PRODUCTS_PAGE_LIMIT;
         }
         if (allPages.length > 0) {
@@ -345,8 +354,10 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           if (typeof (data as { total?: number }).total === 'number') totalFromApi = (data as { total: number }).total;
           const page = rawList.map((item) => normalizeProductItem(item));
           allPages.push(...page);
-          if (page.length < pageLimit || (typeof totalFromApi === 'number' && allPages.length >= totalFromApi)) break;
-          offset += page.length;
+          // Important: backend may filter non-sellable rows after pagination, so "page.length" can be
+          // smaller than pageLimit even when more pages exist. Use raw page size to decide has-more.
+          if (rawList.length < pageLimit || (typeof totalFromApi === 'number' && offset + rawList.length >= totalFromApi)) break;
+          offset += rawList.length;
           pageLimit = PRODUCTS_PAGE_LIMIT;
         }
         if (isMounted.current) {
@@ -405,6 +416,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
     loadProductsAbortRef.current = ctrl;
     setCart([]);
     setSearch('');
+    setDebouncedSearch('');
     setCategory('all');
     setSizeFilter('');
     setColorFilter('');
@@ -920,7 +932,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
             <ProductGrid
               products={products}
               loading={loading}
-              search={search}
+              search={debouncedSearch}
               category={category}
               sizeFilter={sizeFilter}
               colorFilter={colorFilter}

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ProductCardSkeleton } from '../inventory/ProductCard';
 import POSProductCard from './POSProductCard';
 import type { POSProduct } from './SizePickerSheet';
@@ -22,22 +22,121 @@ interface ProductGridProps {
   onColorFilterChange: (value: string) => void;
 }
 
+function normalizeSearchText(value: string | null | undefined): string {
+  return (value ?? '').toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function compactSearchText(value: string | null | undefined): string {
+  return normalizeSearchText(value).replace(/[^a-z0-9]/g, '');
+}
+
+function isSubsequence(needle: string, haystack: string): boolean {
+  if (!needle) return true;
+  let i = 0;
+  for (let j = 0; j < haystack.length && i < needle.length; j += 1) {
+    if (haystack[j] === needle[i]) i += 1;
+  }
+  return i === needle.length;
+}
+
+function scoreMatch(
+  product: POSProduct,
+  q: string,
+  compactQ: string,
+  tokens: string[],
+  meta: { blob: string; compact: string }
+): number {
+  const name = normalizeSearchText(product.name);
+  const sku = normalizeSearchText(product.sku ?? '');
+  const barcode = normalizeSearchText(product.barcode ?? '');
+  const skuCompact = compactSearchText(product.sku ?? '');
+  const barcodeCompact = compactSearchText(product.barcode ?? '');
+
+  let score = 0;
+
+  // Highest confidence: exact identifier hits.
+  if (compactQ && barcodeCompact === compactQ) score += 1000;
+  if (compactQ && skuCompact === compactQ) score += 900;
+  if (q && name === q) score += 850;
+
+  // Strong confidence: prefix hits.
+  if (q && name.startsWith(q)) score += 700;
+  if (q && sku.startsWith(q)) score += 650;
+  if (q && barcode.startsWith(q)) score += 650;
+
+  // Medium confidence: contains hits.
+  if (q && name.includes(q)) score += 450;
+  if (q && sku.includes(q)) score += 400;
+  if (q && barcode.includes(q)) score += 400;
+
+  // Compact contains helps spacing/punctuation variants.
+  if (compactQ && meta.compact.includes(compactQ)) score += 250;
+
+  // Reward complete token coverage.
+  const tokenHits = tokens.reduce((acc, t) => (meta.blob.includes(t) ? acc + 1 : acc), 0);
+  score += tokenHits * 80;
+
+  // Small boost for short fuzzy subsequence hints.
+  if (
+    compactQ &&
+    compactQ.length >= 3 &&
+    compactQ.length <= 7 &&
+    tokens.length <= 2 &&
+    isSubsequence(compactQ, meta.compact)
+  ) {
+    score += 120;
+  }
+
+  // Tie-breaker: earlier name match is slightly better.
+  if (q) {
+    const idx = name.indexOf(q);
+    if (idx >= 0) score += Math.max(0, 40 - idx);
+  }
+
+  // Final deterministic tie-breaker: alphabetical by name.
+  return score;
+}
+
 function applyFilters(
   list: POSProduct[],
   search: string,
   category: string,
   sizeFilter: string,
-  colorFilter: string
+  colorFilter: string,
+  searchableMeta: Map<string, { blob: string; compact: string }>
 ): POSProduct[] {
   let r = [...list];
   if (search.trim()) {
-    const q = search.toLowerCase().trim();
-    r = r.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.sku ?? '').toLowerCase().includes(q) ||
-        (p.barcode ?? '').toLowerCase().includes(q)
-    );
+    const q = normalizeSearchText(search);
+    const compactQ = compactSearchText(search);
+    const tokens = q.split(' ').filter(Boolean);
+    const matched = r.filter((p) => {
+      const meta = searchableMeta.get(p.id);
+      if (!meta) return false;
+      if (meta.blob.includes(q)) return true;
+      if (compactQ && meta.compact.includes(compactQ)) return true;
+      // Subsequence matching is only for "hint" queries; keep strict bounds to avoid noisy matches.
+      if (
+        compactQ &&
+        compactQ.length >= 3 &&
+        compactQ.length <= 7 &&
+        tokens.length <= 2 &&
+        isSubsequence(compactQ, meta.compact)
+      ) {
+        return true;
+      }
+      return tokens.every((t) => meta.blob.includes(t));
+    });
+    r = matched
+      .map((p) => {
+        const meta = searchableMeta.get(p.id)!;
+        return { p, score: scoreMatch(p, q, compactQ, tokens, meta) };
+      })
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.p.name.localeCompare(b.p.name);
+      })
+      .map((entry) => entry.p);
   }
   if (category && category !== 'all') {
     r = r.filter((p) => (p.category ?? 'Uncategorized').toLowerCase() === category.toLowerCase());
@@ -75,6 +174,31 @@ export default function ProductGrid({
   onSizeFilterChange,
   onColorFilterChange,
 }: ProductGridProps) {
+  const [showAllSearchResults, setShowAllSearchResults] = useState(false);
+  const SEARCH_RENDER_LIMIT = 60;
+
+  const searchableMeta = useMemo(() => {
+    const map = new Map<string, { blob: string; compact: string }>();
+    for (const p of products) {
+      const sizeCodes = (p.quantityBySize ?? []).map((s) => s.sizeCode ?? '').join(' ');
+      const raw = [
+        p.name,
+        p.sku,
+        p.barcode ?? '',
+        p.category ?? '',
+        p.color ?? '',
+        sizeCodes,
+      ]
+        .join(' ')
+        .trim();
+      map.set(p.id, {
+        blob: normalizeSearchText(raw),
+        compact: compactSearchText(raw),
+      });
+    }
+    return map;
+  }, [products]);
+
   const categories = useMemo(() => {
     const set = new Set<string>(['all']);
     products.forEach((p) => (p.category ? set.add(p.category) : set.add('Uncategorized')));
@@ -92,9 +216,21 @@ export default function ProductGrid({
   }, [products]);
 
   const filtered = useMemo(
-    () => applyFilters(products, search, category, sizeFilter, colorFilter),
-    [products, search, category, sizeFilter, colorFilter]
+    () => applyFilters(products, search, category, sizeFilter, colorFilter, searchableMeta),
+    [products, search, category, sizeFilter, colorFilter, searchableMeta]
   );
+
+  // Reset to limited mode whenever search text changes.
+  useEffect(() => {
+    setShowAllSearchResults(false);
+  }, [search]);
+
+  const isSearchActive = Boolean(search.trim());
+  const shouldLimitRenderedSearchResults =
+    isSearchActive && !showAllSearchResults && filtered.length > SEARCH_RENDER_LIMIT;
+  const visibleProducts = shouldLimitRenderedSearchResults
+    ? filtered.slice(0, SEARCH_RENDER_LIMIT)
+    : filtered;
 
   const hasActiveFilters = Boolean(search.trim() || (category && category !== 'all') || sizeFilter.trim() || colorFilter.trim());
 
@@ -185,12 +321,24 @@ export default function ProductGrid({
           ))}
         </select>
         <span className="text-[11px] text-[var(--edk-ink-3)] whitespace-nowrap">
-          Showing <strong className="text-[var(--edk-ink-2)] font-semibold">{filtered.length}</strong> of {products.length}
+          Showing{' '}
+          <strong className="text-[var(--edk-ink-2)] font-semibold">{visibleProducts.length}</strong>
+          {' '}of {filtered.length}
+          {isSearchActive ? ' matches' : ''} ({products.length} total)
         </span>
+        {shouldLimitRenderedSearchResults && (
+          <button
+            type="button"
+            onClick={() => setShowAllSearchResults(true)}
+            className="h-[30px] px-3 rounded-[var(--edk-radius-sm)] border border-[var(--edk-border-mid)] bg-[var(--edk-surface)] text-[12px] font-medium text-[var(--edk-ink-2)] hover:bg-[var(--edk-bg)]"
+          >
+            Show all ({filtered.length})
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-        {filtered.map((p) => (
+        {visibleProducts.map((p) => (
           <POSProductCard key={p.id} product={p} onSelect={onSelect} />
         ))}
       </div>
