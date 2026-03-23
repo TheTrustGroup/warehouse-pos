@@ -2,7 +2,7 @@
 // Hidden on /pos so POS page uses its own topbar only.
 import { useState, FormEvent, useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { Search, Bell, LogOut, ShoppingCart } from 'lucide-react';
+import { Search, Bell, LogOut, ShoppingCart, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/Button';
@@ -16,6 +16,7 @@ export function Header() {
   const isInventory = location.pathname === '/inventory';
   const qFromUrl = isInventory ? (searchParams.get('q') ?? '') : '';
   const [searchQuery, setSearchQuery] = useState(qFromUrl);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
@@ -37,10 +38,13 @@ export function Header() {
   const handleSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const q = searchQuery.trim();
-    if (q) {
-      navigate(`/inventory?q=${encodeURIComponent(q)}`);
-      setSearchParams({ q });
+    const nextPath = q ? `/inventory?q=${encodeURIComponent(q)}` : '/inventory';
+    navigate(nextPath);
+    if (isInventory) {
+      if (q) setSearchParams({ q });
+      else setSearchParams({});
     }
+    setMobileSearchOpen(false);
   };
 
   const onSearchChange = (value: string) => {
@@ -49,6 +53,11 @@ export function Header() {
       if (value.trim()) setSearchParams({ q: value.trim() }, { replace: true });
       else setSearchParams({}, { replace: true });
     }
+  };
+
+  const handleMobileSearchClick = () => {
+    setMobileSearchOpen((prev) => !prev);
+    if (!isInventory) navigate('/inventory');
   };
 
   // POS has its own topbar; do not show layout header on POS
@@ -78,11 +87,11 @@ export function Header() {
         </span>
         <button
           type="button"
-          onClick={() => navigate('/inventory')}
+          onClick={handleMobileSearchClick}
           className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md text-[var(--edk-ink-3)]"
-          aria-label="Search"
+          aria-label={mobileSearchOpen ? 'Close search' : 'Search'}
         >
-          <Search className="w-4 h-4" strokeWidth={2} />
+          {mobileSearchOpen ? <X className="w-4 h-4" strokeWidth={2} /> : <Search className="w-4 h-4" strokeWidth={2} />}
         </button>
         <span className="flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold bg-[var(--edk-green-bg)] text-[var(--edk-green)]">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--edk-green)]" aria-hidden />
@@ -104,6 +113,30 @@ export function Header() {
         >
           <ShoppingCart className="w-5 h-5" strokeWidth={2} />
         </Link>
+        {mobileSearchOpen && (
+          <form
+            onSubmit={handleSearch}
+            className="absolute left-0 right-0 top-full px-[max(1rem,var(--safe-left))] py-2 bg-[var(--edk-surface)] border-b border-[var(--edk-border)]"
+          >
+            <div className="relative">
+              <Search
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--edk-ink-3)] pointer-events-none"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <input
+                type="search"
+                inputMode="search"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search products, SKU, or barcode…"
+                className="w-full h-[36px] pl-8 pr-3 rounded-md bg-[var(--edk-bg)] border border-[var(--edk-border-mid)] text-[13px] text-[var(--edk-ink)] placeholder:text-[var(--edk-ink-3)] outline-none focus:border-[var(--blue)] focus:shadow-[0_0_0_2px_var(--blue-soft)]"
+                aria-label="Search products, SKU, or barcode"
+                autoFocus
+              />
+            </div>
+          </form>
+        )}
       </header>
 
       {/* Desktop: single search (max 520px, 32px height, blue focus), sync, logout, bell */}
