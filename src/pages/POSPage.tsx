@@ -318,10 +318,14 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           if (typeof (revalidate as { total?: number }).total === 'number') totalFromApi = (revalidate as { total: number }).total;
           const page = rawList.map((item) => normalizeProductItem(item));
           allPages.push(...page);
-          // Important: backend may filter non-sellable rows after pagination, so "page.length" can be
-          // smaller than pageLimit even when more pages exist. Use raw page size to decide has-more.
-          if (rawList.length < pageLimit || (typeof totalFromApi === 'number' && offset + rawList.length >= totalFromApi)) break;
-          offset += rawList.length;
+          // Important: backend can return fewer visible rows than requested limit after per-warehouse filtering.
+          // Keep scanning by requested page size until we cover server-reported total range.
+          if (typeof totalFromApi === 'number') {
+            if (offset + pageLimit >= totalFromApi) break;
+          } else if (rawList.length < pageLimit) {
+            break;
+          }
+          offset += pageLimit;
           pageLimit = PRODUCTS_PAGE_LIMIT;
         }
         if (allPages.length > 0) {
@@ -354,10 +358,14 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           if (typeof (data as { total?: number }).total === 'number') totalFromApi = (data as { total: number }).total;
           const page = rawList.map((item) => normalizeProductItem(item));
           allPages.push(...page);
-          // Important: backend may filter non-sellable rows after pagination, so "page.length" can be
-          // smaller than pageLimit even when more pages exist. Use raw page size to decide has-more.
-          if (rawList.length < pageLimit || (typeof totalFromApi === 'number' && offset + rawList.length >= totalFromApi)) break;
-          offset += rawList.length;
+          // Important: backend can return fewer visible rows than requested limit after per-warehouse filtering.
+          // Keep scanning by requested page size until we cover server-reported total range.
+          if (typeof totalFromApi === 'number') {
+            if (offset + pageLimit >= totalFromApi) break;
+          } else if (rawList.length < pageLimit) {
+            break;
+          }
+          offset += pageLimit;
           pageLimit = PRODUCTS_PAGE_LIMIT;
         }
         if (isMounted.current) {
