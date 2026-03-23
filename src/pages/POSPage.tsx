@@ -307,7 +307,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           const revalidate = await apiFetch<
             POSProduct[] | { data?: POSProduct[]; products?: POSProduct[]; total?: number }
           >(
-            `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${Number(offset) || 0}`,
+            `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${Number(offset) || 0}&view=list`,
             { signal }
           ).catch(() => null);
           if (signal?.aborted || !isMounted.current) return;
@@ -344,7 +344,7 @@ export default function POSPage({ apiBaseUrl: _ignored }: POSPageProps) {
           const data = await apiFetch<
             POSProduct[] | { data?: POSProduct[]; products?: POSProduct[]; total?: number }
           >(
-            `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${Number(offset) || 0}`,
+            `/api/products?warehouse_id=${encodeURIComponent(wid)}&limit=${pageLimit}&offset=${Number(offset) || 0}&view=list`,
             { signal }
           );
           if (signal?.aborted) return;
