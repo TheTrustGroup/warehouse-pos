@@ -31,17 +31,14 @@ function dataUrlToBuffer(dataUrl: string): { buffer: Buffer; contentType: string
   return { buffer, contentType };
 }
 
-/**
- * Upload image array to Storage. Data URLs are uploaded and replaced with public URLs; HTTP(S) URLs are kept.
- * Path format: {productId}/{uuid}.{ext}
- * Returns array of URLs in same order as input. On upload failure for an item, that item is omitted (or keep original data URL - we'll skip and keep to avoid losing data).
- */
-export async function uploadProductImages(
+function hasDataImageUrl(images: string[]): boolean {
+  return images.some((s) => typeof s === 'string' && s.startsWith('data:image/'));
+}
+
+async function uploadProductImagesOnePass(
   images: string[],
   productId: string
 ): Promise<string[]> {
-  if (!Array.isArray(images) || images.length === 0) return [];
-
   const supabase = getSupabaseAdmin();
   const results: string[] = [];
 
@@ -92,4 +89,26 @@ export async function uploadProductImages(
   }
 
   return results;
+}
+
+/**
+ * Upload image array to Storage. Data URLs are uploaded and replaced with public URLs; HTTP(S) URLs are kept.
+ * Path format: {productId}/{uuid}.{ext}
+ * Runs up to `maxRounds` passes so transient Storage errors can succeed on retry without a manual migrate script.
+ * On upload failure for an item, that item keeps its original data URL.
+ */
+export async function uploadProductImages(
+  images: string[],
+  productId: string,
+  maxRounds: number = 2
+): Promise<string[]> {
+  if (!Array.isArray(images) || images.length === 0) return [];
+
+  let current = images;
+  const rounds = Math.max(1, Math.floor(maxRounds));
+  for (let r = 0; r < rounds; r++) {
+    current = await uploadProductImagesOnePass(current, productId);
+    if (!hasDataImageUrl(current)) break;
+  }
+  return current;
 }

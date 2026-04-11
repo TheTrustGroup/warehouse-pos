@@ -9,8 +9,8 @@
  *
  * Safe to re-run: only processes products that still have at least one data:image/ in images.
  * If some products still don't show images after the first run, run again to retry failed uploads
- * or catch products that were missed. List view also hides base64 images over 80KB, so migrating
- * them to Storage URLs fixes "no image" for those cards.
+ * or catch products that were missed. List view caps embedded base64 thumbnails (~100k chars);
+ * migrating to Storage URLs keeps payloads small and avoids display edge cases.
  */
 
 import * as fs from 'fs';

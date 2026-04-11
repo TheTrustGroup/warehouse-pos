@@ -5,6 +5,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
 import { getSizeCodes } from '@/lib/data/sizeCodes';
 
+/**
+ * List view returns at most one thumbnail; for base64 we cap size to limit JSON payload.
+ * Must be >= client limits (sync ~95k chars, ProductFormModal compress target 100k) so a
+ * newly saved product is not hidden in list/grid until someone runs migrate:base64-images.
+ */
+const LIST_VIEW_MAX_BASE64_IMAGE_CHARS = 100_000;
+
 export interface ListOptions {
   limit?: number;
   offset?: number;
@@ -236,7 +243,8 @@ export async function getWarehouseProducts(
               .slice(0, 1);
             if (urlFirst.length > 0) return urlFirst;
             const firstBase64 = rawImages.find(
-              (img): img is string => typeof img === 'string' && img.startsWith('data:') && img.length <= 80_000
+              (img): img is string =>
+                typeof img === 'string' && img.startsWith('data:') && img.length <= LIST_VIEW_MAX_BASE64_IMAGE_CHARS
             );
             return firstBase64 ? [firstBase64] : [];
           })()
