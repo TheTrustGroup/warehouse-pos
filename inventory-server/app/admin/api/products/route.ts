@@ -4,6 +4,7 @@ import type { PutProductBody } from '@/lib/data/warehouseProducts';
 import { requireAdmin, getEffectiveWarehouseId } from '@/lib/auth/session';
 import { logDurability } from '@/lib/data/durabilityLogger';
 import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
+import { uploadProductImages } from '@/lib/storage/productImages';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,8 +53,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
   }
   const warehouseId = (body?.warehouseId as string) ?? undefined;
+  const productId = (typeof body?.id === 'string' && (body.id as string).trim() ? (body.id as string).trim() : crypto.randomUUID()) as string;
+  let imagesToSave: string[] = Array.isArray(body?.images) ? (body.images as string[]) : [];
   try {
-    const created = await createWarehouseProduct(body);
+    imagesToSave = await uploadProductImages(imagesToSave, productId);
+  } catch (e) {
+    console.error('[admin/api/products POST] image upload failed:', e instanceof Error ? e.message : e);
+  }
+  try {
+    const created = await createWarehouseProduct({ ...body, id: productId, images: imagesToSave });
     const entityId = (created as { id?: string })?.id ?? '';
     const wid = (created as { warehouseId?: string })?.warehouseId ?? warehouseId;
     if (wid) await notifyInventoryUpdated(wid);
@@ -104,10 +112,16 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       { status: 400 }
     );
   }
+  let imagesToSave: string[] = Array.isArray(body.images) ? body.images : [];
+  try {
+    imagesToSave = await uploadProductImages(imagesToSave, productId);
+  } catch (e) {
+    console.error('[admin/api/products PUT] image upload failed:', e instanceof Error ? e.message : e);
+  }
   const normalizedBody: PutProductBody & { warehouseId?: string; warehouse_id?: string } = {
     ...body,
     tags: Array.isArray(body.tags) ? body.tags : [],
-    images: Array.isArray(body.images) ? body.images : [],
+    images: imagesToSave,
     quantityBySize: Array.isArray(body.quantityBySize) ? body.quantityBySize : undefined,
   };
   try {
