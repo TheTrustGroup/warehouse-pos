@@ -2,12 +2,18 @@
  * Product image URL helper — CDN-ready.
  * Use 'medium' (400px) for list/grid/cards to avoid blur; 'full' for detail/lightbox.
  * - Data URLs (base64): returned as-is.
- * - Supabase Storage public URLs: rewritten to the Image Transform API (thumb/medium/full).
- *   Requires Supabase Pro for transforms. See docs/CDN_AND_IMAGE_OPTIMIZATION.md.
+ * - Supabase Storage public URLs: optionally rewritten to the Image Transform API (thumb/medium/full).
+ *   Transforms require Supabase Pro. On Free, use direct object URLs (default). See docs/CDN_AND_IMAGE_OPTIMIZATION.md.
  * - Other HTTP(S) URLs: returned as-is (or add your CDN logic below).
  */
 
 export type ProductImageSize = 'thumb' | 'medium' | 'full';
+
+/** True only when VITE_SUPABASE_IMAGE_TRANSFORMS=true (Pro plan). Free tier must use object/public URLs. */
+function supabaseImageTransformsEnabled(): boolean {
+  if (typeof import.meta === 'undefined' || import.meta.env == null) return false;
+  return String(import.meta.env.VITE_SUPABASE_IMAGE_TRANSFORMS ?? '').toLowerCase() === 'true';
+}
 
 const SIZE_PARAMS: Record<ProductImageSize, { width: number; height: number }> = {
   thumb: { width: 150, height: 150 },
@@ -41,7 +47,9 @@ export function getProductImageUrl(
 ): string {
   if (url == null || url === '') return '';
   if (url.startsWith('data:')) return url;
-  const renderUrl = toSupabaseRenderUrl(url, size);
-  if (renderUrl) return renderUrl;
+  if (supabaseImageTransformsEnabled()) {
+    const renderUrl = toSupabaseRenderUrl(url, size);
+    if (renderUrl) return renderUrl;
+  }
   return url;
 }

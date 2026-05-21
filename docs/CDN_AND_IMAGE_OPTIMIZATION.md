@@ -11,7 +11,7 @@ How to get resized, fast product images (thumbnails in list/grid, full size in d
 | **Goal** | Smaller, faster loads via **on-the-fly resize** (not full originals in lists). |
 | **Code** | `src/lib/productImageUrl.ts` — `getProductImageUrl(url, 'thumb' \| 'medium' \| 'full')`. |
 | **Supabase** | **Public bucket** (e.g. `product-images`) + **public object URL** in `product.images[]`. |
-| **Plan** | **Supabase Pro** required for [Image Transformations](https://supabase.com/docs/guides/storage/serving/image-transformations). |
+| **Plan** | **Supabase Pro** required for [Image Transformations](https://supabase.com/docs/guides/storage/serving/image-transformations). On **Free**, images use direct `object/public` URLs (default). Set `VITE_SUPABASE_IMAGE_TRANSFORMS=true` only on Pro. |
 | **API** | **POST/PUT** `/api/products` uploads base64 to Storage → saves **public URL** to DB. |
 | **Unchanged** | Base64 `data:` URLs; arbitrary HTTP(S) URLs (unless you add CDN logic). |
 
@@ -50,8 +50,9 @@ So the app is **ready** for Supabase Storage: once product images are stored the
 3. **Frontend**
    - No change needed. The app already uses `getProductImageUrl(product.images[0], 'thumb')` in cards and can use `'medium'` / `'full'` in detail/lightbox. Any URL that matches the Supabase public object pattern will be rewritten to the render URL with size params.
 
-4. **Optional: disable transforms**
-   - If you need to turn off the transform (e.g. stay on original URLs), you can add an env check in `productImageUrl.ts` and skip calling `toSupabaseRenderUrl`, or add a feature flag.
+4. **Free vs Pro**
+   - **Free (default):** Do not set `VITE_SUPABASE_IMAGE_TRANSFORMS`. The app serves full-size `object/public` URLs (works; larger payloads in lists).
+   - **Pro:** Set `VITE_SUPABASE_IMAGE_TRANSFORMS=true` at build time (Vercel env) to enable thumb/medium/full via the render API.
 
 ---
 

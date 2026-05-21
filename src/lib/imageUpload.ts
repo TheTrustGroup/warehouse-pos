@@ -271,6 +271,11 @@ export interface ProductImageTransformOptions {
  * For Supabase Storage (product-images) URLs, returns the render endpoint with transform params;
  * for base64 or other URLs, returns the safe URL as-is (no transform).
  */
+function supabaseImageTransformsEnabled(): boolean {
+  const env = getEnv() as { VITE_SUPABASE_IMAGE_TRANSFORMS?: string };
+  return String(env.VITE_SUPABASE_IMAGE_TRANSFORMS ?? '').toLowerCase() === 'true';
+}
+
 export function getProductImageDisplayUrl(
   src: string,
   options?: ProductImageTransformOptions
@@ -278,6 +283,7 @@ export function getProductImageDisplayUrl(
   if (typeof src !== 'string' || !src.trim()) return EMPTY_IMAGE_DATA_URL;
   const s = src.trim();
   if (isBase64(s)) return s;
+  if (!supabaseImageTransformsEnabled()) return safeProductImageUrl(s);
   const path = extractPathFromUrl(s);
   const base = getSupabaseUrl();
   if (!base || !path) return safeProductImageUrl(s);
