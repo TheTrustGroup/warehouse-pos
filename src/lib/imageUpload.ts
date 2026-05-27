@@ -1,22 +1,24 @@
 // ============================================================
-// imageUpload.ts — Supabase Storage helpers + optional client upload
+// imageUpload.ts — Supabase Storage upload/delete (client-direct).
 //
-// PRIMARY UPLOAD: Use POST /api/upload/product-image (server). Auth, validation,
-// and logging live there; ProductFormModal already uses it.
+// Display + URL rules: productImageUrl.ts (single source of truth).
+// Persistence (no base64 in DB): inventory-server lib/storage/productImages.ts
 //
-// THIS MODULE:
-//   - Helpers: isStorageUrl(), isBase64(), extractPathFromUrl() — use when
-//     displaying or cleaning product.images[].
-//   - deleteProductImage(path) — use when removing an image from Storage (e.g.
-//     "remove image" that should delete the object, not only the DB reference).
-//   - uploadProductImage(file, onProgress?) — optional client-direct upload
-//     (e.g. if you need progress UX or server upload is unavailable). Requires
-//     VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.
-//
-// SETUP: Run 20250222130000_master_sql_v2.sql (creates 'product-images' bucket).
+// Preferred upload path: POST /api/upload/product-image (service role) via
+// uploadProductImageForSave(). Client-direct upload is fallback only.
 // ============================================================
 
-const BUCKET = 'product-images';
+import { PRODUCT_IMAGES_BUCKET } from './productImageUrl';
+
+export {
+  isStorageUrl,
+  isBase64,
+  safeProductImageUrl,
+  EMPTY_IMAGE_DATA_URL,
+  isPersistableImageUrl,
+} from './productImageUrl';
+
+const BUCKET = PRODUCT_IMAGES_BUCKET;
 
 /** Max upload size in bytes. Must match API and Supabase bucket file_size_limit. */
 export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
@@ -229,71 +231,45 @@ export function extractPathFromUrl(url: string): string | null {
   }
 }
 
-export function isStorageUrl(src: string): boolean {
-  return src.startsWith('http') && src.includes('/storage/v1/object/');
-}
-
-export function isBase64(src: string): boolean {
-  return src.startsWith('data:');
-}
-
-/** Allowed path for our bucket. Only URLs from our Supabase origin + this path are allowed. */
-const STORAGE_OBJECT_PATH = '/storage/v1/object/';
-
 /**
- * Returns a URL safe to use as img src: only our Supabase Storage (product-images) or data: base64.
- * Prevents XSS from arbitrary user-supplied URLs. For invalid URLs returns a 1x1 transparent GIF.
+ * Upload via API (service role) first, then client Storage. Returns null if both fail.
+ * When online, does not return base64 — keeps DB/Storage as the only durable store.
  */
-export function safeProductImageUrl(src: string): string {
-  if (typeof src !== 'string' || !src) return EMPTY_IMAGE_DATA_URL;
-  const s = src.trim();
-  if (isBase64(s)) return s;
-  const base = getSupabaseUrl();
-  if (base && s.startsWith(base) && s.includes(STORAGE_OBJECT_PATH) && s.includes(BUCKET)) return s;
-  return EMPTY_IMAGE_DATA_URL;
-}
+export async function uploadProductImageForSave(
+  file: File,
+  options: {
+    apiBaseUrl: string;
+    getHeaders: () => Record<string, string>;
+    isOnline: boolean;
+    onProgress?: (pct: number) => void;
+  }
+): Promise<string | null> {
+  const { apiBaseUrl, getHeaders, isOnline, onProgress } = options;
+  if (!isOnline) return null;
 
-/** 1x1 transparent GIF used when image URL is not allowed (XSS). */
-export const EMPTY_IMAGE_DATA_URL =
-  'data:image/gif;base64,R0lGOODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  try {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const headers = getHeaders();
+    const { 'Content-Type': _omitCt, ...rest } = headers;
+    void _omitCt;
+    const res = await fetch(`${apiBaseUrl}/api/upload/product-image`, {
+      method: 'POST',
+      headers: rest,
+      body: form,
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { url?: string };
+      if (typeof data?.url === 'string' && data.url.trim()) return data.url.trim();
+    }
+  } catch {
+    /* try client upload */
+  }
 
-/** Transform options for Supabase Storage image transformation (Pro plan). */
-export interface ProductImageTransformOptions {
-  width?: number;
-  height?: number;
-  quality?: number;
-  resize?: 'cover' | 'contain' | 'fill';
-  format?: 'origin' | 'webp';
-}
-
-/**
- * Returns a display URL with optional resize/quality for product images.
- * For Supabase Storage (product-images) URLs, returns the render endpoint with transform params;
- * for base64 or other URLs, returns the safe URL as-is (no transform).
- */
-function supabaseImageTransformsEnabled(): boolean {
-  const env = getEnv() as { VITE_SUPABASE_IMAGE_TRANSFORMS?: string };
-  return String(env.VITE_SUPABASE_IMAGE_TRANSFORMS ?? '').toLowerCase() === 'true';
-}
-
-export function getProductImageDisplayUrl(
-  src: string,
-  options?: ProductImageTransformOptions
-): string {
-  if (typeof src !== 'string' || !src.trim()) return EMPTY_IMAGE_DATA_URL;
-  const s = src.trim();
-  if (isBase64(s)) return s;
-  if (!supabaseImageTransformsEnabled()) return safeProductImageUrl(s);
-  const path = extractPathFromUrl(s);
-  const base = getSupabaseUrl();
-  if (!base || !path) return safeProductImageUrl(s);
-  const params = new URLSearchParams();
-  if (options?.width != null) params.set('width', String(Math.round(options.width)));
-  if (options?.height != null) params.set('height', String(Math.round(options.height)));
-  if (options?.quality != null) params.set('quality', String(Math.min(100, Math.max(20, options.quality))));
-  if (options?.resize) params.set('resize', options.resize);
-  if (options?.format === 'origin') params.set('format', 'origin');
-  const qs = params.toString();
-  const renderBase = base.replace('/v1/object/', '/v1/render/image/');
-  return qs ? `${renderBase}public/${BUCKET}/${path}?${qs}` : `${renderBase}public/${BUCKET}/${path}`;
+  try {
+    const { url } = await uploadProductImage(file, onProgress);
+    return url?.trim() || null;
+  } catch {
+    return null;
+  }
 }

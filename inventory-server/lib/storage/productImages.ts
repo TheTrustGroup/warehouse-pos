@@ -5,7 +5,23 @@
  */
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 
-const BUCKET = 'product-images';
+export const PRODUCT_IMAGES_BUCKET = 'product-images';
+const BUCKET = PRODUCT_IMAGES_BUCKET;
+
+const MAX_PERSISTED_IMAGES = 5;
+
+/**
+ * URLs safe to store in warehouse_products.images (Storage/CDN only — never base64).
+ * Call after uploadProductImages() so failed uploads are not written to Postgres.
+ */
+export function persistableProductImages(images: string[]): string[] {
+  if (!Array.isArray(images)) return [];
+  return images
+    .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith('http://') || s.startsWith('https://'))
+    .slice(0, MAX_PERSISTED_IMAGES);
+}
 
 const MIME_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',

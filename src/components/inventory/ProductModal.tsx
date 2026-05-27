@@ -8,11 +8,15 @@
 // - SizesSection is fully controlled — no size state lives here.
 // - Bottom sheet on mobile, centered modal on desktop.
 // - Sticky header + footer, scrollable body.
-// - Images: file upload (→ base64) + URL fallback, up to 5 images.
+// - Images: Storage-first upload (API → client), URL paste, up to 5 images.
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Product } from '../../types';
+import { API_BASE_URL, getApiHeaders } from '../../lib/api';
+import { uploadProductImageForSave, extractPathFromUrl, deleteProductImage } from '../../lib/imageUpload';
+import { isStorageUrl } from '../../lib/productImageUrl';
+import { useNetworkStatusContext } from '../../contexts/NetworkStatusContext';
 import SizesSection, {
   type SizesSectionValue,
   type SizeCode,
@@ -240,6 +244,7 @@ interface ImageUploadProps {
 }
 
 function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
+  const { isOnline } = useNetworkStatusContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [urlInput, setUrlInput] = useState('');
   const [showUrlInput, setShowUrlInput] = useState(false);
@@ -264,13 +269,29 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
       if (next.length >= MAX_IMAGES) break;
       const file = picked[i];
 
-      // No pre-check needed — compressImage() resizes + re-encodes to ~150KB regardless of input size.
-      // Only truly unprocessable files (corrupt, wrong type) will throw below.
-
       try {
         setUploadProgress(Math.round(((i + 0.5) / picked.length) * 100));
-        const dataUrl = await compressImage(file);
-        next.push(dataUrl);
+        let imageValue: string | null = await uploadProductImageForSave(file, {
+          apiBaseUrl: API_BASE_URL,
+          getHeaders: () => getApiHeaders() as Record<string, string>,
+          isOnline,
+          onProgress: (pct) => setUploadProgress(Math.round(((i + pct / 100) / picked.length) * 100)),
+        });
+
+        if (!imageValue && !isOnline) {
+          imageValue = await compressImage(file);
+        }
+
+        if (!imageValue) {
+          setUploadError(
+            isOnline
+              ? `Could not upload "${file.name}". Images are stored in Supabase Storage.`
+              : `Offline: could not queue "${file.name}".`
+          );
+          continue;
+        }
+
+        next.push(imageValue);
         setUploadProgress(Math.round(((i + 1) / picked.length) * 100));
       } catch {
         setUploadError(`Could not process "${file.name}".`);
@@ -306,6 +327,11 @@ function ImageUpload({ images, onChange, disabled }: ImageUploadProps) {
   }
 
   function removeImage(idx: number) {
+    const url = images[idx];
+    if (typeof url === 'string' && isStorageUrl(url)) {
+      const path = extractPathFromUrl(url);
+      if (path) deleteProductImage(path).catch(() => undefined);
+    }
     onChange(images.filter((_, i) => i !== idx));
   }
 

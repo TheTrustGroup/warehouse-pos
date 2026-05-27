@@ -3,7 +3,7 @@
  * safeProductImageUrl allows data: and same-origin Supabase Storage URLs only (env-dependent); tests cover data: and rejection of arbitrary URLs.
  */
 import { describe, it, expect } from 'vitest';
-import { safeProductImageUrl, isBase64, EMPTY_IMAGE_DATA_URL } from './imageUpload';
+import { safeProductImageUrl, isBase64, EMPTY_IMAGE_DATA_URL } from './productImageUrl';
 
 describe('isBase64', () => {
   it('returns true for data: URLs', () => {

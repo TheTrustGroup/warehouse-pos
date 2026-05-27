@@ -19,7 +19,7 @@ import {
 import type { PutProductBody } from '@/lib/data/warehouseProducts';
 import { notifyInventoryUpdated } from '@/lib/cache/dashboardStatsCache';
 import { getCachedProducts, setCachedProducts, notifyProductsUpdated, isProductsCacheAvailable } from '@/lib/cache/productsCache';
-import { uploadProductImages } from '@/lib/storage/productImages';
+import { uploadProductImages, persistableProductImages } from '@/lib/storage/productImages';
 
 export const dynamic = 'force-dynamic';
 /** Higher than DB statement_timeout (10s) so we return a clean 504/503 instead of Vercel 504. Requires Vercel Pro for >10s. */
@@ -256,7 +256,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     imagesToSave = await uploadProductImages(imagesToSave, productId);
   } catch (e) {
     console.error('[POST /api/products] image upload failed:', e instanceof Error ? e.message : e);
-    // Continue with original images (e.g. base64) so create still succeeds
+  }
+  const beforePersist = imagesToSave.length;
+  imagesToSave = persistableProductImages(imagesToSave);
+  if (beforePersist > imagesToSave.length) {
+    console.warn('[POST /api/products] dropped non-URL images after Storage upload (avoid base64 in DB)');
   }
 
   try {
@@ -314,6 +318,11 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
     imagesToSave = await uploadProductImages(imagesToSave, productId);
   } catch (e) {
     console.error('[PUT /api/products] image upload failed:', e instanceof Error ? e.message : e);
+  }
+  const beforePersist = imagesToSave.length;
+  imagesToSave = persistableProductImages(imagesToSave);
+  if (beforePersist > imagesToSave.length) {
+    console.warn('[PUT /api/products] dropped non-URL images after Storage upload (avoid base64 in DB)');
   }
   const normalizedBody: PutProductBody & { warehouseId?: string; warehouse_id?: string } = {
     ...body,

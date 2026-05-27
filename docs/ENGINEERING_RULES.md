@@ -19,7 +19,7 @@
 | **Commit at feature boundaries** | One logical change = one commit (e.g. "feat: size/color filter pills", "fix: POS search filter"). |
 | **No "work in progress" for days** | If you leave uncommitted changes overnight or switch machines, you risk losing them. Commit at least at end of day. |
 | **Push after commit** | `git push origin main` after committing so GitHub has your work. |
-| **Migrations and seeds** | Any new `.sql` under `supabase/migrations/` or `inventory-server/supabase/migrations/` must be committed in the same PR/commit as the code that uses them. |
+| **Migrations and seeds** | Any new `.sql` under `inventory-server/supabase/migrations/` must be committed in the same PR/commit as the code that uses them. |
 
 ---
 
@@ -63,9 +63,7 @@ A script runs `git status --porcelain` and **exits 1** if there are uncommitted 
 
 ## 6. Migrations and seeds
 
-- **All migrations** live under:
-  - `inventory-server/supabase/migrations/` (timestamped, applied via Supabase)
-  - or `supabase/migrations/` (if used)
+- **All migrations** live under `inventory-server/supabase/migrations/` (timestamped, applied via Supabase).
 - **Seeds** are in migrations (e.g. `seed_size_codes_*`) or `inventory-server/supabase/scripts/`.
 - **Rule:** Adding a DB change = add migration + commit it in the same commit/PR as the code that depends on it. Never leave migrations uncommitted.
 - **Data integrity (product/quantity drift):** Keep `warehouse_inventory.quantity` and `warehouse_inventory_by_size` in sync so the UI and reports show correct totals. See **docs/DATA_INTEGRITY_PRODUCT_DRIFT.md** for fix scripts and prevention (triggers). After manual inventory loads, run the documented scripts and verify.

@@ -78,10 +78,7 @@ function mustHaveHardeningMigration(migrationFiles) {
 }
 
 async function checkSecurityDefinerHygiene() {
-  const dirs = [
-    `${process.cwd()}/inventory-server/supabase/migrations`,
-    `${process.cwd()}/supabase/migrations`,
-  ];
+  const dirs = [`${process.cwd()}/inventory-server/supabase/migrations`];
 
   const allSqlFiles = [];
   for (const dir of dirs) {

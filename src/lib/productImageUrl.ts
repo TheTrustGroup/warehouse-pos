@@ -1,19 +1,18 @@
 /**
- * Product image URL helper — CDN-ready.
- * Use 'medium' (400px) for list/grid/cards to avoid blur; 'full' for detail/lightbox.
- * - Data URLs (base64): returned as-is.
- * - Supabase Storage public URLs: optionally rewritten to the Image Transform API (thumb/medium/full).
- *   Transforms require Supabase Pro. On Free, use direct object URLs (default). See docs/CDN_AND_IMAGE_OPTIMIZATION.md.
- * - Other HTTP(S) URLs: returned as-is (or add your CDN logic below).
+ * Single source of truth for product image URLs (display + validation).
+ * Upload/delete live in imageUpload.ts; persistence policy on the server in lib/storage/productImages.ts.
+ *
+ * Storage-first: DB holds public Supabase URLs only (see persistableProductImages on API).
+ * List/grid uses object/public URLs; optional transforms when VITE_SUPABASE_IMAGE_TRANSFORMS=true (Pro).
  */
+
+export const PRODUCT_IMAGES_BUCKET = 'product-images';
 
 export type ProductImageSize = 'thumb' | 'medium' | 'full';
 
-/** True only when VITE_SUPABASE_IMAGE_TRANSFORMS=true (Pro plan). Free tier must use object/public URLs. */
-function supabaseImageTransformsEnabled(): boolean {
-  if (typeof import.meta === 'undefined' || import.meta.env == null) return false;
-  return String(import.meta.env.VITE_SUPABASE_IMAGE_TRANSFORMS ?? '').toLowerCase() === 'true';
-}
+/** 1x1 transparent GIF when src is missing or not allowed (XSS). */
+export const EMPTY_IMAGE_DATA_URL =
+  'data:image/gif;base64,R0lGOODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 const SIZE_PARAMS: Record<ProductImageSize, { width: number; height: number }> = {
   thumb: { width: 150, height: 150 },
@@ -21,10 +20,55 @@ const SIZE_PARAMS: Record<ProductImageSize, { width: number; height: number }> =
   full: { width: 1200, height: 1200 },
 };
 
+function getSupabaseUrl(): string {
+  if (typeof import.meta !== 'undefined' && import.meta.env != null) {
+    return String((import.meta.env as { VITE_SUPABASE_URL?: string }).VITE_SUPABASE_URL ?? '').replace(/\/$/, '');
+  }
+  return '';
+}
+
+function supabaseImageTransformsEnabled(): boolean {
+  if (typeof import.meta === 'undefined' || import.meta.env == null) return false;
+  return String(import.meta.env.VITE_SUPABASE_IMAGE_TRANSFORMS ?? '').toLowerCase() === 'true';
+}
+
+export function isBase64(src: string): boolean {
+  return src.startsWith('data:');
+}
+
+export function isStorageUrl(src: string): boolean {
+  return src.startsWith('http') && src.includes('/storage/v1/object/');
+}
+
+/** True for https/http URLs we persist in warehouse_products.images (not base64). */
+export function isPersistableImageUrl(src: string): boolean {
+  const s = src.trim();
+  return s.startsWith('http://') || s.startsWith('https://');
+}
+
+/** Public object URL in our product-images bucket (any Supabase project ref). */
+export function isProductImagesBucketUrl(src: string): boolean {
+  const s = src.trim();
+  return (
+    isPersistableImageUrl(s) &&
+    s.includes('/storage/v1/object/') &&
+    s.includes(`/${PRODUCT_IMAGES_BUCKET}/`)
+  );
+}
+
 /**
- * If url is a Supabase Storage public object URL, return the render/image URL with size params.
- * Pattern: .../storage/v1/object/public/<bucket>/<path> -> .../storage/v1/render/image/public/<bucket>/<path>?width=...&height=...
+ * Safe img src: data URLs, or Storage URLs for product-images (env URL or any *.supabase.co bucket path).
  */
+export function safeProductImageUrl(src: string): string {
+  if (typeof src !== 'string' || !src.trim()) return EMPTY_IMAGE_DATA_URL;
+  const s = src.trim();
+  if (isBase64(s)) return s;
+  const base = getSupabaseUrl();
+  if (base && s.startsWith(base) && isProductImagesBucketUrl(s)) return s;
+  if (isProductImagesBucketUrl(s)) return s;
+  return EMPTY_IMAGE_DATA_URL;
+}
+
 function toSupabaseRenderUrl(url: string, size: ProductImageSize): string | null {
   const objectPrefix = '/storage/v1/object/public/';
   const i = url.indexOf(objectPrefix);
@@ -38,18 +82,20 @@ function toSupabaseRenderUrl(url: string, size: ProductImageSize): string | null
 }
 
 /**
- * Return the URL to use for a product image at the given display size.
- * Data URLs are unchanged. Supabase Storage public URLs use the Image Transform API when available.
+ * Display URL for inventory/POS. Applies optional Supabase transforms, then safeProductImageUrl.
  */
 export function getProductImageUrl(
   url: string | undefined | null,
   size: ProductImageSize = 'thumb'
 ): string {
   if (url == null || url === '') return '';
-  if (url.startsWith('data:')) return url;
+  const s = url.trim();
+  if (isBase64(s)) return s;
+  let candidate = s;
   if (supabaseImageTransformsEnabled()) {
-    const renderUrl = toSupabaseRenderUrl(url, size);
-    if (renderUrl) return renderUrl;
+    const renderUrl = toSupabaseRenderUrl(s, size);
+    if (renderUrl) candidate = renderUrl;
   }
-  return url;
+  const safe = safeProductImageUrl(candidate);
+  return safe === EMPTY_IMAGE_DATA_URL && isProductImagesBucketUrl(s) ? s : safe;
 }

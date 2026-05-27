@@ -1,36 +1,39 @@
-# Product images
+# Product images (Extreme Dept Kidz / warehouse-pos)
 
-How product images are uploaded, stored, and displayed.
+**Supabase project:** `puuszplmdbindiesfxlr` (`https://puuszplmdbindiesfxlr.supabase.co`) — Main Store / Main Town warehouses. Not HunnidOfficial or other org projects.
 
-## Canonical flow
+## Architecture (single source of truth)
 
-- **ProductModal** (Inventory) uses **client-side upload** via `src/lib/imageUpload.ts`:
-  - **Primary:** Supabase Storage (`uploadProductImage()`). Requires `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the app `.env`.
-  - **Fallback:** If Storage is not configured or the request fails, images are stored as base64 data URLs in `product.images[]`. They work offline but are not ideal for production (DB size, no CDN).
+| Layer | Responsibility |
+|--------|----------------|
+| **Supabase Storage** `product-images` | Binary files; public `object/public` URLs |
+| **`warehouse_products.images`** | JSONB array of **https** URLs only (no base64 in production) |
+| **`src/lib/productImageUrl.ts`** | Display URLs, validation, bucket name |
+| **`src/lib/imageUpload.ts`** | Client upload/delete only |
+| **`inventory-server/lib/storage/productImages.ts`** | Server upload + `persistableProductImages()` |
+| **`product_images_v1` (localStorage)** | Optional cache when API list omits images; **never overrides** API when API has URLs |
 
-- **Server route** `POST /api/upload/product-image` exists for server-side upload (e.g. admin tools). ProductModal does not use it by default.
+## Upload flow (ProductModal)
+
+1. **Online:** `POST /api/upload/product-image` (service role) → then client Storage if needed.
+2. **Offline only:** compressed base64 for later sync (server uploads on POST/PUT via `uploadProductImages`).
+3. **On save:** API strips any remaining `data:` URLs with `persistableProductImages()` — Postgres is not used as image blob storage.
 
 ## Environment
 
-| Variable | Required for Storage upload | Description |
-|----------|----------------------------|-------------|
-| `VITE_SUPABASE_URL` | Yes | Supabase project URL (e.g. `https://xxx.supabase.co`) |
-| `VITE_SUPABASE_ANON_KEY` | Yes | Supabase anon key for Storage auth |
-
-Without these, uploads in ProductModal fall back to base64. The UI shows a warning when any image is stored as “local” (base64).
-
-## Backend
-
-- **Database:** `warehouse_products.images` (JSONB array of strings). Added by migration `20250222130000_master_sql_v2.sql`.
-- **Storage bucket:** `product-images` (public read, auth upload/delete). Created by the same migration. Max file size 5MB; MIME types: JPEG, PNG, WebP, GIF.
-- **API:** Create/update product accepts `images: string[]`. Server normalizes to max 5 items and max 8MB per entry.
-
-## Security
-
-- **Display:** Only Supabase Storage URLs (same origin + `product-images` bucket) and `data:` URLs are used as `img` `src`. Other URLs are replaced with a placeholder. See `safeProductImageUrl()` in `src/lib/imageUpload.ts`.
+| Variable | Where | Purpose |
+|----------|--------|---------|
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | API (Vercel) | DB + Storage uploads |
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Frontend | Optional client-direct upload |
+| `VITE_SUPABASE_IMAGE_TRANSFORMS` | Frontend | `true` only on Supabase **Pro** (resize URLs) |
 
 ## Setup checklist
 
-1. Run migrations in order so `warehouse_products.images` and the `product-images` bucket exist.
-2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the frontend `.env` for persistent image hosting.
-3. Re-upload any “local” (base64) images after configuring Storage so they are stored in the bucket.
+1. Bucket `product-images` exists and is **public** (migration `20250222130000_master_sql_v2.sql`).
+2. API and frontend Supabase URLs both point to **`puuszplmdbindiesfxlr`**.
+3. Legacy base64 in DB (if any): `npm run migrate:base64-images` from `warehouse-pos/` (requires `inventory-server/.env.migration`).
+
+## Display
+
+- Inventory/POS use `getProductImageUrl(src, 'thumb' \| 'medium' \| 'full')`.
+- List API (`view=list`) returns at most one image; prefers Storage URLs over base64.

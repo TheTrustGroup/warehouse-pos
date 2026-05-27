@@ -24,7 +24,7 @@ import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
 import { getCategoryDisplay, normalizeProductLocation, normalizeQuantityBySize } from '../lib/utils';
 import { parseProductsResponse } from '../lib/apiSchemas';
-import { getProductImages, setProductImages } from '../lib/productImagesStore';
+import { resolveProductImages, setProductImages } from '../lib/productImagesStore';
 
 /** React Query is the only cache for products; invalidate on Realtime and after mutations. */
 
@@ -255,12 +255,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   }, [warehouseId]);
 
-  /** Merge in client-saved images so they stay visible even when API/refresh omits them. */
+  /** API/Storage URLs are source of truth; localStorage only fills gaps when list omits images. */
   const productsWithLocalImages = useMemo(
     () =>
       products.map((p) => ({
         ...p,
-        images: getProductImages(p.id) ?? (Array.isArray(p.images) ? p.images : []),
+        images: resolveProductImages(p.id, p.images),
       })),
     [products]
   );
@@ -790,7 +790,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           ? (normalized.images as string[])
           : payloadImages.length > 0
             ? payloadImages
-            : (Array.isArray(updated.images) && updated.images.length > 0 ? updated.images : getProductImages(id) ?? []);
+            : resolveProductImages(id, updated.images);
       const withImages = { ...normalized, images: resolvedImages };
       const sizeKind = updates.sizeKind ?? (withImages as Product).sizeKind ?? 'na';
       const rawApiSizes = (withImages as Product).quantityBySize;
